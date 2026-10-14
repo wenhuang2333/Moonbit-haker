@@ -19,9 +19,14 @@ if [ "$MODE" = all ] || [ "$MODE" = native ]; then
   echo "== native (release) =="
   moon build bench --target native --release >/dev/null || exit 1
   ./_build/native/release/build/bench/bench.exe
-  echo "-- peak memory (/usr/bin/time -l) --"
-  /usr/bin/time -l ./_build/native/release/build/bench/bench.exe 2>&1 |
-    grep -E "maximum resident set size|real" || true
+  if [ "$(uname -s)" = Darwin ]; then
+    TIME_FLAG=-l
+  else
+    TIME_FLAG=-v
+  fi
+  echo "-- peak memory (/usr/bin/time $TIME_FLAG) --"
+  /usr/bin/time "$TIME_FLAG" ./_build/native/release/build/bench/bench.exe 2>&1 |
+    grep -Ei "resident set size|^real|elapsed \(wall" || true
 fi
 
 if [ "$MODE" = all ] || [ "$MODE" = js ]; then
