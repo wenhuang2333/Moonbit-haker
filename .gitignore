@@ -3,6 +3,7 @@
 
 # MoonBit 构建产物
 target/
+_build/
 .mooncakes/
 moon.lock
 
