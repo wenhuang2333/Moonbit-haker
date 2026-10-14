@@ -116,6 +116,21 @@ HAND_WRITTEN = [
     # ellipsis
     '[1,...,3]',
     '{"a":...,"b":2}',
+    # string concatenation with `+` (R019): LLM output often glues strings
+    '["a" + "b"]',
+    '["a"+"b"+"c"]',
+    '{"k":"a" + "b"}',
+    '"a" + "b"',
+    '{"a":"x" + "y" + "z"}',
+    '["a" + "b", "c" + "d"]',
+    # `+` with a non-string operand falls back to drop/insert rules
+    '["a" + 1]',
+    '[1 + "b"]',
+    '["a" +]',
+    '{"k":"a" + }',
+    '{"a":1}{"b":2}{"c":3}',
+    '[[1]][[2]][[3]]',
+    '{"a":{"b":1}}{"c":{"d":2}}',
     # nesting
     '[[[[[1]]]]]',
     # lone surrogates
@@ -309,15 +324,23 @@ CODE_REASON = {
     "R011": "number repaired (BR-11)",
     "R012": "literal converted or completed (BR-12, BR-13)",
     "R013": "control character escaped (BR-08)",
-    "R014": "half escape dropped (BR-08)",
-    "R015": "invalid escape repaired (BR-08)",
+    "R014": "invalid escape repaired (BR-08)",
+    "R015": "mismatched closer replaced (BR-14)",
     "R016": "unexpected content dropped (BR-15, multi_root=first default)",
     "R017": "extra closer dropped (BR-14)",
     "R018": "duplicate key merged (BR-19)",
-    "R019": "adjacent strings concatenated (out of scope in 0.1.0)",
-    "R020": "ellipsis dropped (BR-16)",
+    "R019": "adjacent strings concatenated (BR-21)",
+    "R020": "ellipsis placeholder dropped (BR-21)",
     "R021": "prose skipped (FR-08, skip_prose only)",
 }
+
+# The table above is the only place that maps a code to its documented cause,
+# so a typo would silently downgrade a divergence to "unexplained". Guard it.
+_EXPECTED_CODES = ["R%03d" % n for n in range(1, 22)]
+if sorted(CODE_REASON) != _EXPECTED_CODES:
+    raise SystemExit(
+        "CODE_REASON must cover R001..R021 exactly; got %s" % sorted(CODE_REASON)
+    )
 
 def cause(codes, mine, theirs, probes, rc):
     """Classify a divergence: behavioural evidence first, then rule codes."""

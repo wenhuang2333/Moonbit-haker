@@ -9,7 +9,7 @@ because formatting is not part of the contract.
 | provenance | omitted (--no-stamp) so this report is reproducible byte for byte; run without the flag for the date and the binary hash |
 | primary oracle | `json-repair` (Python, MIT) 0.64.0 |
 | secondary oracle | `jsonrepair` (TypeScript/Node, ISC) 3.15.0 from `/private/tmp/node_modules` |
-| corpus | 86 hand written cases + 303 automatic mutations |
+| corpus | 99 hand written cases + 303 automatic mutations |
 | corpus selection | deterministic: fixed list plus fixed mutations, no seed |
 | comparison | `json.loads(jsonmend stdout)` vs `json_repair.repair_json(..., return_objects=True)` |
 | reproduce | `python3 code/tests/diff/run_diff.py --cli <jsonmend binary> [--node-module-dir DIR]` (see docs/REPRODUCE.md) |
@@ -22,16 +22,16 @@ documented behaviour differs from the reference implementation.
 
 | metric | value |
 | --- | --- |
-| cases | 389 |
-| hand written | 86 (agreement 61.6%) |
+| cases | 402 |
+| hand written | 99 (agreement 57.6%) |
 | mutated | 303 (agreement 47.2%) |
-| semantic agreement | 196 (50.4%) |
+| semantic agreement | 200 (49.8%) |
 | both reject the input | 0 |
-| divergences | 193 |
-| divergences with a documented cause | 193 |
+| divergences | 202 |
+| divergences with a documented cause | 202 |
 | unexplained divergences | 0 |
 | documented-scope agreement | 100.0% |
-| agreement with jsonrepair (node) | 59.4% (227/382) |
+| agreement with jsonrepair (node) | 59.7% (236/395) |
 
 ## Divergence classes
 
@@ -49,39 +49,40 @@ its answer; the referenced rule is why the two libraries differ.
 | `jsonmend rejects, jsonrepair repairs (E001/E002/E040)` | 8 | FR-01 no JSON value found (E001/E002/E040); jsonrepair invents a value |
 | `R012` | 6 | literal converted or completed (BR-12, BR-13) |
 | `R009+R012` | 6 | container closed (BR-13); literal converted or completed (BR-12, BR-13) |
+| `R019` | 6 | adjacent strings concatenated (BR-21) |
 | `R004+R006+R007+R008+R009+R010` | 6 | bare word quoted (BR-10); missing comma inserted (BR-06); missing colon inserted (BR-05); missing value filled with null (BR-13); container closed (BR-13); string closed (BR-13) |
 | `R007` | 5 | missing colon inserted (BR-05) |
-| `R016` | 4 | unexpected content dropped (BR-15, multi_root=first default) |
-| `R005+R008+R015+R016` | 4 | extra comma removed (BR-06); missing value filled with null (BR-13); invalid escape repaired (BR-08); unexpected content dropped (BR-15, multi_root=first default) |
+| `R016` | 5 | unexpected content dropped (BR-15, multi_root=first default) |
+| `multi-root (BR-15 policy)` | 4 | BR-15 multi_root=first (probe: --multi-root array agrees) |
+| `R005+R008+R015+R016` | 4 | extra comma removed (BR-06); missing value filled with null (BR-13); mismatched closer replaced (BR-14); unexpected content dropped (BR-15, multi_root=first default) |
 | `R005+R008+R016` | 4 | extra comma removed (BR-06); missing value filled with null (BR-13); unexpected content dropped (BR-15, multi_root=first default) |
 | `prose (skip_prose off by default)` | 3 | FR-08 skip_prose off by default (probe: --skip-prose agrees) |
 | `R005` | 3 | extra comma removed (BR-06) |
-| `R009+R010+R014` | 3 | container closed (BR-13); string closed (BR-13); half escape dropped (BR-08) |
-| `R014` | 3 | half escape dropped (BR-08) |
+| `R009+R010+R014` | 3 | container closed (BR-13); string closed (BR-13); invalid escape repaired (BR-08) |
+| `R014` | 3 | invalid escape repaired (BR-08) |
 | `R009+R010` | 3 | container closed (BR-13); string closed (BR-13) |
 | `R008+R016` | 3 | missing value filled with null (BR-13); unexpected content dropped (BR-15, multi_root=first default) |
 | `R004+R005+R008+R012` | 3 | bare word quoted (BR-10); extra comma removed (BR-06); missing value filled with null (BR-13); literal converted or completed (BR-12, BR-13) |
 | `R006+R008+R009+R010+R012` | 3 | missing comma inserted (BR-06); missing value filled with null (BR-13); container closed (BR-13); string closed (BR-13); literal converted or completed (BR-12, BR-13) |
 | `R004+R006+R008+R012+R017` | 3 | bare word quoted (BR-10); missing comma inserted (BR-06); missing value filled with null (BR-13); literal converted or completed (BR-12, BR-13); extra closer dropped (BR-14) |
-| `multi-root (BR-15 policy)` | 2 | BR-15 multi_root=first (probe: --multi-root array agrees) |
 | `R004+R006+R008+R016+R017` | 2 | bare word quoted (BR-10); missing comma inserted (BR-06); missing value filled with null (BR-13); unexpected content dropped (BR-15, multi_root=first default); extra closer dropped (BR-14) |
 | `R008+R016+R017` | 2 | missing value filled with null (BR-13); unexpected content dropped (BR-15, multi_root=first default); extra closer dropped (BR-14) |
 | `R004+R008` | 2 | bare word quoted (BR-10); missing value filled with null (BR-13) |
 | `R007+R009+R010` | 2 | missing colon inserted (BR-05); container closed (BR-13); string closed (BR-13) |
 | `R006+R008+R009+R010` | 2 | missing comma inserted (BR-06); missing value filled with null (BR-13); container closed (BR-13); string closed (BR-13) |
 | `R005+R016` | 2 | extra comma removed (BR-06); unexpected content dropped (BR-15, multi_root=first default) |
-| `R005+R006+R008+R015+R016` | 2 | extra comma removed (BR-06); missing comma inserted (BR-06); missing value filled with null (BR-13); invalid escape repaired (BR-08); unexpected content dropped (BR-15, multi_root=first default) |
+| `R005+R006+R008+R015+R016` | 2 | extra comma removed (BR-06); missing comma inserted (BR-06); missing value filled with null (BR-13); mismatched closer replaced (BR-14); unexpected content dropped (BR-15, multi_root=first default) |
 | `R004+R006+R008+R017` | 2 | bare word quoted (BR-10); missing comma inserted (BR-06); missing value filled with null (BR-13); extra closer dropped (BR-14) |
 | `R004+R006+R008` | 1 | bare word quoted (BR-10); missing comma inserted (BR-06); missing value filled with null (BR-13) |
 | `R004` | 1 | bare word quoted (BR-10) |
-| `R020` | 1 | ellipsis dropped (BR-16) |
-| `R006+R009+R015+R016` | 1 | missing comma inserted (BR-06); container closed (BR-13); invalid escape repaired (BR-08); unexpected content dropped (BR-15, multi_root=first default) |
+| `R020` | 1 | ellipsis placeholder dropped (BR-21) |
+| `R006+R009+R015+R016` | 1 | missing comma inserted (BR-06); container closed (BR-13); mismatched closer replaced (BR-14); unexpected content dropped (BR-15, multi_root=first default) |
 | `R004+R007+R009+R010` | 1 | bare word quoted (BR-10); missing colon inserted (BR-05); container closed (BR-13); string closed (BR-13) |
 | `R008` | 1 | missing value filled with null (BR-13) |
 | `R004+R008+R016` | 1 | bare word quoted (BR-10); missing value filled with null (BR-13); unexpected content dropped (BR-15, multi_root=first default) |
 | `R004+R005+R008+R016` | 1 | bare word quoted (BR-10); extra comma removed (BR-06); missing value filled with null (BR-13); unexpected content dropped (BR-15, multi_root=first default) |
 | `R004+R005+R008` | 1 | bare word quoted (BR-10); extra comma removed (BR-06); missing value filled with null (BR-13) |
-| `R015+R016` | 1 | invalid escape repaired (BR-08); unexpected content dropped (BR-15, multi_root=first default) |
+| `R015+R016` | 1 | mismatched closer replaced (BR-14); unexpected content dropped (BR-15, multi_root=first default) |
 | `R004+R005+R006+R008+R016+R017` | 1 | bare word quoted (BR-10); extra comma removed (BR-06); missing comma inserted (BR-06); missing value filled with null (BR-13); unexpected content dropped (BR-15, multi_root=first default); extra closer dropped (BR-14) |
 | `R004+R005+R006+R008+R017` | 1 | bare word quoted (BR-10); extra comma removed (BR-06); missing comma inserted (BR-06); missing value filled with null (BR-13); extra closer dropped (BR-14) |
 
@@ -96,12 +97,13 @@ its answer; the referenced rule is why the two libraries differ.
 | R006 | 84 |
 | R007 | 62 |
 | R012 | 57 |
-| R016 | 30 |
+| R016 | 33 |
 | R005 | 22 |
 | R017 | 11 |
 | R018 | 9 |
 | R015 | 8 |
 | R014 | 6 |
+| R019 | 6 |
 | R020 | 1 |
 
 ## Unexplained divergences
@@ -273,6 +275,24 @@ None: every divergence is attributed to a documented rule or policy.
   - jsonmend (rc 0): {'name': 'moonbit', 'tags': ['a', 'b'], 'meta': {'n': 12, 'ok': True}} ['R009', 'R012']
   - json-repair: {'name': 'moonbit', 'tags': ['a', 'b'], 'meta': {'n': 12, 'ok': 'tr'}}
 
+### `R019`
+
+- input `'["a" + "b"]'`
+  - jsonmend (rc 0): ['ab'] ['R019']
+  - json-repair: ['a" + "b']
+- input `'["a"+"b"+"c"]'`
+  - jsonmend (rc 0): ['abc'] ['R019']
+  - json-repair: ['a"+"b"+"c']
+- input `'{"k":"a" + "b"}'`
+  - jsonmend (rc 0): {'k': 'ab'} ['R019']
+  - json-repair: {'k': 'a" + "b'}
+- input `'"a" + "b"'`
+  - jsonmend (rc 0): 'ab' ['R019']
+  - json-repair: ''
+- input `'{"a":"x" + "y" + "z"}'`
+  - jsonmend (rc 0): {'a': 'xyz'} ['R019']
+  - json-repair: {'a': 'x" + "y" + "z'}
+
 ### `R004+R006+R007+R008+R009+R010`
 
 - input `'{"name":"moonbit","tags":["a","b"],"meta":{"n:12,"ok":true}}'`
@@ -311,6 +331,9 @@ None: every divergence is attributed to a documented rule or policy.
 
 ### `R016`
 
+- input `'[[1]][[2]][[3]]'`
+  - jsonmend (rc 0): [[1]] ['R016']
+  - json-repair: [[3]]
 - input `'"name":"moonbit","tags":["a","b"],"meta":{"n":12,"ok":true}}'`
   - jsonmend (rc 0): 'name' ['R016']
   - json-repair: {'name': 'moonbit', 'tags': ['a', 'b'], 'meta': {'n': 12, 'ok': True}}
@@ -323,6 +346,21 @@ None: every divergence is attributed to a documented rule or policy.
 - input `'{"name":"moonbit","tags":["a","b"]},"meta":{"n":12,"ok":true}}'`
   - jsonmend (rc 0): {'name': 'moonbit', 'tags': ['a', 'b']} ['R016']
   - json-repair: {'name': 'moonbit', 'tags': ['a', 'b'], 'meta': {'n': 12, 'ok': True}}
+
+### `multi-root (BR-15 policy)`
+
+- input `'{"a":1}{"b":2}'`
+  - jsonmend (rc 0): {'a': 1} ['R016']
+  - json-repair: [{'a': 1}, {'b': 2}]
+- input `'{"a":1} {"b":2}'`
+  - jsonmend (rc 0): {'a': 1} ['R016']
+  - json-repair: [{'a': 1}, {'b': 2}]
+- input `'{"a":1}{"b":2}{"c":3}'`
+  - jsonmend (rc 0): {'a': 1} ['R016']
+  - json-repair: [{'a': 1}, {'b': 2}, {'c': 3}]
+- input `'{"a":{"b":1}}{"c":{"d":2}}'`
+  - jsonmend (rc 0): {'a': {'b': 1}} ['R016']
+  - json-repair: [{'a': {'b': 1}}, {'c': {'d': 2}}]
 
 ### `R005+R008+R015+R016`
 
@@ -461,15 +499,6 @@ None: every divergence is attributed to a documented rule or policy.
 - input `'{"name":"moonbit","tags":["a","b"],"meta":{"n":12,"ok":tru}e}}'`
   - jsonmend (rc 0): {'name': 'moonbit', 'tags': ['a', 'b'], 'meta': {'n': 12, 'ok': True}, 'e': None} ['R004', 'R006', 'R008', 'R012', 'R017']
   - json-repair: {'name': 'moonbit', 'tags': ['a', 'b'], 'meta': {'n': 12, 'ok': 'tru'}}
-
-### `multi-root (BR-15 policy)`
-
-- input `'{"a":1}{"b":2}'`
-  - jsonmend (rc 0): {'a': 1} ['R016']
-  - json-repair: [{'a': 1}, {'b': 2}]
-- input `'{"a":1} {"b":2}'`
-  - jsonmend (rc 0): {'a': 1} ['R016']
-  - json-repair: [{'a': 1}, {'b': 2}]
 
 ### `R004+R006+R008+R016+R017`
 
