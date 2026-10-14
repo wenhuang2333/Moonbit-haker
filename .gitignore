@@ -7,6 +7,13 @@ _build/
 .mooncakes/
 moon.lock
 
+# 覆盖率产物
+*.coverage
+moonbit_coverage_*
+
+# 临时脚本目录（工作区约定：一次性脚本放 test/）
+test/
+
 # Node
 node_modules/
 dist/

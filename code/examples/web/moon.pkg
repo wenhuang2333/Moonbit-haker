@@ -1,0 +1,7 @@
+import {
+  "wenhuang2333/jsonmend" @mend,
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "js"

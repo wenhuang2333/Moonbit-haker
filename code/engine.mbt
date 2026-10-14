@@ -270,7 +270,6 @@ fn Engine::make(opts : Options) -> Engine {
 fn Engine::report(
   self : Engine,
   code : RepairCode,
-  sev : Severity,
   p : Position,
 ) -> Unit raise MendError {
   if self.opts.mode is Strict || !self.opts.rules.is_enabled(code) {
@@ -280,7 +279,7 @@ fn Engine::report(
     self.reps.push({
       code,
       position: p,
-      severity: sev,
+      severity: code.severity(),
       message: code.message(),
     })
   }

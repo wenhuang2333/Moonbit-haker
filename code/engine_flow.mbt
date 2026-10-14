@@ -43,7 +43,7 @@ fn Engine::step_prelude(
     let n = u.to_int()
     if n == 0x7B || n == 0x5B {
       if self.prose_skipped > 0 {
-        self.report(SkipProse, Warning, self.prose_start)
+        self.report(SkipProse, self.prose_start)
       }
       self.phase = PBody
       self.step_body(u, p)
@@ -71,7 +71,7 @@ fn Engine::epilogue_drop(self : Engine, p : Position) -> Unit raise MendError {
   match self.opts.multi_root {
     KeepFirst =>
       if !self.epilogue_reported {
-        self.report(DropUnexpected, Warning, p)
+        self.report(DropUnexpected, p)
         self.epilogue_reported = true
       }
     AsError =>
@@ -115,7 +115,7 @@ fn Engine::step_epilogue(
     return
   }
   if n == 0x7D || n == 0x5D {
-    self.report(DropExtraCloser, Info, p)
+    self.report(DropExtraCloser, p)
     return
   }
   self.epilogue_drop(p)
@@ -240,14 +240,14 @@ fn Engine::step_in_array(
         return
       }
       if n == 0x2C {
-        self.report(RemoveExtraComma, Info, p)
+        self.report(RemoveExtraComma, p)
         return
       }
       if is_value_start_char(u) {
         self.start_value_char(u, p)
         return
       }
-      self.report(DropUnexpected, Warning, p)
+      self.report(DropUnexpected, p)
     }
     CArrCommaOrEnd => {
       if n == 0x2C {
@@ -266,14 +266,14 @@ fn Engine::step_in_array(
       }
       if is_value_start_char(u) {
         if !self.stack[idx].synthetic {
-          self.report(InsertComma, Info, p)
+          self.report(InsertComma, p)
         }
         self.start_value_char(u, p)
         return
       }
-      self.report(DropUnexpected, Warning, p)
+      self.report(DropUnexpected, p)
     }
-    _ => self.report(DropUnexpected, Warning, p)
+    _ => self.report(DropUnexpected, p)
   }
 }
 
@@ -311,10 +311,10 @@ fn Engine::step_in_object(
         return
       }
       if n == 0x2C {
-        self.report(RemoveExtraComma, Info, p)
+        self.report(RemoveExtraComma, p)
         return
       }
-      self.report(DropUnexpected, Warning, p)
+      self.report(DropUnexpected, p)
     }
     CObjColon => {
       if n == 0x3A {
@@ -326,11 +326,11 @@ fn Engine::step_in_object(
         return
       }
       if is_value_start_char(u) {
-        self.report(InsertColon, Info, p)
+        self.report(InsertColon, p)
         self.start_value_char(u, p)
         return
       }
-      self.report(DropUnexpected, Warning, p)
+      self.report(DropUnexpected, p)
     }
     CObjValue => {
       if is_value_start_char(u) {
@@ -341,7 +341,7 @@ fn Engine::step_in_object(
         self.fill_null_and_replay(idx, p, u)
         return
       }
-      self.report(DropUnexpected, Warning, p)
+      self.report(DropUnexpected, p)
     }
     CObjCommaOrEnd => {
       if n == 0x2C {
@@ -359,13 +359,13 @@ fn Engine::step_in_object(
         return
       }
       if is_quote_open(u) || is_ident_char(u) {
-        self.report(InsertComma, Info, p)
+        self.report(InsertComma, p)
         self.start_key_char(u, p)
         return
       }
-      self.report(DropUnexpected, Warning, p)
+      self.report(DropUnexpected, p)
     }
-    _ => self.report(DropUnexpected, Warning, p)
+    _ => self.report(DropUnexpected, p)
   }
 }
 
@@ -377,7 +377,7 @@ fn Engine::fill_null_and_replay(
   p : Position,
   u : UInt16,
 ) -> Unit raise MendError {
-  self.report(FillNull, Warning, p)
+  self.report(FillNull, p)
   match self.stack[idx].last_key {
     Some(k) => self.assign(idx, k, Json::null())
     None => ()
@@ -396,11 +396,11 @@ fn Engine::close_container(
   mismatch : Bool,
 ) -> Unit raise MendError {
   if mismatch {
-    self.report(MismatchedCloser, Warning, p)
+    self.report(MismatchedCloser, p)
   }
   let idx = self.stack.length() - 1
   if self.stack[idx].after_comma {
-    self.report(RemoveExtraComma, Info, self.stack[idx].last_comma)
+    self.report(RemoveExtraComma, self.stack[idx].last_comma)
   }
   let frame = self.stack.pop().unwrap()
   let v = match frame.kind {
@@ -461,11 +461,10 @@ fn Engine::assign(
   if self.stack[idx].map.contains(k) {
     match self.opts.duplicate_keys {
       KeepLast => {
-        self.report(MergeDuplicateKey, Warning, self.stack[idx].key_pos)
+        self.report(MergeDuplicateKey, self.stack[idx].key_pos)
         self.stack[idx].map[k] = v
       }
-      KeepFirst =>
-        self.report(MergeDuplicateKey, Warning, self.stack[idx].key_pos)
+      KeepFirst => self.report(MergeDuplicateKey, self.stack[idx].key_pos)
       AsError =>
         raise StrictViolation(
           MergeDuplicateKey,
@@ -505,7 +504,7 @@ fn Engine::start_string(
   is_key : Bool,
 ) -> Unit raise MendError {
   if u.to_int() != 0x22 {
-    self.report(NormalizeQuote, Info, p)
+    self.report(NormalizeQuote, p)
   }
   self.tok = TStr(str_kind_of(u), is_key)
   self.tok_start = p
@@ -538,7 +537,7 @@ fn Engine::push_cu(
         0x10000 + ((hi - 0xD800) << 10) + (u.to_int() - 0xDC00),
       )
     } else {
-      self.report(FixEscape, Warning, p)
+      self.report(FixEscape, p)
       self.push_code_point(0xFFFD)
     }
     return
@@ -568,7 +567,7 @@ fn Engine::push_escaped_cu(
       self.pending_high = 0
       self.push_code_point(0x10000 + ((hi - 0xD800) << 10) + (v - 0xDC00))
     } else {
-      self.report(FixEscape, Warning, p)
+      self.report(FixEscape, p)
       self.push_code_point(0xFFFD)
     }
     return
@@ -618,7 +617,7 @@ fn Engine::push_char(self : Engine, c : Char) -> Unit raise MendError {
 fn Engine::flush_lone_surrogate(self : Engine) -> Unit raise MendError {
   let p = self.pending_high_pos
   self.pending_high = 0
-  self.report(FixEscape, Warning, p)
+  self.report(FixEscape, p)
   self.push_code_point(0xFFFD)
 }
 
@@ -672,7 +671,7 @@ fn Engine::step_str(
       self.push_plain(0x5C)
       return
     }
-    self.report(FixEscape, Warning, self.esc_pos)
+    self.report(FixEscape, self.esc_pos)
     self.push_cu(u, p)
     return
   }
@@ -687,7 +686,7 @@ fn Engine::step_str(
       return
     }
     self.esc = 0
-    self.report(FixEscape, Warning, self.esc_pos)
+    self.report(FixEscape, self.esc_pos)
     self.push_cu(u, p)
     return
   }
@@ -711,7 +710,7 @@ fn Engine::step_str(
     return
   }
   if u.to_int() < 0x20 {
-    self.report(EscapeControl, Warning, p)
+    self.report(EscapeControl, p)
   }
   self.push_cu(u, p)
 }
@@ -741,7 +740,7 @@ fn Engine::step_str_pending(
     self.step_idle(u, p)
     return
   }
-  self.report(NormalizeQuote, Warning, self.pending_quote_pos)
+  self.report(NormalizeQuote, self.pending_quote_pos)
   match self.pending_quote.to_char() {
     Some(q) => self.push_char(q)
     None => ()
@@ -763,7 +762,7 @@ fn Engine::finish_string(self : Engine, is_key : Bool) -> Unit raise MendError {
     self.flush_lone_surrogate()
   }
   if self.esc != 0 {
-    self.report(FixEscape, Warning, self.esc_pos)
+    self.report(FixEscape, self.esc_pos)
     self.esc = 0
   }
   let text = self.parts_text()
@@ -838,7 +837,7 @@ fn Engine::classify_bare(
     return
   }
   if text == "..." {
-    self.report(DropEllipsis, Info, start)
+    self.report(DropEllipsis, start)
     self.mark_value_done_no_value()
     return
   }
@@ -867,7 +866,7 @@ fn Engine::classify_bare(
     match normalize_number(text) {
       Some(txt) => {
         if txt != text {
-          self.report(FixNumber, Info, start)
+          self.report(FixNumber, start)
         }
         self.value_done(build_number(txt))
       }
@@ -887,7 +886,7 @@ fn Engine::emit_literal(
   start : Position,
 ) -> Unit raise MendError {
   if !exact {
-    self.report(ConvertLiteral, Warning, start)
+    self.report(ConvertLiteral, start)
   }
   self.value_done(v)
 }
@@ -901,11 +900,11 @@ fn Engine::emit_non_finite(
 ) -> Unit raise MendError {
   match self.opts.non_finite {
     AsNull => {
-      self.report(ConvertLiteral, Warning, start)
+      self.report(ConvertLiteral, start)
       self.value_done(Json::null())
     }
     AsString => {
-      self.report(ConvertLiteral, Warning, start)
+      self.report(ConvertLiteral, start)
       self.value_done(Json::string(text))
     }
     AsError =>
@@ -930,11 +929,11 @@ fn Engine::emit_numberless(
   let idx = self.stack.length() - 1
   match self.stack[idx].kind {
     FArr => {
-      self.report(FixNumber, Info, start)
+      self.report(FixNumber, start)
       self.mark_value_done_no_value()
     }
     FObj => {
-      self.report(FillNull, Warning, start)
+      self.report(FillNull, start)
       match self.stack[idx].last_key {
         Some(k) => self.assign(idx, k, Json::null())
         None => ()
@@ -956,7 +955,7 @@ fn Engine::emit_bare_word(
 ) -> Unit raise MendError {
   match kind {
     BareKey => {
-      self.report(QuoteBareWord, Info, start)
+      self.report(QuoteBareWord, start)
       let idx = self.stack.length() - 1
       self.stack[idx].last_key = Some(text)
       self.stack[idx].key_pos = start
@@ -966,7 +965,7 @@ fn Engine::emit_bare_word(
       if self.stack.length() == 0 {
         raise NoJsonFound(start.offset)
       }
-      self.report(QuoteBareWord, Warning, start)
+      self.report(QuoteBareWord, start)
       self.value_done(Json::string(text))
     }
   }
@@ -982,17 +981,17 @@ fn Engine::step_slash(
   let n = u.to_int()
   if n == 0x2F {
     self.tok = TLineComment
-    self.report(StripComment, Info, self.tok_start)
+    self.report(StripComment, self.tok_start)
     return
   }
   if n == 0x2A {
     self.tok = TBlockComment
     self.block_star = false
-    self.report(StripComment, Info, self.tok_start)
+    self.report(StripComment, self.tok_start)
     return
   }
   self.tok = TIdle
-  self.report(DropUnexpected, Warning, self.tok_start)
+  self.report(DropUnexpected, self.tok_start)
   self.step_idle(u, p)
 }
 
@@ -1022,7 +1021,7 @@ fn Engine::step_fence(
 ) -> Unit raise MendError {
   if u.to_int() == 0x60 {
     if count + 1 >= 3 {
-      self.report(StripFence, Info, self.fence_start)
+      self.report(StripFence, self.fence_start)
       self.tok = TFenceLine
     } else {
       self.tok = TFence(count + 1)
@@ -1059,10 +1058,10 @@ fn Engine::finalize_token(self : Engine) -> Unit raise MendError {
         self.flush_lone_surrogate()
       }
       if self.esc != 0 {
-        self.report(FixEscape, Warning, self.esc_pos)
+        self.report(FixEscape, self.esc_pos)
         self.esc = 0
       }
-      self.report(CloseString, Warning, self.pos)
+      self.report(CloseString, self.pos)
       self.finish_string(is_key)
     }
     TStrPending(_kind, is_key) => {
@@ -1075,7 +1074,7 @@ fn Engine::finalize_token(self : Engine) -> Unit raise MendError {
     }
     TSlash => {
       self.tok = TIdle
-      self.report(DropUnexpected, Warning, self.tok_start)
+      self.report(DropUnexpected, self.tok_start)
     }
     TLineComment | TBlockComment | TFence(_) | TFenceLine => self.tok = TIdle
   }
@@ -1100,24 +1099,24 @@ fn Engine::unwind_top(self : Engine) -> Bool raise MendError {
       if f.ctx is CObjColon || f.ctx is CObjValue {
         match f.last_key {
           Some(k) => {
-            self.report(FillNull, Warning, self.pos)
+            self.report(FillNull, self.pos)
             self.assign(idx, k, Json::null())
           }
           None => ()
         }
       } else if f.after_comma {
-        self.report(RemoveExtraComma, Info, f.last_comma)
+        self.report(RemoveExtraComma, f.last_comma)
       }
-      self.report(CloseContainer, Warning, self.pos)
+      self.report(CloseContainer, self.pos)
       self.stack.pop() |> ignore
       self.value_done(Json::object(f.map))
       true
     }
     FArr => {
       if f.after_comma {
-        self.report(RemoveExtraComma, Info, f.last_comma)
+        self.report(RemoveExtraComma, f.last_comma)
       }
-      self.report(CloseContainer, Warning, self.pos)
+      self.report(CloseContainer, self.pos)
       self.stack.pop() |> ignore
       self.value_done(Json::array(f.items))
       true
