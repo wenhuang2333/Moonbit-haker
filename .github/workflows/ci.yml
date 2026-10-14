@@ -1,0 +1,121 @@
+# Continuous integration: type check, tests on all three backends, CLI and
+# demo smoke tests, differential report and coverage.
+#
+# Everything here is a command that also runs locally; docs/REPRODUCE.md has
+# the same list for a manual run.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  moonbit:
+    name: MoonBit (check, test, CLI, demo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the MoonBit toolchain
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - name: Toolchain versions
+        run: moon version --all
+
+      - name: Type check (warnings are errors)
+        working-directory: code
+        run: moon check --deny-warn
+
+      - name: Formatting
+        working-directory: code
+        run: moon fmt --check
+
+      - name: Test on wasm-gc, native and JavaScript
+        working-directory: code
+        run: |
+          moon test
+          moon test --target native
+          moon test --target js
+
+      - name: Command line smoke test
+        working-directory: code
+        run: |
+          moon build cmd/jsonmend --target native --release
+          bash tests/cli_smoke.sh
+
+      - name: Example inputs
+        working-directory: code
+        run: bash tests/examples.sh
+
+      - name: Library coverage
+        working-directory: code
+        run: |
+          moon coverage clean
+          moon test --enable-coverage
+          echo "== library package =="
+          moon coverage report -f summary -p wenhuang2333/jsonmend
+          echo "== including bench =="
+          moon coverage report -f summary
+
+      - name: Browser demo bundle is in sync
+        run: |
+          bash static/demo/build.sh
+          git diff --exit-code -- static/demo/jsonmend.js
+
+      - name: Browser demo bundle smoke test
+        run: node code/tests/demo_smoke.mjs
+
+  differential:
+    name: Differential and benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the MoonBit toolchain
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install the reference implementations
+        run: |
+          python3 -m pip install "json-repair==0.64.0"
+          mkdir -p "$RUNNER_TEMP/node-oracle"
+          cd "$RUNNER_TEMP/node-oracle"
+          npm install --no-audit --no-fund "jsonrepair@3.15.0"
+
+      - name: Differential report (must exit 0)
+        working-directory: code
+        run: |
+          moon build cmd/jsonmend --target native --release
+          python3 tests/diff/run_diff.py \
+            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe \
+            --node-module-dir "$RUNNER_TEMP/node-oracle/node_modules" \
+            --out "$RUNNER_TEMP/diff-report.md"
+
+      - name: Benchmark (informational)
+        working-directory: code
+        run: bash tests/bench.sh native
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: differential-report
+          path: ${{ runner.temp }}/diff-report.md

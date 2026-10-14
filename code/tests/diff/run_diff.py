@@ -14,9 +14,12 @@ Exit status is 0 when the in-scope semantic equivalence rate is at least
 """
 
 import argparse
+import datetime
+import hashlib
 import json
 import re
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -182,7 +185,7 @@ def py_oracle(text):
         return ("__error__", str(exc))
 
 
-def node_oracle(text, script):
+def node_oracle(text, script, env=None):
     if not script:
         return ("__unavailable__",)
     try:
@@ -192,6 +195,7 @@ def node_oracle(text, script):
             capture_output=True,
             text=True,
             timeout=60,
+            env=env,
         )
     except Exception as exc:  # pragma: no cover
         return ("__error__", str(exc))
@@ -201,6 +205,88 @@ def node_oracle(text, script):
         return json.loads(proc.stdout)
     except Exception as exc:
         return ("__error__", "unparsable oracle output: %s" % exc)
+
+
+# ------------------------------------------------------------- environment ---
+
+
+def detect_node_module_dir(explicit):
+    """Where `jsonrepair` is installed, or None.
+
+    Search order: --node-module-dir, NODE_PATH, the repo, the usual scratch
+    locations, the global npm root.
+    """
+    candidates = []
+    if explicit:
+        candidates.append(explicit)
+    env_path = os.environ.get("NODE_PATH", "")
+    candidates.extend(p for p in env_path.split(os.pathsep) if p)
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates.extend(
+        [
+            os.path.join(here, "..", "..", "node_modules"),
+            os.path.join(here, "..", "..", "..", "node_modules"),
+            "/private/tmp/node_modules",
+            "/tmp/node_modules",
+        ]
+    )
+    npm_root = shutil.which("npm")
+    if npm_root:
+        try:
+            out = subprocess.run(
+                ["npm", "root", "-g"], capture_output=True, text=True, timeout=30
+            )
+            if out.returncode == 0 and out.stdout.strip():
+                candidates.append(out.stdout.strip())
+        except Exception:
+            pass
+    for cand in candidates:
+        cand = os.path.abspath(cand)
+        if os.path.isdir(os.path.join(cand, "jsonrepair")):
+            return cand
+    return None
+
+
+def node_oracle_available(script, env):
+    """True when the node oracle really answers for a trivial document."""
+    if not script:
+        return False
+    value = node_oracle('{"a":1}', script, env)
+    return not isinstance(value, tuple)
+
+
+def probe_versions(module_dir):
+    """Version strings of the oracles, for the report header."""
+    py_version = "not installed"
+    try:
+        from importlib.metadata import version
+
+        py_version = version("json-repair")
+    except Exception:
+        pass
+    node_version = "not installed"
+    if module_dir:
+        pkg = os.path.join(module_dir, "jsonrepair", "package.json")
+        try:
+            with open(pkg) as fh:
+                node_version = json.load(fh).get("version", "unknown")
+        except Exception:
+            node_version = "unknown"
+    return py_version, node_version
+
+
+def binary_stamp(path):
+    """Identity of the binary under test, so a report can be reproduced."""
+    try:
+        with open(path, "rb") as fh:
+            digest = hashlib.sha256(fh.read()).hexdigest()[:16]
+        size = os.path.getsize(path)
+        mtime = datetime.datetime.fromtimestamp(
+            os.path.getmtime(path), datetime.timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return "sha256:%s, %d bytes, mtime %s" % (digest, size, mtime)
+    except Exception as exc:
+        return "unavailable (%s)" % exc
 
 
 # ------------------------------------------------------------ classifying ---
@@ -275,6 +361,23 @@ def main():
         help="node script wrapping jsonrepair, or '' to skip",
     )
     ap.add_argument(
+        "--no-stamp",
+        action="store_true",
+        help="omit the volatile provenance rows (date, binary hash) so the "
+        "report is byte-for-byte reproducible; used for docs/DIVERGENCES.md",
+    )
+    ap.add_argument(
+        "--no-node",
+        action="store_true",
+        help="skip the node oracle entirely",
+    )
+    ap.add_argument(
+        "--node-module-dir",
+        default="",
+        help="directory containing node_modules/jsonrepair "
+        "(default: auto-detect)",
+    )
+    ap.add_argument(
         "--out",
         default=os.path.join(os.path.dirname(__file__), "report.md"),
     )
@@ -289,6 +392,37 @@ def main():
     node_script = args.node_script
     if node_script and not os.path.exists(node_script):
         node_script = ""
+    if args.node_module_dir and not os.path.isdir(
+        os.path.join(args.node_module_dir, "jsonrepair")
+    ):
+        print(
+            "warning: no jsonrepair under %s, falling back to auto-detection"
+            % args.node_module_dir,
+            file=sys.stderr,
+        )
+    module_dir = None
+    node_env = dict(os.environ)
+    node_used = False
+    if args.no_node:
+        print("node oracle skipped (--no-node)", file=sys.stderr)
+        node_script = ""
+    else:
+        module_dir = detect_node_module_dir(args.node_module_dir)
+        if module_dir:
+            node_env["NODE_PATH"] = module_dir
+        node_used = node_oracle_available(node_script, node_env)
+        if node_used:
+            print("node oracle: %s" % (module_dir or "ambient node path"),
+                  file=sys.stderr)
+        else:
+            print(
+                "node oracle unavailable: jsonrepair not found "
+                "(install it and pass --node-module-dir); "
+                "the node column is skipped, not scored 0.0%",
+                file=sys.stderr,
+            )
+            node_script = "" 
+    py_version, node_version = probe_versions(module_dir if node_used else None)
 
     rows = []
     node_agree = node_diverge = 0
@@ -303,7 +437,7 @@ def main():
                 mine_ok = False
         theirs = py_oracle(text)
         theirs_ok = not isinstance(theirs, tuple)
-        node_value = node_oracle(text, node_script)
+        node_value = node_oracle(text, node_script, node_env)
         node_ok = not isinstance(node_value, tuple)
         if mine_ok and node_ok:
             if mine == node_value:
@@ -364,13 +498,41 @@ def main():
     lines.append("JSONMend is compared against two independent reference")
     lines.append("implementations. Only *parsed JSON values* are compared, never text,")
     lines.append("because formatting is not part of the contract.\n")
+    generated = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
     lines.append("| item | value |")
     lines.append("| --- | --- |")
-    lines.append("| primary oracle | `json-repair` (Python, MIT) |")
-    lines.append("| secondary oracle | `jsonrepair` (TypeScript/Node, MIT) |")
+    if args.no_stamp:
+        lines.append(
+            "| provenance | omitted (--no-stamp) so this report is "
+            "reproducible byte for byte; run without the flag for the date "
+            "and the binary hash |"
+        )
+    else:
+        lines.append("| generated (UTC) | %s |" % generated)
+        lines.append("| binary under test | `%s` |" % args.cli)
+        lines.append("| binary identity | %s |" % binary_stamp(args.cli))
+    lines.append("| primary oracle | `json-repair` (Python, MIT) %s |" % py_version)
+    if node_used:
+        lines.append(
+            "| secondary oracle | `jsonrepair` (TypeScript/Node, ISC) %s "
+            "from `%s` |" % (node_version, module_dir)
+        )
+    else:
+        why = (
+            "skipped by --no-node"
+            if args.no_node
+            else "jsonrepair not installed"
+        )
+        lines.append(
+            "| secondary oracle | **skipped** (%s; the node column is not "
+            "scored) |" % why
+        )
     lines.append(f"| corpus | {len(HAND_WRITTEN)} hand written cases + {len(mutations())} automatic mutations |")
+    lines.append("| corpus selection | deterministic: fixed list plus fixed mutations, no seed |")
     lines.append("| comparison | `json.loads(jsonmend stdout)` vs `json_repair.repair_json(..., return_objects=True)` |")
-    lines.append("| reproduce | `python3 code/tests/diff/run_diff.py --cli <jsonmend binary>` (see docs/REPRODUCE.md) |\n")
+    lines.append("| reproduce | `python3 code/tests/diff/run_diff.py --cli <jsonmend binary> [--node-module-dir DIR]` (see docs/REPRODUCE.md) |\n")
     lines.append("A divergence is *documented* when JSONMend's own repair record list")
     lines.append("explains it: the rules that fired are exactly the rules whose")
     lines.append("documented behaviour differs from the reference implementation.\n")
@@ -386,11 +548,22 @@ def main():
     lines.append(f"| divergences with a documented cause | {len(explained)} |")
     lines.append(f"| unexplained divergences | {len(unexplained)} |")
     lines.append(f"| documented-scope agreement | {in_scope_rate:.1f}% |")
-    lines.append(
-        f"| agreement with jsonrepair (node) | "
-        f"{100.0 * node_agree / max(node_agree + node_diverge, 1):.1f}% "
-        f"({node_agree}/{node_agree + node_diverge}) |\n"
-    )
+    if node_used:
+        lines.append(
+            f"| agreement with jsonrepair (node) | "
+            f"{100.0 * node_agree / max(node_agree + node_diverge, 1):.1f}% "
+            f"({node_agree}/{node_agree + node_diverge}) |\n"
+        )
+    else:
+        why = (
+            "skipped by --no-node"
+            if args.no_node
+            else "jsonrepair not installed"
+        )
+        lines.append(
+            "| agreement with jsonrepair (node) | skipped (%s; not scored "
+            "as 0%%) |\n" % why
+        )
 
     lines.append("## Divergence classes\n")
     lines.append("Every class is the set of repair rules JSONMend applied to reach")

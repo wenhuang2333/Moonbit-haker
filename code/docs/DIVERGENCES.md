@@ -6,11 +6,13 @@ because formatting is not part of the contract.
 
 | item | value |
 | --- | --- |
-| primary oracle | `json-repair` (Python, MIT) |
-| secondary oracle | `jsonrepair` (TypeScript/Node, MIT) |
+| provenance | omitted (--no-stamp) so this report is reproducible byte for byte; run without the flag for the date and the binary hash |
+| primary oracle | `json-repair` (Python, MIT) 0.64.0 |
+| secondary oracle | `jsonrepair` (TypeScript/Node, ISC) 3.15.0 from `/private/tmp/node_modules` |
 | corpus | 86 hand written cases + 303 automatic mutations |
+| corpus selection | deterministic: fixed list plus fixed mutations, no seed |
 | comparison | `json.loads(jsonmend stdout)` vs `json_repair.repair_json(..., return_objects=True)` |
-| reproduce | `python3 code/tests/diff/run_diff.py --cli <jsonmend binary>` (see docs/REPRODUCE.md) |
+| reproduce | `python3 code/tests/diff/run_diff.py --cli <jsonmend binary> [--node-module-dir DIR]` (see docs/REPRODUCE.md) |
 
 A divergence is *documented* when JSONMend's own repair record list
 explains it: the rules that fired are exactly the rules whose
