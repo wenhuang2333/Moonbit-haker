@@ -15,6 +15,15 @@ __pycache__/
 *.pyc
 .venv/
 
-# 环境变量与密钥
+# 环境变量与密钥（敏感信息严禁上传）
 .env
 *.key
+*.pem
+*.ppk
+id_rsa*
+id_ed25519*
+id_ecdsa*
+*.p12
+*.pfx
+gh_token*.txt
+device_code*.txt
