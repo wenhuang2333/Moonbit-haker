@@ -30,11 +30,11 @@ MoonBit 生态里没有 —— 这个库补上这一块。
 curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
 export PATH="$HOME/.moon/bin:$PATH"
 
-# 2. 构建与测试
-git clone git@github.com:wenhuang2333/Moonbit-haker.git
+# 2. 构建与测试（HTTPS 可直接匿名克隆；SSH 用 git@github.com:wenhuang2333/Moonbit-haker.git）
+git clone https://github.com/wenhuang2333/Moonbit-haker.git
 cd Moonbit-haker/code
-moon check          # 0 warning
-moon test           # 28 个测试块全部通过
+moon check --deny-warn   # 0 warning
+moon test                # 32 个测试块全部通过
 ```
 
 ```moonbit
@@ -88,7 +88,7 @@ $J --indent 2 broken.json            # 缩进输出
 | --- | --- |
 | 一次性修复 | `repair` 返回修复文本、`Json` 值与逐条修复记录（码、位置、级别、消息） |
 | 流式部分解析 | `PartialParser::feed` / `feed_bytes` / `snapshot` / `finish`，快照给出值、完整性状态与未闭合路径 |
-| 21 条修复规则 | R001–R021：围栏、注释、引号、裸词、逗号、冒号、缺值补 null、容器/字符串闭合、数字、字面量、转义、括号错配、意外内容、多余闭合符、重复键、省略号、前导说明 |
+| 21 条修复规则 | R001–R021：围栏、注释、引号、裸词、逗号、冒号、缺值补 null、容器/字符串闭合、数字、字面量、转义、括号错配、意外内容、多余闭合符、重复键、相邻字符串拼接、省略号、前导说明 |
 | 9 个错误码 | E001/E002/E010/E020/E021/E022/E030/E040/E050，含位置与上下文片段 |
 | 严格模式 | 任何修复都升级为 `E010`，可用于校验流水线 |
 | 策略选项 | 重复键、未完成数字、悬空键、非有限值、多根值、围栏、前导说明、引号前瞻、缩进、按规则开关 |
@@ -102,24 +102,27 @@ $J --indent 2 broken.json            # 缩进输出
 
 | 项目 | 规模 | 结果 |
 | --- | --- | --- |
-| 黄金用例（项目文档附录 A、B） | 115 条 | 全部通过 |
-| 流式用例（S-001…S-020）与分块不变性 | 20 条 + 逐码元/二分/1 KB 切分 | 通过 |
+| 黄金用例（项目文档附录 A、B） | 126 条 | 全部通过 |
+| 流式用例（S-001…S-021）与分块不变性 | 21 条 + 逐码元/二分/1 KB 切分 | 通过 |
 | 属性与模糊测试 | 8 组 × 400 例（另压测 20 万例） | 通过，无反例 |
 | 公共面与选项测试 | 21 个 R 码 + 9 个 E 码逐一检查 | 通过 |
-| 三个后端 | wasm-gc / native / JS | 各 28/28 通过 |
+| 三个后端 | wasm-gc / native / JS | 各 32/32 通过 |
 | 命令行冒烟 | 25 项断言（含全部退出码） | 通过 |
 | 示例对照 | 6 组输入/期望输出 | 逐字节一致 |
 | 差分测试（对照 `jsonrepair`、`json-repair`） | 389 条用例 | 193 处差异**全部有文档解释**，未解释 0 |
-| 库代码行覆盖率 | 1054/1125 行 | 93.7% |
-| 吞吐（Apple M5，release） | 合法 JSON native 30–32 MB/s、JS 18–30 MB/s | 达标（阈值 20 / 5） |
-| wasm-gc 产物体积 | 93.6 KiB | 达标（上限 150 KB） |
+| 库代码行覆盖率 | 1137/1223 行 | 93.0% |
+| 吞吐（Apple M5，release，单机单次观测） | 合法 JSON native 32–36 MB/s、JS 20–37 MB/s | 达标（阈值 20 / 5） |
+| wasm-gc 产物体积 | 95.9 KiB | 达标（上限 150 KB） |
 
 ```bash
 cd code
 moon test && moon test --target native && moon test --target js
 bash tests/cli_smoke.sh && bash tests/examples.sh
+node tests/demo_smoke.mjs
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 ```
+
+以上命令（含差分与产物体积）也在 `.github/workflows/ci.yml` 中按同样的版本执行。
 
 ## 演示页
 
@@ -156,9 +159,9 @@ python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/
 
 ## 已知限制
 
-- `R019` 相邻字符串拼接（`"a" + "b"`）未实现；FR-16 事件/回调接口未实现。
+- FR-16 事件/回调接口未实现（需要回调的调用方只能用 `snapshot()` 轮询）。
 - 快照的 `incomplete_number` / `pending_key` 策略只影响快照，最终结果仍会补全。
-- 峰值内存约为输入的 18 倍，未达到「≤ 4 倍输入」的预算（需要「只产出文本、不建树」的模式）。
+- 峰值内存约为输入的 16 倍（13.2 MB 输入 → 212 MB），未达到「≤ 4 倍输入」的预算：只要保留完整 `Json` 树就无法达标，需要「只产出文本、不建树」的模式。
 - 命令行仅支持 native 后端；解析器实例非线程安全，每个流用一个实例。
 - `Json` 数值遵循 core 的表示，大整数可能损失精度，但修复后的文本保留原数字。
 - 恢复策略是启发式的，不是某个标准的合规实现。
@@ -182,9 +185,9 @@ python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/
 
 ## 路线图
 
-- 实现 `R019` 相邻字符串拼接与 FR-16 事件/回调接口。
+- 实现 FR-16 事件/回调接口。
 - 增加「只产出文本、不建树」的模式，把内存降到 4 × 输入以内。
-- 扩大差分语料并接入 CI（`moon check` / `moon test` / CLI 冒烟 / 差分）。
+- 扩大差分语料（嵌套多根文档、更深的变异）并补充流式路径的内存预算测试。
 - 发布到 mooncakes.io。
 
 ## 许可与致谢
@@ -213,12 +216,13 @@ repaired, complete what is truncated, and record every change with a code and a 
   keys, ellipsis, prose) and **9 fatal error codes** with positions and snippets.
 - **Guarantees enforced by property tests**: output is always valid JSON, repair is idempotent,
   and streaming is chunk invariant.
-- **Verified**: 115 golden cases, 20 streaming cases, 8 property groups × 400 cases,
-  28 test blocks on wasm-gc / native / JS, 25 CLI assertions, and a 389-case differential
+- **Verified**: 126 golden cases, 21 streaming cases, 8 property groups × 400 cases,
+  32 test blocks on wasm-gc / native / JS, 25 CLI assertions, and a 389-case differential
   corpus against `jsonrepair` and `json-repair` in which every one of the 193 divergences has
-  a documented cause. Library line coverage 93.7%; native throughput 30–32 MB/s.
+  a documented cause. Library line coverage 93.0%; native throughput 32–36 MB/s
+  (single-machine observation; CI reruns the same benchmark script).
 - **CLI** (`jsonmend`) with `--report`, `--check`, `--strict`, `--indent`, `--multi-root`,
-  and a browser demo driven by the MoonBit JS build.
+  `--max-repairs`, chunked streaming input, and a browser demo driven by the MoonBit JS build.
 
 Docs: [code/README.md](code/README.md) (English) · [code/README.zh.md](code/README.zh.md) (中文) ·
 [code/docs/](code/docs/). License: Apache-2.0.

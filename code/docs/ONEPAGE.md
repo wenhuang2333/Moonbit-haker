@@ -48,24 +48,24 @@ jsonmend --check broken.json ; echo $?     # 1 = 需要修复
 | 公共 API | `code/api.mbt` | `repair` / `parse` / `PartialParser` / `is_valid_json` |
 | 规则与错误 | `code/error.mbt` | 21 条修复规则（R001–R021）、9 个致命错误码（E001–E050） |
 | 选项 | `code/options.mbt` | 严格模式、重复键、未完成数字、非有限值、多根值、规则开关、资源上限 |
-| CLI | `code/cmd/jsonmend/` | stdin/文件、`--report`、`--check`、`--strict`、`--indent`、`--multi-root` |
+| CLI | `code/cmd/jsonmend/` | stdin/文件（64 KB 分块流式读入）、`--report`、`--check`、`--strict`、`--indent`、`--multi-root`、`--max-repairs` |
 | 基准 | `code/bench/` | 吞吐、线性、流式、产物体积 |
 
 ## 证据
 
 | 项 | 结果 |
 | --- | --- |
-| 黄金用例 | 115 条（规范附录 A、B）全部通过 |
-| 流式用例 | 20 条（S-001…S-020）+ 分块不变性（逐码元 / 二分 / 1 KB 分块） |
+| 黄金用例 | 126 条（附录 A 77 + 附录 B 49）全部通过 |
+| 流式用例 | 21 条（S-001…S-021）+ 分块不变性（逐码元 / 二分 / 1 KB 分块） |
 | 属性与模糊 | 8 组 × 400 例，含 200 000 例压测；未发现反例 |
 | 公共面与选项 | 21 个 R 码 + 9 个 E 码逐一检查；策略枚举、规则开关、字节输入共 17 例 |
-| 覆盖率 | 库代码 1054/1125 行 = 93.7%（`moon test --enable-coverage`） |
+| 覆盖率 | 库代码 1137/1223 行 = 93.0%（`moon coverage report -f summary -p wenhuang2333/jsonmend`） |
 | 差分测试 | 389 条用例对照 `json-repair` 与 `jsonrepair`；193 处差异全部由修复记录解释，未解释 0 |
 | 命令行 | 25 项断言全部通过（退出码 0/1/2/3/4/5/70 覆盖） |
 | 演示页 | `static/demo/index.html`，MoonBit JS 产物驱动，无头浏览器验证无报错 |
-| 跨后端 | wasm-gc / native / JS 三个后端 28 个测试块全部通过 |
-| 吞吐 | native 30–32 MB/s，JS 18–30 MB/s（合法 JSON，Apple M5） |
-| 体积 | wasm-gc release 93.6 KiB（上限 150 KB） |
+| 跨后端 | wasm-gc / native / JS 三个后端 32 个测试块全部通过 |
+| 吞吐 | native 32–36 MB/s，JS 20–37 MB/s（合法 JSON，Apple M5，单次观测） |
+| 体积 | wasm-gc release 95.9 KiB（上限 150 KB） |
 
 ## 与参照实现的关系
 
@@ -77,10 +77,9 @@ jsonmend --check broken.json ; echo $?     # 1 = 需要修复
 
 ## 已知限制
 
-- `R019` 相邻字符串拼接（`"a" + "b"`）未实现；
-- FR-16 事件/回调接口未实现；
+- FR-16 事件/回调接口未实现（需要回调的调用方只能用 `snapshot()` 轮询）；
 - 快照的 `incomplete_number` / `pending_key` 策略只影响快照，最终结果仍补全；
-- 峰值内存约为输入的 18 倍，未达到「≤ 4 倍输入」的预算（见基准报告）；
+- 峰值内存约为输入的 16 倍（13.2 MB 输入 → 212 MB），未达到「≤ 4 倍输入」的预算：保留完整 `Json` 树就无法达标，见基准报告；
 - 恢复策略是启发式的，不是某个标准的合规实现。
 
 ## 文档索引
@@ -95,3 +94,6 @@ jsonmend --check broken.json ; echo $?     # 1 = 需要修复
 | `docs/REPRODUCE.md` | 从零复现全部结论 |
 | `docs/TRACEABILITY.md` | 需求 → 用例 → 证据 的追踪矩阵 |
 | `CHANGELOG.md` | 版本变更与限制 |
+
+CI 与本地执行同一组命令：`.github/workflows/ci.yml`（`moon check --deny-warn`、三后端
+`moon test`、CLI/示例/演示冒烟、差分报告、覆盖率、产物体积）。

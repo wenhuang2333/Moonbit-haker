@@ -7,7 +7,8 @@
 
 ## [0.1.0] - 2026-10-14
 
-首个发布版本。
+首个发布版本。本版本尚未发布到 mooncakes.io（`moon whoami` 未登录），源码状态见
+`docs/TRACEABILITY.md`。
 
 ### 新增
 
@@ -26,13 +27,17 @@
   数字（`incomplete_number`：快照中丢弃/裁剪为合法数字）、悬空键
   （`pending_key`：省略/补 null）、非有限值（`non_finite`：转 null/报错/转字符串）
   与多根值（`multi_root`：保留第一个/合成数组/报错）。
+- 修复记录上限可配置（`max_repairs`，默认 10000）：超出后仍继续修复但不再记录，
+  结果类型新增 `repairs_truncated` 字段；CLI 对应 `--max-repairs N`，被截断时向
+  标准错误打印一行提示。
 - Markdown 代码围栏剥离（`strip_fence`，默认开启）。
 - 前导说明文字跳过选项（`skip_prose`）与引号歧义前瞻选项（`quote_lookahead`）。
 - 按规则粒度的开关（`RuleSet::enable`/`disable`），关闭某条规则后对应情形按
   严格模式处理。
 - 原生命令行工具 `cmd/jsonmend`：支持 `--strict`、`--check`、`--report`、
   `--indent N`、`--multi-root MODE`、`--skip-prose`、`--quote-lookahead`、
-  `-h/--help`，从文件或标准输入读取并输出修复后的 JSON。
+  `--max-repairs N`、`-h/--help`，从文件或标准输入读取并输出修复后的 JSON；
+  输入按 64 KB 分块流式读入，不再把整份输入复制成一份 `Bytes`。
 - 基准测试框架 `bench/`，用于测量一次性修复与流式解析的吞吐和耗时。
 - 黄金用例测试套件（`golden_wbtest.mbt`，覆盖项目文档附录 A/B 的 TC-G 用例）
   与文档用例流式测试套件（`stream_wbtest.mbt`，覆盖 TC-S 及分块不变性、
@@ -48,6 +53,15 @@
 - 浏览器演示页 `static/demo/index.html`：由 MoonBit JS 产物直接驱动，无第二实现。
 - 文档集 `docs/`：RULES、ERRORS、DIVERGENCES、BENCHMARK、REPRODUCE、ONEPAGE、
   TRACEABILITY，以及 `CONTRIBUTING.md`、`SECURITY.md`、`LICENSE`、`NOTICE`。
+- 性能：连续普通字符走批处理快路径（`Engine::push_run`），1 MB 单串 native
+  535 MB/s；`snapshot` 在引擎状态未变化时命中记忆化，1 MB 输入重复取 1000 次
+  快照由约 200 倍降到 13 ms。
+- 持续集成 `.github/workflows/ci.yml`：两个 job 分别执行 `moon check --deny-warn`、
+  三后端 `moon test`、CLI/示例/演示冒烟、覆盖率、bundle 同步检查，以及差分报告与基准。
+- 演示 bundle 冒烟测试 `tests/demo_smoke.mjs`（Node 直接执行已提交的 bundle）。
+- 差分脚本增强：自动探测 `jsonrepair` 模块目录（`--node-module-dir`、`--no-node`），
+  报告头部记录生成时间、被测二进制 sha256、两个 oracle 的版本与语料构成；
+  `--no-stamp` 输出逐字节可复现，提交版报告为 `docs/DIVERGENCES.md`。
 
 ### 修复
 
@@ -59,13 +73,13 @@
   FR-16 的事件接口可缓解。
 - `Json` 数值遵循 core 的表示，大整数可能损失精度；修复后的文本保留数字原文。
 - 引号前瞻默认关闭，开启后对缺逗号的字符串序列会偏向解释为内容。
-- 修复记录有内部上限 10000 条。
+- 修复记录受 `max_repairs` 限制（默认 10000 条），超出后不再记录，可由 `repairs_truncated` 得知。
 - 解析器实例非线程安全，每个输入流应使用独立实例。
 - 与 `jsonrepair` 存在有意差异，详见差分报告；差异点包括未结束数字在快照中
   默认不输出、悬空键在快照中省略而最终结果为 null、重复键默认保留最后一个并
   记录 R018、孤立代理码元统一替换为 U+FFFD，以及参照实现中更激进的猜测式修复
   属于范围外行为。
-- 峰值内存约为输入的 18 倍，未达到「≤ 4 倍输入」的预算；需要「只产出文本、
-  不建树」的模式才能达标（见 `docs/BENCHMARK.md`）。
-- `R019` 相邻字符串拼接（`"a" + "b"`）未实现；FR-16 事件/回调接口未实现。
+- 峰值内存约为输入的 16 倍（13.2 MB 输入 → 212 MB），未达到「≤ 4 倍输入」的预算；
+  需要「只产出文本、不建树」的模式才能达标（见 `docs/BENCHMARK.md`）。
+- FR-16 事件/回调接口未实现，需要回调的调用方只能用 `snapshot()` 轮询。
 - 命令行工具仅支持 native 后端；库本身在 wasm-gc / native / JS 三个后端均通过测试。

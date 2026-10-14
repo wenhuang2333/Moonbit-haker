@@ -80,10 +80,15 @@ intended in `docs/DIVERGENCES.md` (the file is generated; put the explanation in
 
 ## Commit and review checklist
 
-- [ ] `moon check` reports 0 warnings
+CI (`.github/workflows/ci.yml`) runs the same list; a red job is a blocker.
+
+- [ ] `moon check --deny-warn` reports 0 warnings
 - [ ] `moon fmt --check` is clean
 - [ ] tests pass on wasm-gc, native and JS
-- [ ] CLI smoke test passes
+- [ ] CLI smoke test passes (`bash tests/cli_smoke.sh`)
+- [ ] example inputs match (`bash tests/examples.sh`)
+- [ ] the browser bundle is rebuilt when the engine changed (`bash static/demo/build.sh`,
+      then `node code/tests/demo_smoke.mjs`)
 - [ ] differential harness still exits 0
 - [ ] docs and `CHANGELOG.md` updated with the change
 - [ ] no key, token, `.env` or build artifact is committed

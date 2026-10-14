@@ -245,19 +245,22 @@ JSONMend 有两条完全分开的信号通道（ADR-006，规格 D09 9.1）：
   fn Engine::report(
     self : Engine,
     code : RepairCode,
-    sev : Severity,
     p : Position,
   ) -> Unit raise MendError {
     if self.opts.mode is Strict || !self.opts.rules.is_enabled(code) {
       raise StrictViolation(code, p, code.message())
     }
-    if self.opts.collect_repairs && self.reps.length() < 10000 {
-      self.reps.push({
-        code,
-        position: p,
-        severity: sev,
-        message: code.message(),
-      })
+    if self.opts.collect_repairs {
+      if self.reps.length() < self.opts.max_repairs {
+        self.reps.push({
+          code,
+          position: p,
+          severity: code.severity(),
+          message: code.message(),
+        })
+      } else {
+        self.repairs_truncated = true
+      }
     }
   }
   ```
@@ -269,18 +272,24 @@ JSONMend 有两条完全分开的信号通道（ADR-006，规格 D09 9.1）：
 
 ## 修复记录上限
 
-上限硬编码为 10000 条，判断在 `Engine::report` 的第二条分支（`code/engine.mbt:279`）：
+上限由 `Options.max_repairs` 给出，默认 10000，判断在 `Engine::report` 的第二条分支
+（`code/engine.mbt`）：
 
 ```moonbit
-if self.opts.collect_repairs && self.reps.length() < 10000 {
-  self.reps.push({ code, position: p, severity: sev, message: code.message() })
+if self.opts.collect_repairs {
+  if self.reps.length() < self.opts.max_repairs {
+    self.reps.push({ code, position: p, severity: code.severity(), message: code.message() })
+  } else {
+    self.repairs_truncated = true
+  }
 }
 ```
 
-- 记录数达到 10000 之后，后续记录被**丢弃**，解析继续正常进行，`finish` 仍然返回文本、值与已收集的记录。
+- 记录数达到上限之后，后续记录被**丢弃**，解析继续正常进行，`finish` 仍然返回文本、值与已收集的记录；此时结果的 `repairs_truncated` 为 `true`，CLI 在 `--report` 下额外打印一行 `jsonmend: repair records truncated at N (raise max_repairs to record more)`。
+- `max_repairs <= 0` 由 `Options::validate` 拒绝（`E050`）；CLI 用 `--max-repairs N` 设置。
 - 上限只作用于 `self.reps`，不改变解析状态，也不改变任何错误码。
 - **Strict 升级不受影响**：`mode is Strict || !rules.is_enabled(code)` 的判断在长度判断之前，所以第 10001 条之后的记录在 Strict 或规则关闭时仍然抛出 `E010`，载荷中的修复码与位置照常。
-- `collect_repairs = false` 时任何记录都不写入 `self.reps`（Lenient 下静默修复），这与 10000 上限是两条独立的分支条件。
+- `collect_repairs = false` 时任何记录都不写入 `self.reps`（Lenient 下静默修复），也不会把 `repairs_truncated` 置位，这与记录上限是两条独立的分支条件。
 
 ## CLI 退出码
 
@@ -337,4 +346,4 @@ if self.opts.collect_repairs && self.reps.length() < 10000 {
 | 非法 UTF-8 | `Engine::feed_byte` 的解码器（`code/engine.mbt:360/364/371`）与 `Engine::finish_engine` 的未完成序列检查（`code/engine_flow.mbt:1136`） | E040 | 同上；CLI 退出码 3 |
 | 调用顺序错误 | `Engine::feed_str`（`code/engine.mbt:293`）、`Engine::step_idle`（`code/engine_flow.mbt:22`）、`Engine::finish_engine`（`code/engine_flow.mbt:1132`）的生命周期状态检查 | E030 | 无部分结果；CLI 退出码 70 |
 | 内部不变量被破坏（缺陷） | 不可达分支 | 规格要求 E030 且说明中标注 `internal`；当前实现只有上述三处生命周期检查，没有标注 `internal` 的抛出点 | 视为缺陷，由模糊测试捕获 |
-| 修复记录过多 | `Engine::report` 的内部上限 `self.reps.length() < 10000`（`code/engine.mbt:279`） | 停止追加记录，解析继续，Strict 升级不受影响 | 结果照常返回，记录被截断至 10000 条 |
+| 修复记录过多 | `Engine::report` 的 `self.reps.length() < self.opts.max_repairs`（默认 10000） | 停止追加记录并置 `repairs_truncated`，解析继续，Strict 升级不受影响 | 结果照常返回，记录被截断至 `max_repairs` 条 |

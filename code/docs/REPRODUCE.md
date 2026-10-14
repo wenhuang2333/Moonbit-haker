@@ -9,9 +9,11 @@
 | --- | --- | --- |
 | MoonBit 工具链 | `moon 0.1.20261012`、`moonc v0.10.15+943464bfa` | `curl -fsSL https://cli.moonbitlang.com/install/unix.sh \| bash`，然后 `export PATH="$HOME/.moon/bin:$PATH"` |
 | Python | 3.9+ | 差分测试脚本 |
-| `json-repair`（Python） | 0.64.0 | `python3 -m pip install json-repair` |
-| Node.js | 24.x | JS 后端与第二个差分参照 |
-| `jsonrepair`（npm） | 3.15.0 | `npm install jsonrepair`（本仓库实测装在 `/private/tmp/node_modules`） |
+| `json-repair`（Python） | 0.64.0 | `python3 -m pip install "json-repair==0.64.0"` |
+| Node.js | 24.x | JS 后端、演示 bundle 冒烟测试与第二个差分参照 |
+| `jsonrepair`（npm） | 3.15.0 | `npm install "jsonrepair@3.15.0"`；脚本会自动搜索 `NODE_PATH`、仓库内 `node_modules`、`/tmp/node_modules` 与 `npm root -g`，也可以用 `--node-module-dir` 指定 |
+
+CI（`.github/workflows/ci.yml`）用同样的依赖版本执行下面第 1–6 节的命令。
 
 ```bash
 export PATH="$HOME/.moon/bin:$PATH"
@@ -23,7 +25,7 @@ moon version --all
 
 ```bash
 cd code
-moon check                    # 0 errors, 0 warnings
+moon check --deny-warn        # 0 errors, 0 warnings（警告即失败）
 moon fmt --check              # 格式一致
 moon build --target native --release
 moon build --target wasm-gc --release
@@ -39,13 +41,17 @@ moon test --target native      # 本机后端
 moon test --target js          # JS 后端
 ```
 
-期望：15 个测试块全部通过（黄金用例 115 条、流式用例 20 条、属性测试 8 组，
+期望：32 个测试块全部通过（黄金用例 126 条、流式用例 6 块含 21 组断言、属性测试 8 组，
 每组 400 例）。任一后端失败都视为发布阻塞。
 
-覆盖率（如工具链提供）：
+覆盖率（`-p` 限定到库包，否则 `bench/main.mbt` 会以 0% 计入分母）：
 
 ```bash
-cd code && moon test --enable-coverage && moon coverage report
+cd code
+moon coverage clean                     # 清掉上一轮的 .trace 文件，避免计数错位
+moon test --enable-coverage
+moon coverage report -f summary -p wenhuang2333/jsonmend   # 库代码 1137/1223 = 93.0%
+moon coverage report -f summary                             # 含 bench：1137/1393 = 81.6%
 ```
 
 ## 3. 命令行冒烟测试（TC-C-01）
@@ -68,18 +74,26 @@ bash tests/cli_smoke.sh ./path/to/jsonmend.exe  # 指定其它可执行文件
 cd code
 moon build cmd/jsonmend --target native --release
 
-# 只用 Python 参照
+# 只用 Python 参照（node 参照不可用时自动跳过并说明，而不是记 0%）
 python3 tests/diff/run_diff.py \
-  --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+  --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe --no-node
 
-# 两个参照都跑（需要 npm 的 jsonrepair）
-NODE_PATH=/private/tmp/node_modules python3 tests/diff/run_diff.py \
+# 两个参照都跑：模块目录自动探测，也可显式指定
+python3 tests/diff/run_diff.py \
   --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe \
-  --out docs/DIVERGENCES.md
+  --node-module-dir "$(npm root -g)" \
+  --out /tmp/diff-report.md
+
+# 提交版报告：--no-stamp 去掉日期与二进制哈希，输出逐字节可复现
+python3 tests/diff/run_diff.py \
+  --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe \
+  --no-stamp --out docs/DIVERGENCES.md
 ```
 
-脚本产出 389 条用例的对照结果并写出 `docs/DIVERGENCES.md`；当且仅当
+脚本产出 389 条用例的对照结果，报告头部记录生成时间、被测二进制的 sha256、两个
+参照实现的版本与模块目录、语料构成（固定列表 + 固定变异，无随机种子）。当且仅当
 「有文档解释的差异比例 ≥ 90% 且未解释差异为 0」时退出码为 0。
+`tests/diff/report.md` 是本地默认输出（已 gitignore），提交版是 `docs/DIVERGENCES.md`。
 
 ## 5. 基准（TC-B）
 
@@ -107,6 +121,13 @@ open ../static/demo/index.html
 直接驱动（`code/examples/web/main.mbt` 通过 `globalThis.jsonmendRegister*` 暴露
 `repair` / `report` / `snapshot`），页面内没有第二份实现。
 
+bundle 冒烟测试（Node 直接执行，CI 中也会先重建再比对，防止提交的 bundle 过期）：
+
+```bash
+node code/tests/demo_smoke.mjs        # 10 项断言：三个入口 + 典型修复/记录/快照
+bash static/demo/build.sh && git diff --exit-code -- static/demo/jsonmend.js
+```
+
 无头验证（可选，需要 Python Playwright）：
 
 ```python
@@ -122,11 +143,12 @@ with sync_playwright() as p:
 
 ```bash
 cd code
-moon check && moon fmt --check                 # 无警告、格式一致
+moon check --deny-warn && moon fmt --check     # 无警告、格式一致
 moon test && moon test --target native && moon test --target js
-bash tests/cli_smoke.sh
+bash tests/cli_smoke.sh && bash tests/examples.sh
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
-bash tests/bench.sh size                       # wasm-gc ≤ 150 KB
+bash tests/bench.sh size                       # wasm-gc ≤ 150 KB（当前 98 247 B）
+node ../code/tests/demo_smoke.mjs              # 演示 bundle 仍可用
 ```
 
 逐项状态（含未达标项）见 `docs/TRACEABILITY.md`。

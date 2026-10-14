@@ -126,8 +126,9 @@ Every field of `Options`. `@jsonmend.Options::default()` is the documented defau
 | `multi_root` | `MultiRoot` | `KeepFirst` | Policy for content after the first root value: `KeepFirst`, `AsArray`, or `AsError` (`R016`). |
 | `rules` | `RuleSet` | `RuleSet::all()` | Per-rule switches; disabling a rule makes that code raise `E010`. |
 | `indent` | `Int32` | `0` | Output indentation in spaces; `0` renders compact JSON. |
+| `max_repairs` | `Int32` | `10000` | Maximum number of repair records kept; beyond it repairs still apply but the result sets `repairs_truncated`. |
 
-Invalid values (`max_depth <= 0`, `max_input_len <= 0`, `max_token_len <= 0`, `indent < 0`) raise `E050` from `Options::validate`, which `repair`, `parse`, and `PartialParser::new` call for you.
+Invalid values (`max_depth <= 0`, `max_input_len <= 0`, `max_token_len <= 0`, `max_repairs <= 0`, `indent < 0`) raise `E050` from `Options::validate`, which `repair`, `parse`, and `PartialParser::new` call for you.
 
 ## Repair rules overview
 
@@ -153,7 +154,7 @@ Every change is one record whose code is stable. The full dictionary, with examp
 | `R016` | `DropUnexpected` | Drop unrecognized or surplus content, including trailing content after the root value. |
 | `R017` | `DropExtraCloser` | Drop a surplus closer. |
 | `R018` | `MergeDuplicateKey` | Merge a duplicate key according to `duplicate_keys`. |
-| `R019` | `ConcatStrings` | Merge adjacent string concatenation. Defined but **not implemented in 0.1.0**. |
+| `R019` | `ConcatStrings` | Merge adjacent string concatenation (`["a" + "b"]` becomes `["ab"]`). |
 | `R020` | `DropEllipsis` | Drop an `...` placeholder in a value position. |
 | `R021` | `SkipProse` | Skip leading prose before the JSON value. |
 
@@ -161,7 +162,7 @@ Every change is one record whose code is stable. The full dictionary, with examp
 
 Two signal families are kept apart: repair records are informational and travel with the result; fatal errors abort processing and are raised as `MendError`.
 
-A `Repair` carries `code : RepairCode`, `position : Position`, `severity : Severity`, and `message : String`. `Position.offset` counts UTF-16 code units from 0, while `line` and `column` are 1-based. `Severity::Info` means the value is unchanged and only the notation was normalized; `Severity::Warning` means content may have been invented, dropped, or altered. Messages are fixed templates and never embed user input.
+A `Repair` carries `code : RepairCode`, `position : Position`, `severity : Severity`, and `message : String`. `repair`, `parse`, and `finish` also return `repairs_truncated : Bool`, which is `true` when the record array hit `max_repairs`. `Position.offset` counts UTF-16 code units from 0, while `line` and `column` are 1-based. `Severity::Info` means the value is unchanged and only the notation was normalized; `Severity::Warning` means content may have been invented, dropped, or altered. Messages are fixed templates and never embed user input.
 
 | Code | Error | Raised when |
 | --- | --- | --- |
@@ -215,6 +216,7 @@ jsonmend [选项] [文件]
   --multi-root MODE   first、array 或 error，默认 first
   --skip-prose        跳过 JSON 之前的说明文字
   --quote-lookahead   启用引号歧义前瞻
+  --max-repairs N     最多记录多少条修复记录，默认 10000
   -h, --help          显示帮助
   --version           显示版本
 
@@ -235,11 +237,12 @@ Flags and their meanings:
 | `--multi-root MODE` | `first`, `array`, or `error`; the default is `first`. |
 | `--skip-prose` | Skip prose before the JSON value. |
 | `--quote-lookahead` | Enable quote-ambiguity lookahead. |
+| `--max-repairs N` | Maximum number of repair records to keep (default 10000); a truncated run also prints a note to standard error. |
 | `-h`, `--help` | Show help. |
 | `--version` | Show the version (`jsonmend 0.1.0`). |
 | file, or `-` | Read a file; `-` or an omitted argument reads standard input. |
 
-`--indent=N` and `--multi-root=MODE` are accepted as equivalent to the space-separated forms.
+`--indent=N`, `--multi-root=MODE`, and `--max-repairs=N` are accepted as equivalent to the space-separated forms.
 
 Exit codes:
 
@@ -264,22 +267,25 @@ moon test --target native      # host backend
 moon test --target js          # JavaScript backend
 bash tests/cli_smoke.sh        # 25 command line assertions
 bash tests/examples.sh         # example inputs vs code/examples/cases/*.expected
+node ../code/tests/demo_smoke.mjs   # the committed browser bundle still answers
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 ```
 
 | Suite | Size | Result (0.1.0) |
 | --- | --- | --- |
-| Golden cases (spec appendices A and B) | 115 | pass |
+| Golden cases (spec appendices A and B) | 126 | pass |
 | Documented streaming cases (S-001…S-020) + chunk invariance | 20 + invariance checks | pass |
 | Property and fuzz tests (TC-P-01…TC-P-06) | 8 groups × 400 cases | pass, no counterexample |
 | Public surface (every `R` code and `E` code) | 9 assertions over 21 + 9 codes | pass |
 | Option policies and byte input | 10 cases | pass |
 | Command line smoke (exit codes 0/1/2/3/4/5/70) | 25 assertions | pass |
 | Differential corpus against `jsonrepair` / `json-repair` | 389 cases | 193 divergences, all documented, 0 unexplained |
-| Line coverage of the library | 1054/1125 lines | 93.7% |
+| Line coverage of the library | 1137/1223 lines | 93.0% |
 
-Cross-backend results are identical: 28 test blocks pass on wasm-gc, native and
-JavaScript. Reproduction steps, thresholds and the two known shortfalls are in
+Cross-backend results are identical: 32 test blocks pass on wasm-gc, native and
+JavaScript. `.github/workflows/ci.yml` runs the same commands on every push, so
+the numbers above are re-derived rather than trusted. Reproduction steps,
+thresholds and the two known shortfalls are in
 [docs/REPRODUCE.md](docs/REPRODUCE.md) and [docs/TRACEABILITY.md](docs/TRACEABILITY.md).
 
 ## Differences from jsonrepair
@@ -295,11 +301,10 @@ moon run bench --target native --release
 moon run bench --target js --release
 ```
 
-On a 2026 Apple-silicon laptop, native measured about 31 MB/s and js about 19–31 MB/s. These figures are observations, not a guarantee: throughput depends on the input shape, chunk size, snapshot frequency, and the toolchain version, and memory or artifact size is measured separately from the process. The full method and tables are in [docs/BENCHMARK.md](docs/BENCHMARK.md), and [docs/REPRODUCE.md](docs/REPRODUCE.md) explains how to rerun the benchmarks.
+On a 2026 Apple-silicon laptop, native measured 32–36 MB/s and js 20–37 MB/s on the same corpus. These figures are observations, not a guarantee: throughput depends on the input shape, chunk size, snapshot frequency, and the toolchain version, and memory or artifact size is measured separately from the process. The full method and tables are in [docs/BENCHMARK.md](docs/BENCHMARK.md), and [docs/REPRODUCE.md](docs/REPRODUCE.md) explains how to rerun the benchmarks.
 
 ## Known limitations
 
-- **`R019` is not implemented in 0.1.0.** Adjacent string concatenation (`"a" + "b"`) is defined as a rule but never applied by the engine.
 - **The `FR-16` event/callback interface is not implemented.** `snapshot()` returns a full deep copy, so its cost is proportional to the tree size and frequent snapshots are expensive overall.
 - **Only `...` in a value position is dropped.** `R020` handles `[1,...,3]` and `{"a":1,...}`; an ellipsis anywhere else is not treated as a placeholder.
 - **A truncated literal prefix is completed regardless of the following character.** For example, a bare `tru` followed by an unexpected character is completed to `true` and the unexpected character is handled separately.
@@ -309,13 +314,13 @@ On a 2026 Apple-silicon laptop, native measured about 31 MB/s and js about 19–
 - **Recovery guarantees are heuristic, not a conformance claim.** JSONMend is not a JSON standard, and it does not guarantee a particular interpretation for every malformed input; the differential report is the evidence for the behaviour it does document.
 - **`Json` numbers follow the core representation.** Very large integers may lose precision in the tree, although the repaired text keeps the number's original digits.
 - **`quote_lookahead` is off by default.** When enabled, a sequence of strings that is missing commas is biased toward being read as string content.
-- **Repair records have an internal cap of 10000.** Further repairs are applied but not recorded.
+- **Repair records are capped by `max_repairs` (default 10000).** Further repairs are applied but not recorded, and the result sets `repairs_truncated`; the CLI prints a note to standard error.
 - **Parser instances are not thread-safe.** Use one instance per input stream.
 
 ## Roadmap
 
-- Implement `R019` adjacent-string concatenation.
 - Add the `FR-16` event/callback interface so streaming consumers can avoid full snapshot copies.
+- Add a text-only mode (`want_value = false`) so the streaming path can meet the 4 × input memory budget; the current peak is about 16 × input because the full `Json` tree stays alive.
 - Widen the differential corpus further (nested multi-root documents, deeper mutations) and add memory-budget tests for the streaming path.
 - Publish the package on mooncakes.io and keep reproducible-build records.
 - Keep `docs/RULES.md`, `docs/ERRORS.md`, `docs/DIVERGENCES.md`, `docs/BENCHMARK.md`, and `docs/TRACEABILITY.md` in sync with the code.

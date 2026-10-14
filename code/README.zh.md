@@ -126,8 +126,9 @@ try {
 | `multi_root` | `MultiRoot` | `KeepFirst` | 根值之后内容的策略：`KeepFirst`、`AsArray` 或 `AsError`（`R016`）。 |
 | `rules` | `RuleSet` | `RuleSet::all()` | 逐规则开关；关闭某条规则会让对应编号抛 `E010`。 |
 | `indent` | `Int32` | `0` | 输出缩进空格数；`0` 表示紧凑输出。 |
+| `max_repairs` | `Int32` | `10000` | 最多保留多少条修复记录；超出后仍继续修复，但结果把 `repairs_truncated` 置为 `true`。 |
 
-非法取值（`max_depth <= 0`、`max_input_len <= 0`、`max_token_len <= 0`、`indent < 0`）由 `Options::validate` 抛出 `E050`；`repair`、`parse` 和 `PartialParser::new` 都会替你调用校验。
+非法取值（`max_depth <= 0`、`max_input_len <= 0`、`max_token_len <= 0`、`max_repairs <= 0`、`indent < 0`）由 `Options::validate` 抛出 `E050`；`repair`、`parse` 和 `PartialParser::new` 都会替你调用校验。
 
 ## 修复规则一览
 
@@ -153,7 +154,7 @@ try {
 | `R016` | `DropUnexpected` | 丢弃无法识别或多余的内容，包括根值之后的尾随内容。 |
 | `R017` | `DropExtraCloser` | 丢弃多余的闭合符。 |
 | `R018` | `MergeDuplicateKey` | 按 `duplicate_keys` 策略合并重复键。 |
-| `R019` | `ConcatStrings` | 合并相邻的字符串拼接。已定义，但 **0.1.0 未实现**。 |
+| `R019` | `ConcatStrings` | 合并相邻的字符串拼接（`["a" + "b"]` 得到 `["ab"]`）。 |
 | `R020` | `DropEllipsis` | 删除值位置的 `...` 占位。 |
 | `R021` | `SkipProse` | 跳过 JSON 值之前的说明文字。 |
 
@@ -215,6 +216,7 @@ jsonmend [选项] [文件]
   --multi-root MODE   first、array 或 error，默认 first
   --skip-prose        跳过 JSON 之前的说明文字
   --quote-lookahead   启用引号歧义前瞻
+  --max-repairs N     最多记录多少条修复记录，默认 10000
   -h, --help          显示帮助
   --version           显示版本
 
@@ -235,11 +237,12 @@ jsonmend [选项] [文件]
 | `--multi-root MODE` | `first`、`array` 或 `error`，默认 `first`。 |
 | `--skip-prose` | 跳过 JSON 之前的说明文字。 |
 | `--quote-lookahead` | 启用引号歧义前瞻。 |
+| `--max-repairs N` | 最多保留多少条修复记录（默认 10000）；被截断时另向标准错误打印一行提示。 |
 | `-h`、`--help` | 显示帮助。 |
 | `--version` | 显示版本（`jsonmend 0.1.0`）。 |
 | 文件或 `-` | 读取文件；`-` 或缺省时读取标准输入。 |
 
-`--indent=N` 与 `--multi-root=MODE` 和用空格分隔的写法等价。
+`--indent=N`、`--multi-root=MODE`、`--max-repairs=N` 和用空格分隔的写法等价。
 
 退出码：
 
@@ -269,16 +272,16 @@ python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/
 
 | 测试集 | 规模 | 0.1.0 结果 |
 | --- | --- | --- |
-| 黄金用例（规范附录 A、B） | 115 条 | 通过 |
+| 黄金用例（规范附录 A、B） | 126 条 | 通过 |
 | 流式用例（S-001…S-020）与分块不变性 | 20 条 + 不变性检查 | 通过 |
 | 属性与模糊测试（TC-P-01…TC-P-06） | 8 组 × 400 例 | 通过，无反例 |
 | 公共面（逐个 R 码与 E 码） | 21 + 9 个码的 9 项断言 | 通过 |
 | 选项策略与字节输入 | 10 例 | 通过 |
 | 命令行冒烟（退出码 0/1/2/3/4/5/70） | 25 项断言 | 通过 |
 | 差分语料（对照 `jsonrepair` / `json-repair`） | 389 条 | 193 处差异全部有文档解释，未解释 0 |
-| 库代码行覆盖率 | 1054/1125 行 | 93.7% |
+| 库代码行覆盖率 | 1137/1223 行 | 93.0% |
 
-三个后端结果一致：wasm-gc、native 与 JavaScript 均为 28 个测试块全通过。
+三个后端结果一致：wasm-gc、native 与 JavaScript 均为 32 个测试块全通过。`.github/workflows/ci.yml` 在每次推送时执行同一组命令，因此上表是重新推导出来的结果，而不是一次性记录。
 复现步骤、阈值与两项已知未达标项见 [docs/REPRODUCE.md](docs/REPRODUCE.md)
 与 [docs/TRACEABILITY.md](docs/TRACEABILITY.md)。
 
@@ -295,13 +298,12 @@ moon run bench --target native --release
 moon run bench --target js --release
 ```
 
-在 2026 年的 Apple 芯片笔记本上，native 实测约 31 MB/s，js 约 19–31 MB/s。这些数字是观测值而非承诺：吞吐取决于输入形态、分块大小、快照频率与工具链版本，内存与产物大小另行测量。完整方法与表格见 [docs/BENCHMARK.md](docs/BENCHMARK.md)，复现步骤见 [docs/REPRODUCE.md](docs/REPRODUCE.md)。
+在 2026 年的 Apple 芯片笔记本上，native 实测 32–36 MB/s，js 实测 20–37 MB/s（同一台机器单次观测，不同轮次可差 ±15%）。这些数字是观测值而非承诺：吞吐取决于输入形态、分块大小、快照频率与工具链版本，内存与产物大小另行测量。完整方法与表格见 [docs/BENCHMARK.md](docs/BENCHMARK.md)，复现步骤见 [docs/REPRODUCE.md](docs/REPRODUCE.md)。
 
 ## 已知限制
 
-- **`R019` 在 0.1.0 中未实现。** 相邻字符串拼接（`"a" + "b"`）已定义为规则，但引擎从不应用它。
 - **`FR-16` 事件/回调接口未实现。** `snapshot()` 返回完整深拷贝，开销与树的大小成正比，高频调用时总体代价较大。
-- **只有值位置的 `...` 会被丢弃。** `R020` 处理 `[1,...,3]` 与 `{"a":1,...}`；出现在其他位置的省略号不会被当作占位。
+- **省略号的判定位于键位与值位之前。** `R020` 处理 `[1,...,3]`、`{"a":1,...}`，键位置的独立 `...` 也会被删除（`{...}` → `{}`，`{"a":...}` → `{}`）；`....`、`..` 与字符串内部的 `...` 不是省略号。
 - **残缺字面量前缀会无视后一个字符直接补全。** 例如裸词 `tru` 后跟意外字符时，会先补成 `true`，意外字符另行处理。
 - **`incomplete_number` 与 `pending_key` 只影响快照。** 它们不改变 `finish`：最终结果按各自的规则裁剪数字（`R011`）、把悬空键填为 `null`（`R008`）。
 - **孤立代理项在不同后端表现不同。** wasm 后端上 `\uD800` 这类孤立代理项会保留在输出中；其他后端走 `InvalidUtf8`（`E040`）路径，替换为 U+FFFD。
@@ -309,12 +311,11 @@ moon run bench --target js --release
 - **修复保证是启发式的，不构成一致性声明。** JSONMend 不是 JSON 标准，也不保证对每种畸形输入都给出唯一解释；差分报告才是其已记录行为的证据。
 - **`Json` 数字遵循 core 的表示。** 超大整数在树中可能损失精度，但修复后的文本保留数字原文。
 - **`quote_lookahead` 默认关闭。** 开启后，缺少逗号的连续字符串会偏向解释为字符串内容。
-- **修复记录有 10000 条的内部上限。** 超出后仍会继续修复，但不再记录。
+- **修复记录受 `max_repairs` 限制（默认 10000 条）。** 超出后仍会继续修复但不再记录，结果把 `repairs_truncated` 置为 `true`，CLI 另向标准错误打印提示。
 - **解析器实例非线程安全。** 每个输入流应使用独立实例。
 
 ## 路线图
 
-- 实现 `R019` 相邻字符串拼接。
 - 增加 `FR-16` 事件/回调接口，让流式消费方不必做全量快照拷贝。
 - 继续扩大差分语料（多根嵌套文档、更深的变异），并为流式路径补内存预算测试。
 - 发布到 mooncakes.io，并保留可复现构建记录。
