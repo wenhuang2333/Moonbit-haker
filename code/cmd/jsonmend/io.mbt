@@ -23,7 +23,15 @@ extern "C" fn ffi_fdopen(fd : Int32, mode : Bytes) -> Int64 = "fdopen"
 extern "C" fn ffi_fopen(path : Bytes, mode : Bytes) -> Int64 = "moonbit_fopen_ffi"
 
 ///|
-extern "C" fn ffi_fgetc(f : Int64) -> Int32 = "fgetc"
+/// Bulk read into a `Bytes` buffer. `moonbit_fread_ffi` is provided by the
+/// toolchain runtime, so no C header of our own is needed.
+#borrow(buf)
+extern "C" fn ffi_fread(
+  buf : Bytes,
+  size : Int32,
+  nitems : Int32,
+  f : Int64,
+) -> Int64 = "moonbit_fread_ffi"
 
 ///|
 /// The named file, or standard input when `path` is `None`, as a stdio
@@ -51,18 +59,16 @@ fn open_input(path : String?) -> Int64 {
 
 ///|
 /// The next piece of the stream, at most `cap` bytes; empty at end of stream.
-/// stdio is read byte by byte because the runtime exposes no buffered read
-/// symbol, and the fixed chunk keeps the memory cost bounded anyway.
+/// One `fread` per chunk: reading byte by byte through `fgetc` capped the CLI
+/// at roughly 25 MB/s no matter how fast the engine was.
 fn read_chunk(f : Int64, cap : Int32) -> Bytes {
-  let out : Array[Byte] = []
-  while out.length() < cap {
-    let c = ffi_fgetc(f)
-    if c < 0 {
-      break
-    }
-    out.push(c.to_byte())
+  let buf = Bytes::make(cap, b'\x00')
+  let n = ffi_fread(buf, 1, cap, f)
+  if n <= 0L {
+    Bytes::make(0, b'\x00')
+  } else {
+    Bytes::makei(n.to_int(), i => buf[i])
   }
-  Bytes::from_array(out[:])
 }
 
 ///|
