@@ -1,0 +1,5 @@
+```json
+{"a": 1, // trailing comment
+ "b": [1, 2,],
+}
+```

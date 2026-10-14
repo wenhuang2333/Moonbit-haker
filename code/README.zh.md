@@ -263,6 +263,7 @@ moon test                      # 默认后端（wasm-gc）
 moon test --target native      # 本机后端
 moon test --target js          # JavaScript 后端
 bash tests/cli_smoke.sh        # 25 项命令行断言
+bash tests/examples.sh         # 示例输入与 code/examples/cases/*.expected 对照
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 ```
 

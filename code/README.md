@@ -263,6 +263,7 @@ moon test                      # default backend (wasm-gc)
 moon test --target native      # host backend
 moon test --target js          # JavaScript backend
 bash tests/cli_smoke.sh        # 25 command line assertions
+bash tests/examples.sh         # example inputs vs code/examples/cases/*.expected
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 ```
 

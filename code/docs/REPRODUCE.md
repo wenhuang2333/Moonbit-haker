@@ -54,8 +54,13 @@ cd code && moon test --enable-coverage && moon coverage report
 cd code
 moon build cmd/jsonmend --target native --release
 bash tests/cli_smoke.sh                       # 25 项断言，全部 ok 才算通过
+bash tests/examples.sh                        # 示例输入与期望输出逐字节对照
 bash tests/cli_smoke.sh ./path/to/jsonmend.exe  # 指定其它可执行文件
 ```
+
+`code/examples/cases/` 下有 6 组 `*.json` 输入与同名 `*.expected` 期望输出
+（引号与尾逗号、截断补全、围栏与注释、字面量与非有限值、多根值、前导说明），
+`tests/examples.sh` 逐组比较，全部一致才算通过。
 
 ## 4. 差分测试（TC-D）
 
