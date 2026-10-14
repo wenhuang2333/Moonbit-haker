@@ -1,5 +1,8 @@
 # JSONMend — 流式 JSON 修复与部分解析库（纯 MoonBit）
 
+[![CI](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml/badge.svg)](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](code/LICENSE)
+
 **把大模型吐出的「几乎正确」的 JSON 变成可用的 JSON：能修就修、修不了就补全，全程留下可审计的修复记录。**
 
 [English](#english) · [详细文档](#文档索引) · [演示页](static/demo/index.html) · [测试证据](#质量与证据)

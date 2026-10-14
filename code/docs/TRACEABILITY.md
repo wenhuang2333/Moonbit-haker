@@ -52,7 +52,7 @@
 | NFR-TEST-01 | 覆盖率 | TC-COV-01 | `moon test --enable-coverage` + `moon coverage report -f summary -p wenhuang2333/jsonmend`：库代码 1137/1223 行 = **93.0%**（不加 `-p` 时 `bench/main.mbt` 也计入，得 1137/1393 = 81.6%） | 通过 |
 | NFR-SEC-01 | 安全 | TC-P-06、TC-P-07 | 错误消息模板固定、不回显输入；资源上限防止病态输入耗尽内存；无外部依赖 | 通过 |
 | NFR-COMP-01 | 合规 | TC-L-01 | `LICENSE`（Apache-2.0 全文）、`NOTICE`（依赖与参照实现许可证：`jsonrepair` ISC、`json-repair` MIT） | 通过 |
-| NFR-MNT-01 | 可维护 | TC-R-03 | `moon check --deny-warn` 零警告、`moon fmt --check` 干净、`docs/REPRODUCE.md` 一键复现；`.github/workflows/ci.yml` 在两个 job 中执行同一组命令 | 通过 |
+| NFR-MNT-01 | 可维护 | TC-R-03 | `moon check --deny-warn` 零警告、`moon fmt --check` 干净、`docs/REPRODUCE.md` 一键复现；`.github/workflows/ci.yml` 在两个 job 中执行同一组命令，并已在 GitHub Actions 上跑通（run #1 `eff1ad2`、run #2 `169353e` 均 success） | 通过 |
 | NFR-REL-01 | 可发布 | TC-R-01 | `moon.mod` v0.2.0 + Apache-2.0 + repository；`moon package` 产出 128 KB 包；未发布到 mooncakes.io | 削减（未发布到注册表） |
 
 ## 反向覆盖
