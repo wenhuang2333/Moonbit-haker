@@ -193,6 +193,7 @@ pub(all) struct Options {
   multi_root : MultiRoot
   rules : RuleSet
   indent : Int32
+  max_repairs : Int32
 }
 
 ///|
@@ -216,6 +217,7 @@ pub fn Options::default() -> Options {
     multi_root: KeepFirst,
     rules: RuleSet::all(),
     indent: 0,
+    max_repairs: 10000,
   }
 }
 
@@ -233,5 +235,8 @@ pub fn Options::validate(self : Options) -> Unit raise MendError {
   }
   if self.indent < 0 {
     raise InvalidOption("indent must not be negative")
+  }
+  if self.max_repairs <= 0 {
+    raise InvalidOption("max_repairs must be a positive integer")
   }
 }

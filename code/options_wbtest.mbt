@@ -180,3 +180,53 @@ test "TC-S-UTF8-02 invalid bytes raise E040" {
   }
   assert_eq(saw, true)
 }
+
+///|
+test "TC-O-08 max_repairs caps the records and sets the flag" {
+  let input = "['a','b','c','d','e']"
+  let full = repair(input)
+  assert_eq(full.repairs.length(), 5)
+  assert_eq(full.repairs_truncated, false)
+  let capped = repair(input, options={ ..Options::default(), max_repairs: 2, })
+  assert_eq(capped.repairs.length(), 2)
+  assert_eq(capped.repairs_truncated, true)
+  // the text is unaffected by the record cap
+  assert_eq(capped.text, full.text)
+  // collect_repairs=false never sets the flag
+  let quiet = repair(input, options={
+    ..Options::default(),
+    collect_repairs: false,
+  })
+  assert_eq(quiet.repairs.length(), 0)
+  assert_eq(quiet.repairs_truncated, false)
+}
+
+///|
+test "TC-O-09 max_repairs must be positive" {
+  let mut saw = false
+  try {
+    let _ = PartialParser::new(options={ ..Options::default(), max_repairs: 0, })
+    ()
+  } catch {
+    InvalidOption(_) => saw = true
+    _ => ()
+  }
+  assert_eq(saw, true)
+}
+
+///|
+test "TC-O-10 repeated snapshots are stable and stay correct after finish" {
+  let p = PartialParser::new()
+  p.feed("{\"a\":[1,2")
+  let s1 = p.snapshot()
+  let s2 = p.snapshot()
+  assert_eq(s2.completeness == Partial, true)
+  assert_eq(s2.open_path.length(), s1.open_path.length())
+  // feeding invalidates the cache
+  p.feed("]}")
+  let s3 = p.snapshot()
+  assert_eq(s3.completeness == Complete, true)
+  let fin = p.finish()
+  assert_eq(fin.text, "{\"a\":[1,2]}")
+  assert_eq(fin.repairs_truncated, false)
+}

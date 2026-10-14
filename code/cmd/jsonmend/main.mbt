@@ -105,16 +105,14 @@ fn run() -> Unit {
     }
     Run => ()
   }
-  let bytes = match read_input(o.path) {
-    Some(b) => b
-    None => {
-      let name = match o.path {
-        Some(p) => p
-        None => "<stdin>"
-      }
-      eprintln("jsonmend: 无法读取 " + name)
-      return quit(3)
+  let stream = open_input(o.path)
+  if stream == 0L {
+    let name = match o.path {
+      Some(p) => p
+      None => "<stdin>"
     }
+    eprintln("jsonmend: 无法读取 " + name)
+    return quit(3)
   }
   let options : @mend.Options = {
     ..@mend.Options::default(),
@@ -127,13 +125,39 @@ fn run() -> Unit {
     multi_root: o.multi_root,
     skip_prose: o.skip_prose,
     quote_lookahead: o.quote_lookahead,
+    max_repairs: o.max_repairs,
   }
+  // The input is streamed in fixed chunks, so the whole document is never
+  // held in memory twice; the first `PREFIX_MAX` bytes are kept only to draw
+  // the error snippet.
+  let prefix_max = 1048576
+  let prefix : Array[Byte] = []
+  let chunk_cap = 65536
+  let mut chunk_start : Int32 = 0
   try {
     let parser = @mend.PartialParser::new(options~)
-    parser.feed_bytes(bytes)
+    let mut piece = read_chunk(stream, chunk_cap)
+    while piece.length() > 0 {
+      if prefix.length() < prefix_max {
+        for i = 0; i < piece.length(); i = i + 1 {
+          prefix.push(piece[i])
+        }
+      }
+      parser.feed_bytes(piece)
+      chunk_start = chunk_start + piece.length()
+      piece = read_chunk(stream, chunk_cap)
+    }
+    close_input(stream)
     let fin = parser.finish()
     if o.report {
       report(fin.repairs)
+      if fin.repairs_truncated {
+        eprintln(
+          "jsonmend: repair records truncated at " +
+          fin.repairs.length().to_string() +
+          " (raise max_repairs to record more)",
+        )
+      }
     }
     if o.check {
       if fin.repairs.length() > 0 {
@@ -147,7 +171,28 @@ fn run() -> Unit {
     e => {
       eprintln("jsonmend: " + e.to_string())
       match error_offset(e) {
-        Some(off) => eprintln(snippet(@utf8.decode_lossy(bytes[:]), off))
+        Some(off) =>
+          // E040 offsets are relative to the chunk that failed (docs/ERRORS.md)
+          match e {
+            @mend.InvalidUtf8(within) =>
+              if within < chunk_cap {
+                eprintln(
+                  snippet(
+                    @utf8.decode_lossy(Bytes::from_array(prefix[:])[:]),
+                    chunk_start + within,
+                  ),
+                )
+              }
+            _ =>
+              if off < prefix.length() {
+                eprintln(
+                  snippet(
+                    @utf8.decode_lossy(Bytes::from_array(prefix[:])[:]),
+                    off,
+                  ),
+                )
+              }
+          }
         None => ()
       }
       quit(error_exit_code(e))

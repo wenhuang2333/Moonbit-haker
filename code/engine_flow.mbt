@@ -110,6 +110,15 @@ fn Engine::step_epilogue(
     self.tok_start = p
     return
   }
+  if n == 0x2B && self.can_concat() {
+    self.concat_pending = true
+    self.concat_pos = p
+    return
+  }
+  if self.concat_pending && is_quote_open(u) {
+    self.start_string(u, p, false)
+    return
+  }
   if self.opts.multi_root is AsError {
     self.epilogue_drop(p)
     return
@@ -178,6 +187,10 @@ fn Engine::step_body(
     return
   }
   let n = u.to_int()
+  if self.concat_pending && !is_quote_open(u) {
+    self.concat_pending = false
+    self.report(DropUnexpected, self.concat_pos)
+  }
   if self.stack.length() == 0 {
     if n == 0x7B {
       self.enter(FObj, p)
@@ -250,6 +263,11 @@ fn Engine::step_in_array(
       self.report(DropUnexpected, p)
     }
     CArrCommaOrEnd => {
+      if n == 0x2B && self.can_concat() {
+        self.concat_pending = true
+        self.concat_pos = p
+        return
+      }
       if n == 0x2C {
         self.stack[idx].ctx = CArrValueOrEnd
         self.stack[idx].after_comma = true
@@ -265,7 +283,7 @@ fn Engine::step_in_array(
         return
       }
       if is_value_start_char(u) {
-        if !self.stack[idx].synthetic {
+        if !self.stack[idx].synthetic && !self.concat_pending {
           self.report(InsertComma, p)
         }
         self.start_value_char(u, p)
@@ -344,6 +362,11 @@ fn Engine::step_in_object(
       self.report(DropUnexpected, p)
     }
     CObjCommaOrEnd => {
+      if n == 0x2B && self.can_concat() {
+        self.concat_pending = true
+        self.concat_pos = p
+        return
+      }
       if n == 0x2C {
         self.stack[idx].ctx = CObjKeyOrEnd
         self.stack[idx].after_comma = true
@@ -359,6 +382,10 @@ fn Engine::step_in_object(
         return
       }
       if is_quote_open(u) || is_ident_char(u) {
+        if self.concat_pending {
+          self.start_value_char(u, p)
+          return
+        }
         self.report(InsertComma, p)
         self.start_key_char(u, p)
         return
@@ -411,9 +438,99 @@ fn Engine::close_container(
 }
 
 ///|
+/// Whether the value delivered just before a `+` can absorb a string (BR-21).
+fn Engine::can_concat(self : Engine) -> Bool {
+  if self.stack.length() == 0 {
+    match self.root {
+      Some(Json::String(_)) => true
+      _ => false
+    }
+  } else {
+    let f = self.stack[self.stack.length() - 1]
+    match f.kind {
+      FArr =>
+        if f.items.length() == 0 {
+          false
+        } else {
+          match f.items[f.items.length() - 1] {
+            Json::String(_) => true
+            _ => false
+          }
+        }
+      FObj =>
+        match f.last_assigned_key {
+          Some(k) =>
+            match f.map.get(k) {
+              Some(Json::String(_)) => true
+              _ => false
+            }
+          None => false
+        }
+    }
+  }
+}
+
+///|
+/// Append `extra` to the previously delivered string value (R019).
+fn Engine::concat_last(self : Engine, extra : String) -> Bool {
+  if self.stack.length() == 0 {
+    match self.root {
+      Some(Json::String(prev)) => {
+        self.root = Some(Json::string(prev + extra))
+        true
+      }
+      _ => false
+    }
+  } else {
+    let f = self.stack[self.stack.length() - 1]
+    match f.kind {
+      FArr => {
+        let n = f.items.length()
+        if n == 0 {
+          false
+        } else {
+          match f.items[n - 1] {
+            Json::String(prev) => {
+              f.items[n - 1] = Json::string(prev + extra)
+              true
+            }
+            _ => false
+          }
+        }
+      }
+      FObj =>
+        match f.last_assigned_key {
+          Some(k) =>
+            match f.map.get(k) {
+              Some(Json::String(prev)) => {
+                f.map[k] = Json::string(prev + extra)
+                true
+              }
+              _ => false
+            }
+          None => false
+        }
+    }
+  }
+}
+
+///|
 /// Attach a completed value to the enclosing container, or finish the
-/// document when there is none.
+/// document when there is none. A pending `+` first tries to merge a string
+/// into the value delivered just before it (BR-21 / R019).
 fn Engine::value_done(self : Engine, v : Json) -> Unit raise MendError {
+  if self.concat_pending {
+    self.concat_pending = false
+    match v {
+      Json::String(s) =>
+        if self.concat_last(s) {
+          self.report(ConcatStrings, self.concat_pos)
+          return
+        }
+      _ => ()
+    }
+    self.report(DropUnexpected, self.concat_pos)
+  }
   if self.stack.length() == 0 {
     match self.root {
       Some(_old) => ()
@@ -444,6 +561,7 @@ fn Engine::value_done(self : Engine, v : Json) -> Unit raise MendError {
           self.stack[idx].ctx = CObjCommaOrEnd
           self.stack[idx].after_comma = false
           self.stack[idx].last_key = None
+          self.stack[idx].last_assigned_key = Some(k)
         }
         None => self.stack[idx].ctx = CObjCommaOrEnd
       }
@@ -1136,6 +1254,11 @@ fn Engine::finish_engine(self : Engine) -> FinalResult raise MendError {
     self.utf8_need = 0
     raise InvalidUtf8(0)
   }
+  self.snap_stamp = self.snap_stamp + 1
+  if self.concat_pending {
+    self.concat_pending = false
+    self.report(DropUnexpected, self.concat_pos)
+  }
   self.finalize_token()
   let mut unwound = false
   while self.stack.length() > 0 {
@@ -1151,7 +1274,13 @@ fn Engine::finish_engine(self : Engine) -> FinalResult raise MendError {
       } else {
         ""
       }
-      { text, value, repairs: self.reps, completeness: Complete, }
+      {
+        text,
+        value,
+        repairs: self.reps,
+        completeness: Complete,
+        repairs_truncated: self.repairs_truncated,
+      }
     }
     None => {
       self.phase = PFailed
@@ -1316,9 +1445,18 @@ fn Engine::open_path(self : Engine) -> Array[PathSegment] {
 ///|
 /// Take a snapshot without mutating engine state (FR-10).
 fn Engine::snapshot(self : Engine) -> Snapshot {
-  {
+  // P3-8: snapshots taken without any new input reuse the previous result
+  // instead of rebuilding the whole value. Values handed out this way are
+  // shared, so callers must treat snapshot values as immutable.
+  if self.snap_cache is Some(s) && self.snap_cache_stamp == self.snap_stamp {
+    return s
+  }
+  let s : Snapshot = {
     value: self.snapshot_value(),
     completeness: self.completeness(),
     open_path: self.open_path(),
   }
+  self.snap_cache = Some(s)
+  self.snap_cache_stamp = self.snap_stamp
+  s
 }

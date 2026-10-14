@@ -56,6 +56,7 @@ pub(all) struct RepairResult {
   text : String
   repairs : Array[Repair]
   completeness : Completeness
+  repairs_truncated : Bool
 }
 
 ///|
@@ -64,6 +65,7 @@ pub(all) struct ParseResult {
   value : Json
   repairs : Array[Repair]
   completeness : Completeness
+  repairs_truncated : Bool
 }
 
 ///|
@@ -81,6 +83,7 @@ pub(all) struct FinalResult {
   value : Json
   repairs : Array[Repair]
   completeness : Completeness
+  repairs_truncated : Bool
 }
 
 ///|
@@ -158,7 +161,12 @@ pub fn repair(
   let engine = Engine::make(opts)
   engine.feed_str(input)
   let fin = engine.finish_engine()
-  { text: fin.text, repairs: fin.repairs, completeness: fin.completeness, }
+  {
+    text: fin.text,
+    repairs: fin.repairs,
+    completeness: fin.completeness,
+    repairs_truncated: fin.repairs_truncated,
+  }
 }
 
 ///|
@@ -172,7 +180,12 @@ pub fn parse(input : String, options? : Options) -> ParseResult raise MendError 
   let engine = Engine::make(opts)
   engine.feed_str(input)
   let fin = engine.finish_engine()
-  { value: fin.value, repairs: fin.repairs, completeness: fin.completeness, }
+  {
+    value: fin.value,
+    repairs: fin.repairs,
+    completeness: fin.completeness,
+    repairs_truncated: fin.repairs_truncated,
+  }
 }
 
 ///|

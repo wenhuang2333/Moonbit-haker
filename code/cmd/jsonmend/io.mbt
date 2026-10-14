@@ -6,9 +6,6 @@
 extern "C" fn ffi_is_null(p : Int64) -> Int32 = "moonbit_is_null"
 
 ///|
-extern "C" fn ffi_fgetc(f : Int64) -> Int32 = "fgetc"
-
-///|
 extern "C" fn ffi_fclose(f : Int64) -> Int32 = "moonbit_fclose_ffi"
 
 ///|
@@ -26,42 +23,52 @@ extern "C" fn ffi_fdopen(fd : Int32, mode : Bytes) -> Int64 = "fdopen"
 extern "C" fn ffi_fopen(path : Bytes, mode : Bytes) -> Int64 = "moonbit_fopen_ffi"
 
 ///|
-/// Every remaining byte of an open stream.
-fn read_stream(f : Int64) -> Bytes {
-  let out : Array[Byte] = []
-  let mut c = ffi_fgetc(f)
-  while c >= 0 {
-    out.push(c.to_byte())
-    c = ffi_fgetc(f)
-  }
-  Bytes::from_array(out[:])
-}
+extern "C" fn ffi_fgetc(f : Int64) -> Int32 = "fgetc"
 
 ///|
-/// Bytes of the named file, or of standard input when `path` is `None`.
-fn read_input(path : String?) -> Bytes? {
+/// The named file, or standard input when `path` is `None`, as a stdio
+/// stream. `0L` means the input could not be opened.
+fn open_input(path : String?) -> Int64 {
   match path {
     Some(p) => {
       let f = ffi_fopen(@utf8.encode(p), b"rb")
       if ffi_is_null(f) != 0 {
-        None
+        0L
       } else {
-        let bytes = read_stream(f)
-        ignore(ffi_fclose(f))
-        Some(bytes)
+        f
       }
     }
     None => {
       let f = ffi_fdopen(0, b"rb")
       if ffi_is_null(f) != 0 {
-        None
+        0L
       } else {
-        let bytes = read_stream(f)
-        ignore(ffi_fclose(f))
-        Some(bytes)
+        f
       }
     }
   }
+}
+
+///|
+/// The next piece of the stream, at most `cap` bytes; empty at end of stream.
+/// stdio is read byte by byte because the runtime exposes no buffered read
+/// symbol, and the fixed chunk keeps the memory cost bounded anyway.
+fn read_chunk(f : Int64, cap : Int32) -> Bytes {
+  let out : Array[Byte] = []
+  while out.length() < cap {
+    let c = ffi_fgetc(f)
+    if c < 0 {
+      break
+    }
+    out.push(c.to_byte())
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+/// Close a stream opened by `open_input`.
+fn close_input(f : Int64) -> Unit {
+  ignore(ffi_fclose(f))
 }
 
 ///|

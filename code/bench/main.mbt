@@ -232,6 +232,26 @@ fn bench_streaming() -> Unit {
 }
 
 ///|
+/// P3-8: repeated snapshots with no new input in between. A snapshot is
+/// O(current value size), so this only stays cheap when the result is reused.
+fn bench_snap_repeat() -> Unit {
+  let input = make_valid(1048576)
+  let half = input.length() / 2
+  let ms = median5(() => {
+    try {
+      let parser = @mend.PartialParser::new()
+      parser.feed(input[:half].to_owned())
+      for _i = 0; _i < 1000; _i = _i + 1 {
+        ignore(parser.snapshot())
+      }
+    } catch {
+      _ => ()
+    }
+  })
+  println("snapshot	repeat 1000x without feeding\t" + round1(ms) + " ms")
+}
+
+///|
 /// Every benchmark.
 fn main {
   for target in [1024, 102400, 1048576, 10485760] {
@@ -265,4 +285,5 @@ fn main {
   )
   bench_linearity()
   bench_streaming()
+  bench_snap_repeat()
 }

@@ -32,6 +32,7 @@ priv struct Frame {
   items : Array[Json]
   map : Map[String, Json]
   mut last_key : String?
+  mut last_assigned_key : String?
   mut key_pos : Position
   mut after_comma : Bool
   mut last_comma : Position
@@ -105,6 +106,12 @@ priv struct Engine {
   mut tok_start : Position
   mut root : Json?
   reps : Array[Repair]
+  mut repairs_truncated : Bool
+  mut concat_pending : Bool
+  mut concat_pos : Position
+  mut snap_stamp : Int32
+  mut snap_cache : Snapshot?
+  mut snap_cache_stamp : Int32
   mut prose_start : Position
   mut prose_skipped : Int32
   mut saw_content : Bool
@@ -145,6 +152,7 @@ fn new_frame(kind : FrameKind, start : Position, synthetic : Bool) -> Frame {
     items: [],
     map: Map([]),
     last_key: None,
+    last_assigned_key: None,
     key_pos: start,
     after_comma: false,
     last_comma: start,
@@ -248,6 +256,12 @@ fn Engine::make(opts : Options) -> Engine {
     tok_start: start,
     root: None,
     reps: [],
+    repairs_truncated: false,
+    concat_pending: false,
+    concat_pos: pos0(),
+    snap_stamp: 0,
+    snap_cache: None,
+    snap_cache_stamp: -1,
     prose_start: start,
     prose_skipped: 0,
     saw_content: false,
@@ -275,13 +289,17 @@ fn Engine::report(
   if self.opts.mode is Strict || !self.opts.rules.is_enabled(code) {
     raise StrictViolation(code, p, code.message())
   }
-  if self.opts.collect_repairs && self.reps.length() < 10000 {
-    self.reps.push({
-      code,
-      position: p,
-      severity: code.severity(),
-      message: code.message(),
-    })
+  if self.opts.collect_repairs {
+    if self.reps.length() < self.opts.max_repairs {
+      self.reps.push({
+        code,
+        position: p,
+        severity: code.severity(),
+        message: code.message(),
+      })
+    } else {
+      self.repairs_truncated = true
+    }
   }
 }
 
@@ -292,9 +310,70 @@ fn Engine::feed_str(self : Engine, s : String) -> Unit raise MendError {
     PFinished | PFailed => raise InvalidState("cannot feed a finished parser")
     _ => ()
   }
-  for i = 0; i < s.length(); i = i + 1 {
-    self.step(s.at(i))
+  let n = s.length()
+  let mut i = 0
+  while i < n {
+    let mut batched = false
+    // Fast path (P3-9): inside an open string, a run of ordinary characters is
+    // appended in one piece and the position advances in one step. Only code
+    // units that `step_str` would pass straight to `push_cu` qualify, so the
+    // observable behaviour is identical.
+    match self.tok {
+      TStr(kind, _is_key) =>
+        if self.esc == 0 && self.pending_high == 0 {
+          let mut j = i
+          while j < n && is_plain_str_cu(s.at(j), kind) {
+            j = j + 1
+          }
+          // never consume code units beyond max_input_len (E021)
+          while j > i && self.pos.offset + (j - i) > self.opts.max_input_len {
+            j = j - 1
+          }
+          if j > i {
+            self.push_run(s, i, j)
+            i = j
+            batched = true
+          }
+        }
+      _ => ()
+    }
+    if !batched {
+      self.step(s.at(i))
+      i = i + 1
+    }
   }
+}
+
+///|
+/// Whether a code unit is plain string content for the given quote style:
+/// it cannot close the string, cannot start an escape, is not a control
+/// character and is not a surrogate (those need the pair logic).
+fn is_plain_str_cu(u : UInt16, kind : StrKind) -> Bool {
+  let n = u.to_int()
+  n >= 0x20 && n != 0x5C && !closes_str(kind, u) && (n < 0xD800 || n > 0xDFFF)
+}
+
+///|
+/// Append a run of plain string content as a single part (P3-9). The run
+/// contains no line break, so the column advances by the run length.
+fn Engine::push_run(
+  self : Engine,
+  s : String,
+  from : Int32,
+  to : Int32,
+) -> Unit raise MendError {
+  let len = to - from
+  self.parts.push(s[from:to].to_owned())
+  self.parts_len = self.parts_len + len
+  if self.parts_len > self.opts.max_token_len {
+    raise TokenLimit(self.opts.max_token_len, self.tok_start.offset)
+  }
+  self.pos = {
+    offset: self.pos.offset + len,
+    line: self.pos.line,
+    column: self.pos.column + len,
+  }
+  self.snap_stamp = self.snap_stamp + 1
 }
 
 ///|
@@ -316,6 +395,7 @@ fn Engine::step(self : Engine, u : UInt16) -> Unit raise MendError {
     TFenceLine => if u.to_int() == 0x0A { self.finish_fence_line() }
   }
   self.pos = advance(p, u)
+  self.snap_stamp = self.snap_stamp + 1
 }
 
 ///|

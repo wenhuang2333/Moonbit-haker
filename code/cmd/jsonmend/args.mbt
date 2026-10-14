@@ -18,6 +18,7 @@ struct CliOpts {
   mut multi_root : @mend.MultiRoot
   mut skip_prose : Bool
   mut quote_lookahead : Bool
+  mut max_repairs : Int32
   mut path : String?
   mut action : CliAction
 }
@@ -31,8 +32,9 @@ fn help_text() -> String {
     "  --check             只检查，不输出；需要修复时退出码 1", "  --report            把修复记录写到标准错误",
     "  --indent N          输出缩进空格数，默认紧凑输出", "  --multi-root MODE   first、array 或 error，默认 first",
     "  --skip-prose        跳过 JSON 之前的说明文字", "  --quote-lookahead   启用引号歧义前瞻",
-    "  -h, --help          显示帮助", "  --version           显示版本", "",
-    "文件为 `-` 或缺省时读取标准输入。", "", "退出码：0 成功（可能有修复）；1 --check 发现需要修复；2 用法错误；",
+    "  --max-repairs N     最多记录多少条修复记录，默认 10000", "  -h, --help          显示帮助",
+    "  --version           显示版本", "", "文件为 `-` 或缺省时读取标准输入。",
+    "", "退出码：0 成功（可能有修复）；1 --check 发现需要修复；2 用法错误；",
     "        3 输入无效；4 资源限制；5 严格模式违规；70 内部错误。",
   ]
   let sb = StringBuilder()
@@ -98,6 +100,7 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
     multi_root: @mend.KeepFirst,
     skip_prose: false,
     quote_lookahead: false,
+    max_repairs: 10000,
     path: None,
     action: Run,
   }
@@ -120,6 +123,30 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
       o.skip_prose = true
     } else if a == "--quote-lookahead" {
       o.quote_lookahead = true
+    } else if a == "--max-repairs" || a.has_prefix("--max-repairs=") {
+      let value = if a == "--max-repairs" {
+        consumed = 1
+        if i + 1 < args.length() {
+          args[i + 1]
+        } else {
+          ""
+        }
+      } else {
+        slice_tail(a, 14)
+      }
+      if value == "" && a == "--max-repairs" {
+        err = "--max-repairs 缺少参数"
+      } else {
+        match parse_uint(value) {
+          Some(n) =>
+            if n <= 0 {
+              err = "--max-repairs 需要正整数，收到 `" + value + "`"
+            } else {
+              o.max_repairs = n
+            }
+          None => err = "--max-repairs 需要正整数，收到 `" + value + "`"
+        }
+      }
     } else if a == "--indent" || a.has_prefix("--indent=") {
       let value = if a == "--indent" {
         consumed = 1

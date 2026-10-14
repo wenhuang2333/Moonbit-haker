@@ -386,3 +386,15 @@ test "derived golden assertions" {
     }
   }
 }
+
+///|
+test "S-021 R019 survives a chunk boundary" {
+  let whole = repair("[\"a\" + \"b\"]")
+  assert_eq(whole.text, "[\"ab\"]")
+  let p = PartialParser::new()
+  p.feed("[\"a\" +")
+  p.feed(" \"b\"]")
+  let fin = p.finish()
+  assert_eq(fin.text, whole.text)
+  assert_eq(fin.repairs.length(), whole.repairs.length())
+}
