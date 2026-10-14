@@ -90,7 +90,7 @@ python3 tests/diff/run_diff.py \
   --no-stamp --out docs/DIVERGENCES.md
 ```
 
-脚本产出 389 条用例的对照结果，报告头部记录生成时间、被测二进制的 sha256、两个
+脚本产出 402 条用例的对照结果，报告头部记录生成时间、被测二进制的 sha256、两个
 参照实现的版本与模块目录、语料构成（固定列表 + 固定变异，无随机种子）。当且仅当
 「有文档解释的差异比例 ≥ 90% 且未解释差异为 0」时退出码为 0。
 `tests/diff/report.md` 是本地默认输出（已 gitignore），提交版是 `docs/DIVERGENCES.md`。

@@ -60,11 +60,11 @@ jsonmend --check broken.json ; echo $?     # 1 = 需要修复
 | 属性与模糊 | 8 组 × 400 例，含 200 000 例压测；未发现反例 |
 | 公共面与选项 | 21 个 R 码 + 9 个 E 码逐一检查；策略枚举、规则开关、字节输入共 17 例 |
 | 覆盖率 | 库代码 1137/1223 行 = 93.0%（`moon coverage report -f summary -p wenhuang2333/jsonmend`） |
-| 差分测试 | 389 条用例对照 `json-repair` 与 `jsonrepair`；193 处差异全部由修复记录解释，未解释 0 |
+| 差分测试 | 402 条用例对照 `json-repair` 与 `jsonrepair`；202 处差异全部由修复记录解释，未解释 0 |
 | 命令行 | 25 项断言全部通过（退出码 0/1/2/3/4/5/70 覆盖） |
 | 演示页 | `static/demo/index.html`，MoonBit JS 产物驱动，无头浏览器验证无报错 |
 | 跨后端 | wasm-gc / native / JS 三个后端 32 个测试块全部通过 |
-| 吞吐 | native 32–36 MB/s，JS 20–37 MB/s（合法 JSON，Apple M5，单次观测） |
+| 吞吐 | native 41–43 MB/s，JS 19–37 MB/s（合法 JSON，Apple M5，多次观测中位数） |
 | 体积 | wasm-gc release 95.9 KiB（上限 150 KB） |
 
 ## 与参照实现的关系
@@ -79,7 +79,7 @@ jsonmend --check broken.json ; echo $?     # 1 = 需要修复
 
 - FR-16 事件/回调接口未实现（需要回调的调用方只能用 `snapshot()` 轮询）；
 - 快照的 `incomplete_number` / `pending_key` 策略只影响快照，最终结果仍补全；
-- 峰值内存约为输入的 16 倍（13.2 MB 输入 → 212 MB），未达到「≤ 4 倍输入」的预算：保留完整 `Json` 树就无法达标，见基准报告；
+- 峰值内存约为输入的 18 倍（12.95 MB 对象数组 → 230.6 MB；单个 10 MB 字符串 38 倍），未达到「≤ 4 倍输入」的预算：保留完整 `Json` 树就无法达标，见基准报告；
 - 恢复策略是启发式的，不是某个标准的合规实现。
 
 ## 文档索引

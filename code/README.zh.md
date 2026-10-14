@@ -5,7 +5,7 @@
 | | |
 | --- | --- |
 | 模块 | `wenhuang2333/jsonmend` |
-| 版本 | 0.1.0 |
+| 版本 | 0.2.0 |
 | 许可证 | Apache-2.0 |
 | 首选后端 | `wasm`（同时支持 `native` 与 `js`） |
 
@@ -239,7 +239,7 @@ jsonmend [选项] [文件]
 | `--quote-lookahead` | 启用引号歧义前瞻。 |
 | `--max-repairs N` | 最多保留多少条修复记录（默认 10000）；被截断时另向标准错误打印一行提示。 |
 | `-h`、`--help` | 显示帮助。 |
-| `--version` | 显示版本（`jsonmend 0.1.0`）。 |
+| `--version` | 显示版本（`jsonmend 0.2.0`）。 |
 | 文件或 `-` | 读取文件；`-` 或缺省时读取标准输入。 |
 
 `--indent=N`、`--multi-root=MODE`、`--max-repairs=N` 和用空格分隔的写法等价。
@@ -270,7 +270,7 @@ bash tests/examples.sh         # 示例输入与 code/examples/cases/*.expected 
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 ```
 
-| 测试集 | 规模 | 0.1.0 结果 |
+| 测试集 | 规模 | 0.2.0 结果 |
 | --- | --- | --- |
 | 黄金用例（规范附录 A、B） | 126 条 | 通过 |
 | 流式用例（S-001…S-020）与分块不变性 | 20 条 + 不变性检查 | 通过 |
@@ -278,7 +278,7 @@ python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/
 | 公共面（逐个 R 码与 E 码） | 21 + 9 个码的 9 项断言 | 通过 |
 | 选项策略与字节输入 | 10 例 | 通过 |
 | 命令行冒烟（退出码 0/1/2/3/4/5/70） | 25 项断言 | 通过 |
-| 差分语料（对照 `jsonrepair` / `json-repair`） | 389 条 | 193 处差异全部有文档解释，未解释 0 |
+| 差分语料（对照 `jsonrepair` / `json-repair`） | 402 条 | 202 处差异全部有文档解释，未解释 0 |
 | 库代码行覆盖率 | 1137/1223 行 | 93.0% |
 
 三个后端结果一致：wasm-gc、native 与 JavaScript 均为 32 个测试块全通过。`.github/workflows/ci.yml` 在每次推送时执行同一组命令，因此上表是重新推导出来的结果，而不是一次性记录。
@@ -287,7 +287,7 @@ python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/
 
 ## 与 jsonrepair 的差异
 
-JSONMend 不是 `jsonrepair` 的移植，也不追求逐字节一致的输出。若干差异是有意为之、且已文档化的策略选择：根值之后的尾随内容默认保留第一个值而不是合并，Markdown 围栏默认去除，重复键默认保留最后一个值，未完成的数字在快照中默认不出现，严格模式与逐规则开关也没有直接对应物。差分工具在手工编写与自动变异的语料上同时运行 `jsonrepair`（TypeScript/Node）与 `json-repair`（Python），比较解析后的值，并对每一处差异分类。在随 0.1.0 提交的那份报告中，193 处差异全部有文档化的成因，没有无法解释的差异。方法与分类结果、参照库版本见 [docs/DIVERGENCES.md](docs/DIVERGENCES.md)；规则与需求的映射见 [docs/TRACEABILITY.md](docs/TRACEABILITY.md)。
+JSONMend 不是 `jsonrepair` 的移植，也不追求逐字节一致的输出。若干差异是有意为之、且已文档化的策略选择：根值之后的尾随内容默认保留第一个值而不是合并，Markdown 围栏默认去除，重复键默认保留最后一个值，未完成的数字在快照中默认不出现，严格模式与逐规则开关也没有直接对应物。差分工具在手工编写与自动变异的语料上同时运行 `jsonrepair`（TypeScript/Node）与 `json-repair`（Python），比较解析后的值，并对每一处差异分类。在随 0.2.0 提交的那份报告中，202 处差异全部有文档化的成因，没有无法解释的差异。方法与分类结果、参照库版本见 [docs/DIVERGENCES.md](docs/DIVERGENCES.md)；规则与需求的映射见 [docs/TRACEABILITY.md](docs/TRACEABILITY.md)。
 
 ## 性能
 
@@ -298,7 +298,7 @@ moon run bench --target native --release
 moon run bench --target js --release
 ```
 
-在 2026 年的 Apple 芯片笔记本上，native 实测 32–36 MB/s，js 实测 20–37 MB/s（同一台机器单次观测，不同轮次可差 ±15%）。这些数字是观测值而非承诺：吞吐取决于输入形态、分块大小、快照频率与工具链版本，内存与产物大小另行测量。完整方法与表格见 [docs/BENCHMARK.md](docs/BENCHMARK.md)，复现步骤见 [docs/REPRODUCE.md](docs/REPRODUCE.md)。
+在 2026 年的 Apple 芯片笔记本上，native 实测 41–43 MB/s，js 实测 19–37 MB/s（同一台机器多次观测的中位数，不同轮次可差 ±15%）。这些数字是观测值而非承诺：吞吐取决于输入形态、分块大小、快照频率与工具链版本，内存与产物大小另行测量。完整方法与表格见 [docs/BENCHMARK.md](docs/BENCHMARK.md)，复现步骤见 [docs/REPRODUCE.md](docs/REPRODUCE.md)。
 
 ## 已知限制
 
@@ -323,13 +323,13 @@ moon run bench --target js --release
 
 ## 贡献
 
-- `CONTRIBUTING.md`（随 0.1.0 交付）覆盖开发环境、测试运行方式、提交规范，以及如何新增修复规则——规则变更必须同时更新 `docs/RULES.md`、`docs/TRACEABILITY.md` 与 golden 测试。
+- `CONTRIBUTING.md`（随 0.2.0 交付）覆盖开发环境、测试运行方式、提交规范，以及如何新增修复规则——规则变更必须同时更新 `docs/RULES.md`、`docs/TRACEABILITY.md` 与 golden 测试。
 - Issue 模板覆盖缺陷（输入、选项、期望与实际输出、后端）和新规则建议。
-- `SECURITY.md`（随 0.1.0 交付）说明问题上报方式：本库处理的是不可信输入。
+- `SECURITY.md`（随 0.2.0 交付）说明问题上报方式：本库处理的是不可信输入。
 
 ## 许可证与致谢
 
-JSONMend 以 Apache License 2.0 发布（`code/moon.mod` 中 `license = "Apache-2.0"`）。`LICENSE`/`NOTICE` 文件属于 0.1.0 的发布清单。
+JSONMend 以 Apache License 2.0 发布（`code/moon.mod` 中 `license = "Apache-2.0"`）。`LICENSE`/`NOTICE` 文件属于 0.2.0 的发布清单。
 
 - [jsonrepair](https://github.com/josdejong/jsonrepair)（TypeScript）与 [json-repair](https://github.com/mangiucugna/json_repair)（Python）在差分报告中作为行为参照。它们仅用于对照，未内嵌任何代码。
 - MoonBit 核心库（`moonbitlang/core/json`、`moonbitlang/core/string`）提供 `Json` 类型与字符串处理。

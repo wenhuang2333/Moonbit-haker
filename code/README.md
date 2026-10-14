@@ -5,7 +5,7 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 | | |
 | --- | --- |
 | Module | `wenhuang2333/jsonmend` |
-| Version | 0.1.0 |
+| Version | 0.2.0 |
 | License | Apache-2.0 |
 | Preferred target | `wasm` (also builds for `native` and `js`) |
 
@@ -239,7 +239,7 @@ Flags and their meanings:
 | `--quote-lookahead` | Enable quote-ambiguity lookahead. |
 | `--max-repairs N` | Maximum number of repair records to keep (default 10000); a truncated run also prints a note to standard error. |
 | `-h`, `--help` | Show help. |
-| `--version` | Show the version (`jsonmend 0.1.0`). |
+| `--version` | Show the version (`jsonmend 0.2.0`). |
 | file, or `-` | Read a file; `-` or an omitted argument reads standard input. |
 
 `--indent=N`, `--multi-root=MODE`, and `--max-repairs=N` are accepted as equivalent to the space-separated forms.
@@ -271,7 +271,7 @@ node ../code/tests/demo_smoke.mjs   # the committed browser bundle still answers
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 ```
 
-| Suite | Size | Result (0.1.0) |
+| Suite | Size | Result (0.2.0) |
 | --- | --- | --- |
 | Golden cases (spec appendices A and B) | 126 | pass |
 | Documented streaming cases (S-001…S-020) + chunk invariance | 20 + invariance checks | pass |
@@ -279,7 +279,7 @@ python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/
 | Public surface (every `R` code and `E` code) | 9 assertions over 21 + 9 codes | pass |
 | Option policies and byte input | 10 cases | pass |
 | Command line smoke (exit codes 0/1/2/3/4/5/70) | 25 assertions | pass |
-| Differential corpus against `jsonrepair` / `json-repair` | 389 cases | 193 divergences, all documented, 0 unexplained |
+| Differential corpus against `jsonrepair` / `json-repair` | 402 cases | 202 divergences, all documented, 0 unexplained |
 | Line coverage of the library | 1137/1223 lines | 93.0% |
 
 Cross-backend results are identical: 32 test blocks pass on wasm-gc, native and
@@ -290,7 +290,7 @@ thresholds and the two known shortfalls are in
 
 ## Differences from jsonrepair
 
-JSONMend is not a port of `jsonrepair` and does not aim for byte-identical output. Several differences are deliberate, documented policy choices: trailing content after the root value keeps the first value by default instead of merging it, Markdown fences are stripped by default, duplicate keys keep the last value, unfinished numbers are dropped from snapshots, and strict mode plus per-rule switches have no direct equivalent. A differential harness runs `jsonrepair` (TypeScript/Node) and `json-repair` (Python) over a corpus of hand-written and mutated inputs, compares parsed values, and classifies every divergence. In the committed 0.1.0 report, all 193 divergences had a documented cause and none was unexplained. The method, the classification, and the reference-library versions are in [docs/DIVERGENCES.md](docs/DIVERGENCES.md); rule-to-requirement mapping is in [docs/TRACEABILITY.md](docs/TRACEABILITY.md).
+JSONMend is not a port of `jsonrepair` and does not aim for byte-identical output. Several differences are deliberate, documented policy choices: trailing content after the root value keeps the first value by default instead of merging it, Markdown fences are stripped by default, duplicate keys keep the last value, unfinished numbers are dropped from snapshots, and strict mode plus per-rule switches have no direct equivalent. A differential harness runs `jsonrepair` (TypeScript/Node) and `json-repair` (Python) over a corpus of hand-written and mutated inputs, compares parsed values, and classifies every divergence. In the committed 0.2.0 report, all 202 divergences had a documented cause and none was unexplained. The method, the classification, and the reference-library versions are in [docs/DIVERGENCES.md](docs/DIVERGENCES.md); rule-to-requirement mapping is in [docs/TRACEABILITY.md](docs/TRACEABILITY.md).
 
 ## Performance
 
@@ -301,7 +301,7 @@ moon run bench --target native --release
 moon run bench --target js --release
 ```
 
-On a 2026 Apple-silicon laptop, native measured 32–36 MB/s and js 20–37 MB/s on the same corpus. These figures are observations, not a guarantee: throughput depends on the input shape, chunk size, snapshot frequency, and the toolchain version, and memory or artifact size is measured separately from the process. The full method and tables are in [docs/BENCHMARK.md](docs/BENCHMARK.md), and [docs/REPRODUCE.md](docs/REPRODUCE.md) explains how to rerun the benchmarks.
+On a 2026 Apple-silicon laptop, native measured 41–43 MB/s and js 19–37 MB/s on the same corpus. These figures are observations, not a guarantee: throughput depends on the input shape, chunk size, snapshot frequency, and the toolchain version, and memory or artifact size is measured separately from the process. The full method and tables are in [docs/BENCHMARK.md](docs/BENCHMARK.md), and [docs/REPRODUCE.md](docs/REPRODUCE.md) explains how to rerun the benchmarks.
 
 ## Known limitations
 
@@ -327,13 +327,13 @@ On a 2026 Apple-silicon laptop, native measured 32–36 MB/s and js 20–37 MB/s
 
 ## Contributing
 
-- `CONTRIBUTING.md` (part of the 0.1.0 release) covers the development environment, how to run the tests, commit conventions, and how to add a repair rule — a rule change must update `docs/RULES.md`, `docs/TRACEABILITY.md`, and the golden tests together.
+- `CONTRIBUTING.md` (part of the 0.2.0 release) covers the development environment, how to run the tests, commit conventions, and how to add a repair rule — a rule change must update `docs/RULES.md`, `docs/TRACEABILITY.md`, and the golden tests together.
 - Issue templates cover defects (input, options, expected versus actual output, and backend) and new-rule proposals.
-- `SECURITY.md` (part of the 0.1.0 release) describes how to report a problem: this library processes untrusted input.
+- `SECURITY.md` (part of the 0.2.0 release) describes how to report a problem: this library processes untrusted input.
 
 ## License and acknowledgements
 
-JSONMend is released under the Apache License 2.0 (`license = "Apache-2.0"` in `code/moon.mod`). A `LICENSE`/`NOTICE` pair is part of the 0.1.0 release checklist.
+JSONMend is released under the Apache License 2.0 (`license = "Apache-2.0"` in `code/moon.mod`). A `LICENSE`/`NOTICE` pair is part of the 0.2.0 release checklist.
 
 - [jsonrepair](https://github.com/josdejong/jsonrepair) (TypeScript) and [json-repair](https://github.com/mangiucugna/json_repair) (Python) are used as behavioural oracles in the differential report. They are used only for comparison; no code from either project is vendored.
 - The MoonBit core library (`moonbitlang/core/json`, `moonbitlang/core/string`) provides the `Json` type and string handling.
