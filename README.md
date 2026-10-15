@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](code/LICENSE)
 
 **把大模型吐出的「几乎正确」的 JSON 变成可用的 JSON：能修就修、修不了就补全，
-并且告诉调用方「这份结果能不能直接执行」。**
+并且在一次调用里回答「这份结果能不能直接执行、为什么不能、怎么让模型改」。**
 
 [English](#english) · [详细文档](#文档索引) · [演示页](static/demo/index.html) · [测试证据](#质量与证据)
 
@@ -104,26 +104,53 @@ $J --max-loss cosmetic broken.json   # 超出精确度上限时退出码 5，并
 $J --explain broken.json             # 逐条打印级别、位置与插入符片段
 $J --batch < cases.jsonl             # 逐行 {"id","input"} → 逐行结果 JSON
 $J llm --provider anthropic --follow events.jsonl   # 工具调用流：每次增量一行
+
+# 0.5.0：一次调用拿到「能不能执行」+ 回灌模型的话
+$J explain --policy execution --schema '{!query:string,!limit:integer}' tool_call.json
+JSONMend Analysis
+────────────────────────────────
+Input:
+  {"query":"MoonBit","limit":10,"note":"…
+Detected:
+  R005 1:44 RemoveExtraComma  information_loss=false  confidence=certain
+Repair:
+  {"query":"MoonBit","limit":10,"note":"…"}
+Risk:
+  exactness=cosmetic  ambiguous=false  schema 2/2
+Decision:
+  SAFE TO EXECUTE (notation normalised)
+$ echo $?
+0
+
+$ printf '{"words":["colour" "color"]}' | $J explain --policy execution ; echo $?
+Decision:
+  BLOCKED (two readings)
+Suggested retry:
+  JSONMend refused the output (…) E011 …
 ```
 
 | 退出码 | 含义 |
 | --- | --- |
 | 0 | 成功（可能有修复） |
 | 1 | `--check` 发现需要修复 |
-| 2 | 用法错误（未知选项、非法取值、E050） |
+| 2 | 用法错误（未知选项、非法取值、E050；骨架声明写错 E070） |
 | 3 | 输入无效（E001/E002/E040/E060，或文件不可读） |
 | 4 | 资源限制（E020/E021/E022） |
-| 5 | 严格模式违规（E010，含 `--max-loss` 超限） |
+| 5 | 拒绝执行（E010 超预算、E011 歧义、E070 骨架不符） |
 | 70 | 内部错误（E030） |
 
 ## 功能一览
 
 | 能力 | 说明 |
 | --- | --- |
+| **安全档位** | `SafetyPolicy` 五档（`permissive`/`interactive`/`execution`/`agent`/`strict`）；`with_policy` 只换安全字段、保留协议字段，`of_options` 可反查 |
+| **一次调用拿到计划** | `analyze(input, options?, readiness?, schema?)` → `RepairPlan`：决策、修复操作（含动作与置信类别）、重试提示、JSON 通道；**永不抛错** |
+| **执行决策** | `ExecutionDecision` 五态（`safe`/`cosmetic_repair`/`lossy_repair`/`ambiguous`/`invalid`），风险可排序 |
+| **骨架感知就绪** | `Schema` 文本 DSL + `semantic_readiness`：同一条流上给出「语法就绪」与「骨架就绪」两个分数，以及缺失/类型不符清单 |
 | 一次性修复 | `repair` 返回修复文本、`Json` 值与逐条修复记录（码、位置、级别、消息） |
 | 流式部分解析 | `PartialParser::feed` / `feed_bytes` / `snapshot` / `finish`，快照给出值、完整性状态与未闭合路径 |
 | 22 条修复规则 | R001–R022：围栏、注释、引号、裸词、逗号、冒号、缺值补 null、容器/字符串闭合、数字、字面量、转义、括号错配、意外内容、多余闭合符、重复键、相邻字符串拼接、省略号、前导说明、字面量大小写 |
-| 10 个错误码 | E001/E002/E010/E020/E021/E022/E030/E040/E050/E060，含位置与上下文片段 |
+| 12 个错误码 | E001/E002/E010/E011/E020/E021/E022/E030/E040/E050/E060/E070，含位置与上下文片段 |
 | 精确度标签 | `Exact` / `Cosmetic` / `Lossy` 进入全部四个结果类型；`max_loss` 是执行前的闸门 |
 | 增量补丁流 | `collect_deltas` 打开后 `drain_deltas()` 返回 `Set`/`AppendText`/`Close`，路径为 RFC 6901 JSON Pointer |
 | 大模型工具流适配 | `jsonmend/llm`：Anthropic 细粒度工具流与 OpenAI 兼容流，支持多路并发与 SSE 解析 |
@@ -143,14 +170,18 @@ $J llm --provider anthropic --follow events.jsonl   # 工具调用流：每次�
 | 流式用例（S-001…S-021）与分块不变性 | 21 条 + 逐码元/二分/1 KB 切分 | 通过 |
 | 属性与模糊测试 | 8 组 × 400 例（`JSONMEND_LONGRUN` 可提高，夜间跑 1 000 000 例） | 通过，无反例 |
 | 真值评测（协议先冻结） | 1200 条（19 个变异族 + 1 个对照组，每族 60 条） | 恢复率 **100.00%**，漏标率 **0**，四条预登记判据全 PASS |
+| 自愈闭环 | `examples/agent_loop` 4 个 episode | 2 次重试后执行、1 次骨架不符回灌、1 次无改进则放弃 |
 | 增量流重放 | 400 份生成文档 + 400 份变异输入 | 「增量重放 == 快照」全部成立 |
 | 大模型适配器 | 9 个夹具 × 双 provider | 通过（含截断、转义切分、代理对切分、多路并发） |
-| 公共面与选项测试 | 22 个 R 码 + 10 个 E 码逐一检查 | 通过 |
-| 三个后端 | wasm-gc / native / JS | 各 69/69 通过 |
-| 命令行冒烟 | 36 项断言（含全部退出码与 `llm` 子命令） | 通过 |
+| 公共面与选项测试 | 22 个 R 码 + 12 个 E 码逐一检查 | 通过 |
+| 三个后端 | wasm-gc / native / JS | 各 129/129 通过（共 516 次） |
+| 命令行冒烟 | 62 项断言（含全部退出码、`llm` 子命令与 `explain` 的 14 条） | 通过 |
 | 示例对照 | 6 组输入/期望输出 | 逐字节一致 |
 | 差分测试（对照 `jsonrepair`、`json-repair`） | 402 条用例 | 202 处差异**全部有文档解释**，未解释 0 |
-| 库代码行覆盖率 | 根包 1378/1487、`llm` 包 223/243 | 92.7% / 91.8% |
+| 库代码行覆盖率 | 根包 2312/2651、`llm` 包 337/391 | 87.2% / 86.2% |
+| **独立第三方语料** | `nst/JSONTestSuite` 318 文件（MIT，commit `1ef36fa0`） | `y_` 误修 **2/95**（重复键），`n_` 有效值 **165/188** vs `json_repair` 166、`jsonrepair` 144 |
+| **骨架就绪表** | 7 个场景 | 4 个存在落差（最大 973‰ vs 260‰），3 个两层同时到达末尾 |
+| **安全层单价** | 4.9 KiB × 20 次调用 | `analyze` = `repair` 的 1.00–1.03×，`for_agent` 1.33–1.36×，`+schema` 1.38–1.45× |
 | 吞吐（Apple M5，release，单机多次观测中位数） | 合法 JSON native 41–42 MB/s、JS 22–39 MB/s | 达标（阈值 20 / 5） |
 | 首个可见值（流式） | 工具调用文档中位数 | 文档长度的 **0.7%** 处即可渲染，并同时拿到标签 |
 | 命令行吞吐（12.95 MB 输入，64 KB 分块） | 28.0 MB/s（峰值 RSS 231 MB） | 单次 `fread` 取代逐字节读后 +21% |
@@ -176,8 +207,12 @@ python3 tests/gen_llm_fixtures.py --check
 ![演示页](static/demo/screenshot.png)
 
 `static/demo/index.html` 由 MoonBit 的 JavaScript 后端产物直接驱动（`code/examples/web/main.mbt`
-把 `repair` / `report` / `snapshot` 注册到页面），**页面里没有第二份实现**。直接用浏览器打开即可，
+把 `repair` / `report` / `snapshot` / `live` 注册到页面），**页面里没有第二份实现**。直接用浏览器打开即可，
 无需服务器；重新生成 bundle 用 `bash static/demo/build.sh`。
+
+[`static/demo/live.html`](static/demo/live.html) 是 0.5.0 的实时演示：四条真实场景逐帧重放
+（截断 → 重试 → 执行；歧义 → 重试 → 执行；唯一读法直接执行；长尾流 19% 处即可停），
+同一帧里显示模型流、实时结构、成员就绪、三个 readiness 数字与拒绝时的重试提示。
 
 ## 与 jsonrepair 的关系
 
@@ -267,6 +302,11 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 
 ## 已知限制
 
+- **`semantic_readiness` 是诊断指标，不是热路径**：2.25–2.30 ms / 4.9 KiB（`repair` 的 32.7–34.3 倍）。
+- **骨架只认类型，不认约束**：声明不了「`limit` 必须 ≤ 100」。
+- **`plan.mbt` 覆盖率 71.5%**（328/459）是当前最低项：`explain_text` 与 `to_json` 的分支组合多。
+- **live 演示页只重放四个固定场景**，浏览器验证在本机用 Playwright 做过，CI 只跑帧级断言。
+- **`Options::for_text()` 是预设，不是无树引擎**：关掉记录与缩进，但值仍然建树。
 - FR-16 事件/回调接口未实现（需要回调的调用方只能用 `snapshot()` 轮询）。
 - 快照的 `incomplete_number` / `pending_key` 策略只影响快照，最终结果仍会补全。
 - **增量流的吞吐是基线耗时的 1.39–1.51 倍（native）**，未达到「不低于基线 90%」的目标：每条变更都要分配一个 `Delta` 与一份路径数组，见 [code/docs/BENCHMARK.md](code/docs/BENCHMARK.md#增量流的开销未达标项)。
@@ -284,9 +324,11 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 | --- | --- |
 | [code/README.zh.md](code/README.zh.md) / [code/README.md](code/README.md) | 中文 / 英文完整说明：API、选项、CLI、测试 |
 | [code/docs/RULES.md](code/docs/RULES.md) | 22 条修复规则：触发条件、级别、消息模板、示例 |
-| [code/docs/ERRORS.md](code/docs/ERRORS.md) | 10 个错误码、严格模式升级、退出码、失效模式 |
+| [code/docs/ERRORS.md](code/docs/ERRORS.md) | 12 个错误码、严格模式升级、退出码、失效模式 |
 | [code/docs/EVAL_REGISTRATION.md](code/docs/EVAL_REGISTRATION.md) | 真值评测的预登记协议（数据集、判据、修订记录） |
 | [code/docs/EVAL.md](code/docs/EVAL.md) | 真值评测结果（生成物） |
+| [code/docs/EVAL_INDEPENDENT.md](code/docs/EVAL_INDEPENDENT.md) | 独立第三方语料 `nst/JSONTestSuite` 的对照结果（生成物） |
+| [code/docs/READINESS.md](code/docs/READINESS.md) | 骨架就绪表：七个场景的语法/骨架两层分数（生成物） |
 | [code/docs/AI_USAGE.md](code/docs/AI_USAGE.md) | AI 使用说明：用在何处、哪些判断不外包、如何核验 |
 | [code/docs/DIVERGENCES.md](code/docs/DIVERGENCES.md) | 与两个参照实现的逐类差异与归因 |
 | [code/docs/BENCHMARK.md](code/docs/BENCHMARK.md) | 吞吐、线性、流式、内存、体积 |
@@ -298,7 +340,10 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 
 ## 路线图
 
-- **发布 0.3.0 到 mooncakes.io**（`moon whoami` 未登录，阻塞中）；`v0.3.0` tag 已推送，GitHub Release 已产出预编译产物。
+- ~~发布到 mooncakes.io~~：0.3.0 / 0.4.0 已发布，0.5.0 随本轮发布；`v0.5.0` tag 推送后 GitHub Release 产出预编译产物。
+- ~~演示页新增「模拟 LLM 流」标签~~：`static/demo/live.html` 已落地（含重试面板与三层 readiness）。
+- **给骨架加约束**：`minimum` / `enum` / `maxLength`，让声明从「类型检查」变成「参数校验」。
+- **把 `semantic_readiness` 做成增量**：用 `FieldTracker` 的增量路径避免全量重放。
 - **紧凑增量缓冲**：把 `op|path|text` 编码进一块可复用的缓冲，只在 `drain_deltas()` 时物化，
   目标是把增量流的开销从 1.39–1.51 倍压到 1.10 倍以内（NFR-PERF-05）。
 - 实现 FR-16 事件/回调接口（`on_value_complete` / `on_repair`），让流式消费方不必轮询快照。
@@ -331,6 +376,9 @@ repaired, complete what is truncated, and record every change with a code and a 
   of repair records; `parse(input)` returns the value directly.
 - **Streaming**: `PartialParser::feed` / `feed_bytes` / `snapshot` / `finish`, with snapshots
   that are a stable prefix (value, completeness, open path).
+- **Safety runtime (0.5.0)**: `SafetyPolicy` profiles, `ExecutionDecision`, a `RepairPlan` from one
+  never-raising `analyze()` call, a `Schema` declaration with syntax-ready/schema-ready fractions,
+  a self-healing agent loop example, and a live streaming demo.
 - **21 repair rules** (fences, comments, quotes, bare words, commas, colons, missing values,
   unclosed containers and strings, numbers, literals, escapes, mismatched closers, duplicate
   keys, ellipsis, prose) and **9 fatal error codes** with positions and snippets.
@@ -339,7 +387,7 @@ repaired, complete what is truncated, and record every change with a code and a 
 - **Verified**: 126 golden cases, 21 streaming cases, 8 property groups × 400 cases,
   32 test blocks on wasm-gc / native / JS, 25 CLI assertions, and a 402-case differential
   corpus against `jsonrepair` and `json-repair` in which every one of the 202 divergences has
-  a documented cause. Library line coverage 93.0%; native throughput 41–43 MB/s
+  a documented cause. 129 tests on all three backends; library line coverage 87.2%; native throughput 41–43 MB/s
   (single-machine observation; CI reruns the same benchmark script).
 - **CLI** (`jsonmend`) with `--report`, `--check`, `--strict`, `--indent`, `--multi-root`,
   `--max-repairs`, chunked streaming input, and a browser demo driven by the MoonBit JS build.

@@ -41,8 +41,9 @@ moon test --target native      # 本机后端
 moon test --target js          # JS 后端
 ```
 
-期望：69 个测试全部通过（黄金用例 126 条、流式用例 6 块含 21 组断言、属性测试 8 组
-每组 400 例、精确度 240 例、增量流、`llm` 适配器 19 例）。任一后端失败都视为发布阻塞。
+期望：129 个测试全部通过（黄金用例 126 条、流式用例 6 块含 21 组断言、属性测试 8 组
+每组 400 例、精确度 240 例、增量流、`llm` 适配器 19 例，以及 0.5.0 新增的
+安全档位 7 例、修复计划 22 例、骨架 5 例）。任一后端失败都视为发布阻塞。
 
 长跑（O-6）：把每个属性的用例数从 400 提到 N（上限 1 000 000），本机 1 000 000 例
 约 41 s（本机实测：400 → 0.12 s、4 000 → 0.23 s、40 000 → 1.75 s、1 000 000 → 41.2 s）。夜间工作流 `.github/workflows/nightly.yml` 用同一变量跑 1 000 000 例。
@@ -58,9 +59,9 @@ JSONMEND_LONGRUN=1000000 moon test --target native
 cd code
 moon coverage clean                     # 清掉上一轮的 .trace 文件，避免计数错位
 moon test --enable-coverage
-moon coverage report -f summary -p zhanshishan/jsonmend      # 根包 1378/1487 = 92.7%
-moon coverage report -f summary -p zhanshishan/jsonmend/llm  # llm 包 223/243 = 91.8%
-moon coverage report -f summary                               # 含 bench：1586/2002 = 79.2%
+moon coverage report -f summary -p zhanshishan/jsonmend      # 根包 2312/2651 = 87.2%
+moon coverage report -f summary -p zhanshishan/jsonmend/llm  # llm 包 337/391 = 86.2%
+moon coverage report -f summary                               # 含 bench：2649/3415 = 77.6%
 ```
 
 `cmd/jsonmend` 在覆盖率报告里会因 `quit()` 的 native 实现而抛内部错误，属已知的
@@ -71,7 +72,7 @@ moon coverage report -f summary                               # 含 bench：1586
 ```bash
 cd code
 moon build cmd/jsonmend --target native --release
-bash tests/cli_smoke.sh                       # 36 项断言，全部 ok 才算通过
+bash tests/cli_smoke.sh                       # 62 项断言，全部 ok 才算通过
 bash tests/examples.sh                        # 示例输入与期望输出逐字节对照
 bash tests/cli_smoke.sh ./path/to/jsonmend.exe  # 指定其它可执行文件
 ```
@@ -116,8 +117,10 @@ bash code/tests/bench.sh native
 
 结果与 `docs/BENCHMARK.md` 对照；绝对值随机器变化，判定阈值见该文档。
 `bench/main.mbt` 另输出 `deltas`（增量流开销，NFR-PERF-05）、`ttfv`（首个可见值，NFR-PERF-06）、
-`agent`（4 KB 工具调用文档按 1/3/16/1024/65536 码元分块，NFR-PERF-07）与
-`readiness`（字段就绪曲线成本与十分位，FR-29）。
+`agent`（4 KB 工具调用文档按 1/3/16/1024/65536 码元分块，NFR-PERF-07）、
+`readiness`（字段就绪曲线成本与十分位，FR-29）与 `gate`（同一份 4.9 KiB 工具调用上
+`repair` / `analyze` / `analyze for_agent` / `analyze +schema` / `semantic_readiness`
+的单价与相对倍数，FR-32 … FR-36）。
 
 ## 5b. 真值评测（TC-EVAL）
 
@@ -155,6 +158,33 @@ python3 tests/eval/check_amb_guard.py  --cli ./_build/native/release/build/cmd/j
 只在报告里把对应列写成 `n/a (library not installed)`，因为对照列是信息性的，
 而 suite 自身只依赖 JSONMend 的判定——否则这套证据就只能在一台机器上跑得出来。
 
+独立第三方语料（`nst/JSONTestSuite`，MIT，逐字节 vendor 在
+`code/tests/eval/third_party/jsontestsuite/`），用来补上「1200 条语料是自造的、
+缺少独立评测」这个证据缺口：
+
+```bash
+cd code
+python3 tests/eval/run_independent.py
+```
+
+318 个文件（95 `y_` / 188 `n_` / 35 `i_`）逐个喂给 `jsonmend --report`，并用同一份
+输入对照 `json_repair` 与 `jsonrepair`，产出 `docs/EVAL_INDEPENDENT.md`。判据不是我们
+定的：`y_` 是**合法 JSON**，合法文档必须零修复，所以那里的每一条修复记录都是误报。
+两个 oracle 缺失时同样不失败，对应列写成 `n/a (library not installed)`。上游 URL、
+commit SHA、许可与「不得修改 vendor 文件」的约定见
+`tests/eval/third_party/jsontestsuite/PROVENANCE.md`。
+
+骨架就绪表（同一份输入上「语法就绪」与「骨架就绪」两个分数的七个场景）：
+
+```bash
+cd code
+python3 tests/eval/run_readiness.py \
+  --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe --check
+```
+
+`--check` 要求表里既有落差（某场景骨架就绪远早于语法就绪）也有并列（声明字段就是最后写的东西），
+否则脚本失败——一张永远给出同一个数的表证明不了任何事。产出 `docs/READINESS.md`。
+
 横向内存基线（与 Node / Python 同文件对照）：
 
 ```bash
@@ -189,12 +219,22 @@ open ../static/demo/index.html
 
 页面上的「一次性修复」「修复记录」「流式快照」三个区域都由 MoonBit 的 JS 产物
 直接驱动（`code/examples/web/main.mbt` 通过 `globalThis.jsonmendRegister*` 暴露
-`repair` / `report` / `snapshot`），页面内没有第二份实现。
+`repair` / `report` / `snapshot` / `live`），页面内没有第二份实现。
+
+`static/demo/live.html` 是 0.5.0 的实时演示页，同样只调用 bundle 里的 `live` 入口：
+四个场景逐帧重放（截断 → 重试 → 通过；歧义 → 重试 → 通过；唯一读法直接通过；
+长尾流 19% 处即可停），一帧里同时给出 `consumed/total`、实时结构、成员就绪、
+三个 readiness 数字（语法/骨架/执行）与拒绝时的重试提示。
+
+```bash
+open ../static/demo/live.html
+python3 test/live_page_check.py     # 可选：无头重放两个场景并截图
+```
 
 bundle 冒烟测试（Node 直接执行，CI 中也会先重建再比对，防止提交的 bundle 过期）：
 
 ```bash
-node code/tests/demo_smoke.mjs        # 10 项断言：三个入口 + 典型修复/记录/快照
+node code/tests/demo_smoke.mjs        # 四个入口 + 典型修复/记录/快照/实时帧
 bash static/demo/build.sh && git diff --exit-code -- static/demo/jsonmend.js
 ```
 
@@ -217,6 +257,7 @@ moon check --deny-warn && moon fmt --check     # 无警告、格式一致
 moon test && moon test --target native && moon test --target js
 bash tests/cli_smoke.sh && bash tests/examples.sh
 moon run examples/agent_gate --target native --release   # 拒绝 → 回灌 → 再执行
+moon run examples/agent_loop --target native --release   # 自愈闭环：四次 episode，两次成功
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 bash tests/bench.sh size                       # wasm-gc ≤ 150 KB（当前 103 784 B）
 node ../code/tests/demo_smoke.mjs              # 演示 bundle 仍可用
@@ -229,7 +270,7 @@ node ../code/tests/demo_smoke.mjs              # 演示 bundle 仍可用
 ```bash
 moon whoami                 # 必须是模块名里的用户名（当前 zhanshishan）
 moon publish --dry-run      # 打包并检查，不上传
-moon publish                # 上传 0.4.0
+moon publish                # 上传 0.5.0
 ```
 
 `moon.mod` 的 `name` 必须等于 `moon whoami` 的用户名，否则 `moon publish` 报
@@ -245,7 +286,7 @@ moon publish                # 上传 0.4.0
    然后在页面上开 PR）。
 2. **手动触发一次 `nightly.yml`**：Actions 页 → 左侧选 `Nightly` → `Run workflow`。
    命令已在本机验证过（`JSONMEND_LONGRUN=1000000`，41.2 s 通过）。
-3. **确认 Release 页**：`v0.4.0` 标签推送后 `release.yml` 会自动构建 4 个资产
+3. **确认 Release 页**：`v0.5.0` 标签推送后 `release.yml` 会自动构建 4 个资产
    （Linux CLI、wasm 探针、浏览器包、`SHA256SUMS`），到 Release 页确认可下载即可。
 
 ## 8. 已知的环境差异

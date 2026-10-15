@@ -84,10 +84,18 @@ jobs:
             code/docs/EVAL.md
             code/docs/EVAL_PATHS.md
             code/docs/EVAL_AMBIGUITY.md
+            code/docs/READINESS.md
 
       - name: Example inputs
         working-directory: code
         run: bash tests/examples.sh
+
+      - name: Schema readiness table (must exit 0, table must show a gap and a tie)
+        working-directory: code
+        run: |
+          python3 tests/eval/run_readiness.py \
+            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe \
+            --check
 
       - name: Library coverage
         working-directory: code
@@ -110,6 +118,10 @@ jobs:
       - name: Agent gate example (end to end)
         working-directory: code
         run: moon run examples/agent_gate --target native --release
+
+      - name: Self-healing agent loop example (end to end)
+        working-directory: code
+        run: moon run examples/agent_loop --target native --release
 
   differential:
     name: Differential and benchmark
@@ -138,6 +150,14 @@ jobs:
           cd "$RUNNER_TEMP/node-oracle"
           npm install --no-audit --no-fund "jsonrepair@3.15.0"
 
+      - name: Independent corpus (nst/JSONTestSuite, vendored)
+        working-directory: code
+        run: |
+          moon build cmd/jsonmend --target native --release
+          python3 tests/eval/run_independent.py \
+            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe \
+            --node-dir "$RUNNER_TEMP/node-oracle/node_modules"
+
       - name: Differential report (must exit 0)
         working-directory: code
         run: |
@@ -154,4 +174,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: differential-report
-          path: ${{ runner.temp }}/diff-report.md
+          path: |
+            ${{ runner.temp }}/diff-report.md
+            code/docs/EVAL_INDEPENDENT.md

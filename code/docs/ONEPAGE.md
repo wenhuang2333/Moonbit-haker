@@ -19,6 +19,20 @@
 
 ## 用法
 
+### 给 agent 用：一次调用拿到「能不能执行」
+
+```moonbit
+let plan = @jsonmend.analyze(text, options=@jsonmend.Options::for_agent(),
+  schema=@jsonmend.Schema::parse("{!query:string,!limit:integer}"))
+plan.decision          // Safe | CosmeticRepair | LossyRepair | Ambiguous | Invalid
+plan.is_executable()   // 唯一该看的问题
+plan.prompt()          // 不能执行时，直接把这段回灌给模型
+plan.repairs           // 每条：规则、动作、位置、置信类别、是否丢信息
+plan.to_json()         // 机器通道：decision/exactness/value/retry/repairs
+```
+
+`analyze` **永不抛错**：拒绝是返回值的一部分，不是一个需要 `try` 的异常。
+
 ```moonbit
 // 一次性
 let r = @jsonmend.repair("{'a':1,}")        // r.text == {"a":1}
@@ -46,14 +60,18 @@ jsonmend --check broken.json ; echo $?     # 1 = 需要修复
 | --- | --- | --- |
 | 引擎 | `code/engine.mbt`、`code/engine_flow.mbt` | 显式栈 + 状态机，单趟扫描，无递归 |
 | 公共 API | `code/api.mbt` | `repair` / `parse` / `PartialParser` / `is_valid_json` |
-| 规则与错误 | `code/error.mbt` | 22 条修复规则（R001–R022）、11 个致命错误码（E001–E060，含 `E011` 歧义拒绝）、三级精确度标签 `Exactness` 与五态 `Ambiguity` |
+| 规则与错误 | `code/error.mbt` | 22 条修复规则（R001–R022）、12 个致命错误码（E001–E070，含 `E011` 歧义拒绝与 `E070` 骨架声明错误）、三级精确度标签 `Exactness` 与五态 `Ambiguity` |
+| 安全档位 | `code/policy.mbt` | `SafetyPolicy` 五档（permissive / interactive / execution / agent / strict）；`with_policy` 只换安全字段，`of_options` 可反查档位 |
+| 计划与决策 | `code/plan.mbt`、`code/decision.mbt` | `analyze` 一次调用返回 `RepairPlan`（修复操作、置信类别、决策、重试提示、JSON 通道）；`ExecutionDecision` 五态 |
+| 骨架与就绪 | `code/schema.mbt` | `Schema` 文本 DSL、骨架判定（缺失/类型不符）、`semantic_readiness` 的语法与骨架两层分数 |
 | 歧义与反馈 | `code/hint.mbt` | `RetryHint`：拒绝原因、位置、第二种读法、上下文窗口与插入符，可直接回灌模型（FR-28） |
 | 就绪曲线 | `code/readiness.mbt` | 顶层成员的就绪比例、十分位曲线与增量驱动的 `FieldTracker`（FR-29） |
 | 增量流 | `code/delta.mbt` | `Options::collect_deltas` 打开后记录 `Delta`（Set/AppendText/Close），路径为 RFC 6901 JSON Pointer |
 | 大模型适配 | `code/llm/` | Anthropic 与 OpenAI 兼容工具流、SSE 行解析、文本流（`delta.text` / `delta.content`）、结束原因（`Complete`/`MaxTokens`/`Interrupted`/`ProviderError`）、9 个生成夹具 + 文档转录事件形状 |
 | 选项 | `code/options.mbt` | 严格模式、重复键、未完成数字、非有限值、多根值、规则开关、资源上限 |
-| CLI | `code/cmd/jsonmend/` | stdin/文件（64 KB 分块流式读入）、`--report`、`--check`、`--strict`、`--indent`、`--multi-root`、`--max-repairs`、`--max-loss`、`--for-execution`、`--reject-ambiguous`、`--retry-hint`、`--explain`、`--batch`、`--chunk`、`readiness` 与 `llm` 子命令 |
-| 基准 | `code/bench/` | 吞吐、线性、流式、产物体积 |
+| CLI | `code/cmd/jsonmend/` | stdin/文件（64 KB 分块流式读入）、`--report`、`--check`、`--strict`、`--indent`、`--multi-root`、`--max-repairs`、`--max-loss`、`--for-execution`、`--reject-ambiguous`、`--retry-hint`、`--policy`、`--schema`、`--json`、`--explain`、`--batch`、`--chunk`、`explain` / `readiness` / `llm` 子命令 |
+| 自愈闭环 | `code/examples/agent_loop/` | 拒绝 → 回灌 `prompt()` → 重试 → 执行或放弃的四个 episode |
+| 基准 | `code/bench/` | 吞吐、线性、流式、安全层单价（`gate`）、产物体积 |
 
 ## 证据
 
@@ -69,11 +87,15 @@ jsonmend --check broken.json ; echo $?     # 1 = 需要修复
 | 对抗歧义 | 24 条手写用例：10/10 标记并拒绝，14/14 对照放行；判据机制另有守卫证明其可失败 |
 | 大模型适配 | 9 个夹具 × 双 provider，截断/转义切分/代理对切分/多路并发全部覆盖；另有 `ping`/未知事件/`error`/三种结束原因/文本流的文档转录用例 |
 | 公共面与选项 | 22 个 R 码 + 11 个 E 码逐一检查；策略枚举、规则开关、字节输入共 17 例 |
-| 覆盖率 | 根包 1378/1487 = 92.7%，`llm` 包 223/243 = 91.8% |
+| 安全档位与计划 | 34 条新测试：档位 7、计划 22、骨架 5；`analyze` 相对 `repair` 1.00–1.03×，加 `for_agent` 1.33×，加骨架 1.45× |
+| 骨架感知就绪 | 7 个场景：4 个存在落差（最小 1‰、最大 713‰），3 个两层同时到达末尾；`docs/READINESS.md` |
+| 独立语料 | `nst/JSONTestSuite` 318 文件：`y_` 误修 2/95（重复键），`n_` 有效值 165/188 vs `json_repair` 166/188、`jsonrepair` 144/188 |
+| 自愈闭环 | 4 个 episode：2 次重试后执行、1 次骨架不符回灌、1 次判定无改进后放弃 |
+| 覆盖率 | 根包 2312/2651 = 87.2%，`llm` 包 337/391 = 86.2% |
 | 差分测试 | 402 条用例对照 `json-repair` 与 `jsonrepair`；202 处差异全部由修复记录解释，未解释 0 |
-| 命令行 | 48 项断言全部通过（退出码 0/1/2/3/4/5/70 覆盖） |
-| 演示页 | `static/demo/index.html`，MoonBit JS 产物驱动，无头浏览器验证无报错 |
-| 跨后端 | wasm-gc / native / JS 三个后端 95 个测试全部通过 |
+| 命令行 | 62 项断言全部通过（退出码 0/1/2/3/4/5/70 覆盖，含 `explain` 的 14 条） |
+| 演示页 | `static/demo/index.html` + `static/demo/live.html`，MoonBit JS 产物驱动，无头浏览器验证无报错 |
+| 跨后端 | wasm-gc / native / JS 三个后端 129 个测试全部通过（共 516 次） |
 | 吞吐 | native 35–39 MB/s（合法 JSON，1 KB–10 MB）；首个可见值出现在文档长度的 0.7%（中位数）；agent 场景（4 KB / 3 码元）0.08 µs/feed |
 | 内存 | 12.95 MB 输入 177.9 MB（13.7 ×）；同机 Node 10.6 ×、Python 14.3 ×，4 × 目标对建树实现不现实 |
 | 体积 | wasm-gc release 101.4 KiB（上限 150 KB）；native CLI 623.8 KiB；浏览器包 284.1 KiB |
@@ -88,6 +110,12 @@ jsonmend --check broken.json ; echo $?     # 1 = 需要修复
 
 ## 已知限制
 
+- `semantic_readiness` 的代价是 `repair` 的 32.7×（2.25 ms/4.9 KiB）：它按 1‰ 采样重放解析器，
+  是诊断与数据面板用的指标，不是热路径；
+- `plan.mbt` 的覆盖率 71.5%（328/459）是当前最低项：`explain_text` 与 `to_json` 的分支多、
+  组合多，测试只覆盖主路径；
+- live 演示页的浏览器验证在本机做过（Playwright 无头），CI 只跑帧级断言；
+- FR-37 的 live 帧只重放四个固定场景，不是任意流的通用可视化；
 - FR-16 事件/回调接口未实现（需要回调的调用方只能用 `snapshot()` 轮询）；
 - 快照的 `incomplete_number` / `pending_key` 策略只影响快照，最终结果仍补全；
 - 峰值内存约为输入的 18 倍（12.95 MB 对象数组 → 230.6 MB；单个 10 MB 字符串 38 倍），未达到「≤ 4 倍输入」的预算：保留完整 `Json` 树就无法达标，见基准报告；

@@ -5,12 +5,46 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 | | |
 | --- | --- |
 | Module | `zhanshishan/jsonmend` |
-| Version | 0.4.0 |
+| Version | 0.5.0 |
 | License | Apache-2.0 |
 | Preferred target | `wasm` (also builds for `native` and `js`) |
-| Prebuilt binaries | [Release `v0.4.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.4.0) — Linux CLI, wasm probe, browser bundle, `SHA256SUMS` |
+| Prebuilt binaries | [Release `v0.5.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.5.0) — Linux CLI, wasm probe, browser bundle, `SHA256SUMS` |
+| Registry | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
 
 ## Features
+
+### 0.5.0: "may I execute this" in one call
+
+- **`SafetyPolicy`**: five named profiles — `permissive`, `interactive`, `execution`, `agent`,
+  `strict` — over the safety-relevant `Options`. `Options::with_policy` replaces only the safety
+  knobs and keeps the protocol ones (delta stream, prose handling), and
+  `SafetyPolicy::of_options` reads a set of options back to the profile it is (or `None`).
+- **`analyze` returns the whole plan**:
+
+  ```moonbit
+  let plan = @jsonmend.analyze(text,
+    options=@jsonmend.Options::for_agent(),
+    schema=@jsonmend.Schema::parse("{!query:string,!limit:integer}"))
+  plan.decision          // Safe | CosmeticRepair | LossyRepair | Ambiguous | Invalid
+  plan.is_executable()   // the only question a gate has to ask
+  plan.repairs           // rule, action, position, confidence class, information loss
+  plan.prompt()          // ready to feed back to the model when it is not executable
+  plan.to_json()         // machine channel: decision/exactness/value/retry/repairs
+  ```
+
+  `analyze` never raises — a refusal is part of the return value — and costs 1.00–1.03× a plain
+  `repair` call.
+- **`Schema` + `semantic_readiness`**: declare `{!query:string,!limit:integer}` and get two
+  fractions for the same stream — syntax ready and schema ready — plus the members that are
+  missing or of the wrong kind.
+- **Self-healing loop example**: `code/examples/agent_loop` feeds `plan.prompt()` back to a
+  scripted "model" and retries; four episodes cover `E011` ambiguity, `E010` truncation,
+  `E070` skeleton mismatch, and giving up when a retry makes no progress.
+- **Live demo**: `static/demo/live.html` replays four real scenarios frame by frame
+  (truncated → retry → executed; ambiguous → retry → executed; single reading → executed;
+  long tail → ready at 19%).
+
+### Everything else
 
 - **One-shot repair** with `repair`: repaired text, a list of repair records, and the completeness of the input.
 - **One-shot parsing** with `parse`: the repaired input as a `Json` tree plus the same records.
@@ -302,7 +336,10 @@ Flags and their meanings:
 | `--batch` | Read `{"id","input"}` objects line by line and write one result object per line. |
 | `llm` (subcommand) | Feed a provider event stream through the adapter: `jsonmend llm [--provider anthropic\|openai] [--sse] [--follow] [file]`. |
 | `-h`, `--help` | Show help. |
-| `--version` | Show the version (`jsonmend 0.4.0`). |
+| `--version` | Show the version (`jsonmend 0.5.0`). |
+| `--policy NAME` | Safety profile: `permissive`, `interactive`, `execution`, `agent` or `strict`. |
+| `--schema DECL` | Skeleton declaration such as `{!query:string,!limit:integer}`; with `explain` it also prints the syntax-ready and schema-ready fractions. |
+| `--json` | With `explain`: the machine-readable plan instead of the text block. |
 | file, or `-` | Read a file; `-` or an omitted argument reads standard input. |
 
 `--indent=N`, `--multi-root=MODE`, and `--max-repairs=N` are accepted as equivalent to the space-separated forms.
@@ -328,7 +365,7 @@ cd code
 moon test                      # default backend (wasm-gc)
 moon test --target native      # host backend
 moon test --target js          # JavaScript backend
-bash tests/cli_smoke.sh        # 48 command line assertions
+bash tests/cli_smoke.sh        # 62 command line assertions
 bash tests/examples.sh         # example inputs vs code/examples/cases/*.expected
 node ../code/tests/demo_smoke.mjs   # the committed browser bundle still answers
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
@@ -339,9 +376,12 @@ python3 tests/eval/run_ambiguity.py --cli ./_build/native/release/build/cmd/json
 python3 tests/eval/refcompare.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 python3 tests/gen_llm_fixtures.py --check
 python3 tests/memory_baseline.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/eval/run_independent.py    # vendored nst/JSONTestSuite, independent of our own corpus
+python3 tests/eval/run_readiness.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe --check
+moon run examples/agent_loop --target native --release
 ```
 
-| Suite | Size | Result (0.4.0) |
+| Suite | Size | Result (0.5.0) |
 | --- | --- | --- |
 | Golden cases (spec appendices A and B) | 126 | pass |
 | Documented streaming cases (S-001…S-021) + chunk invariance | 21 + invariance checks | pass |
@@ -353,13 +393,16 @@ python3 tests/memory_baseline.py --cli ./_build/native/release/build/cmd/jsonmen
 | Adversarial ambiguity suite `amb-1` | 24 handwritten cases, frozen fingerprint | 10/10 flagged and refused, 14/14 controls pass, 0 failures ([docs/EVAL_AMBIGUITY.md](docs/EVAL_AMBIGUITY.md)) |
 | Reference libraries on the same corpus | 1200 cases × (`jsonrepair` 3.15.0, `json_repair` 0.64.0) | JSONMend silent wrong values 0, `jsonrepair` 122, `json_repair` 189 ([docs/EVAL_REFERENCE.md](docs/EVAL_REFERENCE.md)) |
 | Chunked paths against the ground-truth corpus | 1200 cases × chunk 1/3/7/random | 1200/1200 each, 0 regressions |
-| Public surface (every `R` code and `E` code) | 22 + 10 codes checked field by field | pass |
+| Safety profiles, repair plans, schemas (new in 0.5.0) | 34 tests (7 + 22 + 5) | pass |
+| Independent third-party corpus (`nst/JSONTestSuite`) | 318 files (95 `y_` / 188 `n_` / 35 `i_`) | `y_` false repairs 2/95 (both duplicate keys), `n_` valid values 165/188 vs `json_repair` 166/188 and `jsonrepair` 144/188 ([docs/EVAL_INDEPENDENT.md](docs/EVAL_INDEPENDENT.md)) |
+| Schema readiness table | 7 scenarios | 4 with a gap (up to 713‰), 3 where both fractions arrive at the end ([docs/READINESS.md](docs/READINESS.md)) |
+| Public surface (every `R` code and `E` code) | 22 + 12 codes checked field by field | pass |
 | Ground-truth evaluation (protocol frozen first) | 1200 cases (19 mutation families + 1 control × 60) | recovery **100.00%**, 0 mislabelled, 4/4 pre-registered criteria PASS |
-| Command line smoke (exit codes 0/1/2/3/4/5/70) | 48 assertions | pass |
+| Command line smoke (exit codes 0/1/2/3/4/5/70) | 62 assertions, 14 of them `explain` | pass |
 | Differential corpus against `jsonrepair` / `json-repair` | 402 cases | 202 divergences, all documented, 0 unexplained |
-| Line coverage of the library | 1378/1487 lines (root), 223/243 (`llm`) | 92.7% / 91.8% (measured at 0.3.0; `moon coverage` cannot instrument the `cmd` package, which calls `quit()`) |
+| Line coverage of the library | 2312/2651 lines (root), 337/391 (`llm`) | 87.2% / 86.2% (`moon coverage` cannot instrument the `cmd` package, which calls `quit()`; the new modules widen the denominator, `plan.mbt` at 71.5% is the weakest file) |
 
-Cross-backend results are identical: 95 tests pass on wasm-gc, native and
+Cross-backend results are identical: 129 tests pass on wasm-gc, native and
 JavaScript. `.github/workflows/ci.yml` runs the same commands on every push, so
 the numbers above are re-derived rather than trusted. Reproduction steps,
 thresholds and the known shortfalls are in
@@ -433,7 +476,11 @@ separately from the process. The full method, tables and decision records are in
 
 ## Roadmap
 
-- ~~Publish on mooncakes.io~~: `zhanshishan/jsonmend` 0.3.0 is published; 0.4.0 ships with this round.
+- ~~Publish on mooncakes.io~~: `zhanshishan/jsonmend` 0.3.0 and 0.4.0 are published; 0.5.0 ships with this round.
+- ~~A browser tab that plays a model stream~~: `static/demo/live.html`.
+- ~~Readiness for the members the caller actually needs~~: `Schema` + `semantic_readiness`.
+- **Constraints in the declaration**: the skeleton language names types only, not `minimum` / `enum` / `maxLength`.
+- **Make `semantic_readiness` incremental**: today it replays the document (32.7× `repair`); the delta-driven `FieldTracker` path could compute the same numbers as members settle.
 - Make the delta stream cheap: encode operations into a reusable buffer and share path prefixes, targeting ≤ 1.11 × the baseline instead of 1.40–1.46 × (lower priority now that the scenario benchmark shows it is off the critical path).
 - ~~The `FR-16` event interface~~: done as the `feed_with` thin wrapper.
 - Record real provider streams to replace the documented event shapes (needs credentials; `tests/record_stream.py` is ready).

@@ -6,6 +6,8 @@
 `FR-21` … `FR-26` 是 0.3.0 新增的需求，来自第四轮建议（`I-1` … `I-5`）。
 `FR-27` … `FR-31` 是 0.4.0 新增的需求，来自第五轮评审（`JSONMend 第五轮：优化、完善与扩展方向.md`），
 编号沿用在 `FR-26` 之后，**不与 `FR-21`…`FR-26` 重号**；`FR-16` 由「未实现」转为「通过」。
+`FR-32` … `FR-38` 是 0.5.0 新增的需求，来自第六轮优化文档（`优化.md`），
+主题从「修得更准」转为「修出来的值能不能执行、什么时候可以执行、不能执行时怎么回灌模型」。
 
 ## 功能需求
 
@@ -27,8 +29,9 @@
 | FR-14 | 引号歧义前瞻 | P1 | BR-06 | TC-G-BR06L | `quote_lookahead` 黄金用例 + 属性测试选项组 | 通过 |
 | FR-15 | 多根值 | P1 | BR-15 | TC-O-03、TC-D | 三种策略（KeepFirst/AsArray/AsError）行为固定；差分探针证明与参照一致 | 通过 |
 | FR-16 | 事件接口 | P2 | BR-16 | TC-DELTA | `PartialParser::feed_with` / `feed_bytes_with`：`drain_deltas` 的薄封装，回调顺序与 drain 逐条一致（`delta_wbtest.mbt` 两条，含字节路径、在 UTF-8 序列中间切分） | 通过（薄封装，非独立推送接口，理由见 `docs/ONEPAGE.md`） |
-| FR-17 | 命令行 | P1 | BR-17 | TC-C-01 | `tests/cli_smoke.sh` **48** 项断言全绿；退出码 0/1/2/3/4/5/70 全覆盖；0.4.0 新增 `--for-execution`、`--reject-ambiguous`、`--retry-hint`、`readiness`、`--chunk N`、`llm --text`、`llm --batch` 的断言 | 通过 |
+| FR-17 | 命令行 | P1 | BR-17 | TC-C-01 | `tests/cli_smoke.sh` **62** 项断言全绿；退出码 0/1/2/3/4/5/70 全覆盖；0.4.0 新增 `--for-execution`、`--reject-ambiguous`、`--retry-hint`、`readiness`、`--chunk N`、`llm --text`、`llm --batch`；0.5.0 新增 `explain`、`--policy`、`--schema`、`--json`、`E070` 的断言 | 通过 |
 | FR-18 | 浏览器演示 | P1 | — | TC-W-01 | `static/demo/index.html` 由 MoonBit JS 产物驱动，Playwright 无头验证通过（无 console 错误） | 通过 |
+| （FR-37 备注） | live 页的浏览器验证 | — | — | TC-W-02 | 本机用 Playwright 跑过两个场景（无 console 错误，截断场景重试后 `EXECUTION: READY`），CI 只跑 `demo_smoke.mjs` 的帧级断言：GitHub runner 上不安装 Playwright | 已记录 |
 | FR-19 | 拼接与省略号 | P2 | BR-21 | TC-G-BR21 | `...` 删除（R020，G-301…G-303）；`"a" + "b"` 合并（R019，G-300、G-300b…G-300e，覆盖根值/数组/对象与流式 S-021） | 通过 |
 | FR-20 | 缩进输出 | P2 | — | TC-G-INDENT | CLI `--indent 2` 与 `Options.indent` | 通过 |
 | FR-21 | 精确度标签与执行安全闸 | P0 | BR-13 BR-19 | TC-EVAL、TC-X-01 | `Exactness` 进入四个结果类型；`max_loss` 在超限的第一条记录处抛 `E010`；`exactness_wbtest.mbt` 的 240 例属性 + 18 行手写表；真值评测漏标率 0（`docs/EVAL.md`） | 通过 |
@@ -42,6 +45,13 @@
 | FR-29 | 字段就绪曲线与早停 | P1 | BR-16 | TC-READY | `field_readiness`/`readiness_median`/`readiness_deciles`/`early_stop_saving` 与增量驱动的 `FieldTracker`；CLI `readiness` 子命令；20 份扁平记录十分位 `0 10 21 30 41 51 61 71 80 90 100`；成本 1 794 µs/KiB（`docs/BENCHMARK.md`）。**只覆盖顶层成员**，嵌套成员与「全字段早停≈0」的构造性结果已如实记录 | 通过（指标已量化，边界已记录） |
 | FR-30 | 适配器事件完备性与结束原因 | P1 | BR-16 | TC-LLM | `ping` 与未知事件类型计数后忽略（文档要求）；`error` 事件置 `ProviderError` 并暴露消息；`message_delta.stop_reason` 与 `finish_reason` 映射到 `CallEnd`；三种结束（正常 / `max_tokens` / 连接中断）暴露在 `ToolCallView`；`TextStream` 读取 `delta.text` / `delta.content`。事件形状来源与「文档转录 ≠ 实况录制」的差别见 `docs/LLM_EVENTS.md` | 通过（形状为文档转录，未录制真实流，已披露） |
 | FR-31 | 参照库对照与多路径真值 | P1 | — | TC-EVAL | 同一 1200 条语料上跑 `jsonrepair` 3.15.0 与 `json_repair` 0.64.0：静默错值 122 / 189 例，JSONMend 0 例（`docs/EVAL_REFERENCE.md`）；8 条路径（1/3/7/随机分块、双 provider 工具流、双 provider 文本流）全部 1200/1200（`docs/EVAL_PATHS.md`） | 通过 |
+| FR-32 | 安全档位 | P0 | BR-13 BR-19 | TC-POLICY | `SafetyPolicy` 五档（permissive / interactive / execution / agent / strict）；`with_policy` 只换安全字段、保留协议字段；`of_options` 可反查档位名，未知组合返回 `None`（`policy_wbtest.mbt` 7 例） | 通过 |
+| FR-33 | 修复计划与单次调用 | P0 | BR-19 BR-20 | TC-PLAN | `RepairPlan` + `PlanOp`（动作、位置、严重度、歧义类、置信类别、是否丢信息）；`analyze` 永不抛错，拒绝放在返回值里；`prompt()` / `suggestions()` / `summary()` / `explain_text()` / `to_json()`（`plan_wbtest.mbt` 22 例） | 通过 |
+| FR-34 | 执行决策 | P0 | BR-13 BR-19 | TC-DECISION | `ExecutionDecision` 五态与 `rank` / `worse_of`；`decide` 与 `decide_error` 的映射由测试固定（`plan_wbtest.mbt`） | 通过 |
+| FR-35 | 自愈闭环 | P1 | BR-19 | TC-X-02 | `examples/agent_loop`：4 个 episode（相邻字符串 E011、截断 E010、骨架不符 E070、无改进则放弃）；`moon run examples/agent_loop --target native --release` 在 CI 中执行 | 通过 |
+| FR-36 | 骨架感知就绪 | P1 | BR-16 | TC-READY2 | `Schema` 文本 DSL + `semantic_readiness`（语法/骨架两层分数、缺失与类型不符清单）；`schema_wbtest.mbt` 5 例；`tests/eval/run_readiness.py` 7 场景（4 落差 + 3 并列），`docs/READINESS.md`；CLI `explain --schema`、`readiness --schema`；新错误码 `E070` | 通过 |
+| FR-37 | 流式 live 演示 | P1 | BR-16 | TC-W-02 | `static/demo/live.html` 四场景逐帧重放；bundle 入口 `live`；`code/tests/demo_smoke.mjs` 的 live 断言（帧形状、成员就绪、执行判定、重试提示） | 通过（无头浏览器验证在本机做过，CI 里只跑帧级断言，见备注） |
+| FR-38 | 独立第三方语料 | P1 | — | TC-EVAL | `nst/JSONTestSuite`（318 文件，MIT，commit `1ef36fa0`）逐字节 vendor + `tests/eval/run_independent.py`：`y_` 误修 2/95（均为重复键）、`n_` 有效值 165/188（`json_repair` 166/188、`jsonrepair` 144/188），`docs/EVAL_INDEPENDENT.md` | 通过（2 条误修与 8 条 UTF-8 拒绝已如实记录） |
 
 ## 非功能需求
 

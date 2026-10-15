@@ -5,7 +5,7 @@ JSONMend 有两条完全分开的信号通道（ADR-006，规格 D09 9.1）：
 - **致命错误**：类型为 `MendError`（`code/error.mbt:211`），通过 `raise` 抛出。一旦抛出，本次调用失败，**不返回任何部分结果**，已经生成的文本全部丢弃；调用方只能捕获错误或让进程退出。
 - **修复记录**：类型为 `Repair`（`code/error.mbt:201`），字段为 `code`、`position`、`severity`、`message`。它**永远不是致命错误**，随 `RepairResult` / `ParseResult` / `FinalResult` 一起返回，表示"改了什么、改在哪里、有多严重"。
 
-`MendError` 共 11 个变体，每个变体都有稳定的 `code()` 字符串（`E001` … `E060`，0.4.0 新增 `E011`）与一行 `to_string()` 诊断。`RepairCode` 共 22 个变体，`code()` 为 `R001` … `R022`，`message()` 为固定英文模板（不含用户输入，避免日志注入，D09 9.7）。本文只记录 11 个致命错误码；修复码的含义见 D09 9.4。
+`MendError` 共 12 个变体，每个变体都有稳定的 `code()` 字符串（`E001` … `E070`，0.4.0 新增 `E011`，0.5.0 新增 `E070`）与一行 `to_string()` 诊断。`RepairCode` 共 22 个变体，`code()` 为 `R001` … `R022`，`message()` 为固定英文模板（不含用户输入，避免日志注入，D09 9.7）。本文只记录 12 个致命错误码；修复码的含义见 D09 9.4。
 
 `to_string()` 的格式为 `{code()} {变体名}: {说明}`，`E010` 额外携带位置与触发的修复码。
 
@@ -275,6 +275,29 @@ JSONMend 有两条完全分开的信号通道（ADR-006，规格 D09 9.1）：
 - 说明：事件负载是完整 JSON 文档，因此用严格解析器读；读不动说明调用方给错了流，
   属于输入问题而不是内部错误。
 
+### E070 SchemaError
+
+- `code()`：`E070`
+- 载荷：`String msg`。
+- `to_string()` 模板：`E070 SchemaError: {msg}`
+- 触发条件：`Schema::parse` 读不动骨架声明（`code/schema.mbt`）——括号不闭合、缺少 `:`、
+  未知类型名、同一个成员声明两次、声明后面还有多余字符。
+- CLI 退出码：**2**（用法错误：声明是命令行参数，写错了就不该开始读输入）。
+  库层面 `analyze(..., schema=…)` 不会因此抛错：`--schema` 在参数解析阶段就已经验证过。
+- 与 `E050 InvalidOption` 的区别：`E050` 是 `Options` 的字段值不合法（如
+  `max_depth = 0`），`E070` 是调用方给的骨架文本不合法。两者都是「参数错，不是输入错」。
+
+  示例：
+
+  ```text
+  $ printf '{}' | jsonmend explain --schema '{!a:'
+  jsonmend: E070 SchemaError: unterminated object at offset 4
+  ```
+
+- 骨架检查的**结果**不是错误：`{"query":"MoonBit"}` 缺 `limit` 时，
+  `analyze` 返回一个 `decision = invalid`、`error_code = "E070"` 的计划（**不抛错**），
+  CLI 退出码 5。抛出 `E070` 只发生在声明本身写错的时候。
+
 ## 严格模式升级
 
 严格模式由 `Mode`（`code/options.mbt:5`）选择，`Strict` 与逐条关闭规则走同一条升级路径。
@@ -341,10 +364,10 @@ if self.opts.collect_repairs {
 | --- | --- | --- |
 | 0 | 成功（可能有修复） | — |
 | 1 | `--check` 模式下发现需要修复的内容 | — |
-| 2 | 命令行用法错误 | E050 |
+| 2 | 命令行用法错误 | E050 E070（声明写错） |
 | 3 | 输入无效 | E001 E002 E040 E060 |
 | 4 | 资源限制 | E020 E021 E022 |
-| 5 | 严格模式违规（含 `--max-loss` 超限） | E010 |
+| 5 | 严格模式违规（含 `--max-loss` 超限）、歧义、骨架不符 | E010 E011 E070（计划内拒绝） |
 | 70 | 内部错误 | E030（内部不可达） |
 
 补充说明：
@@ -382,6 +405,7 @@ if self.opts.collect_repairs {
 
 | 失效模式 | 检测点 | 响应 | 用户可见结果 |
 | --- | --- | --- | --- |
+| 骨架声明写错 | `Schema::parse`（`code/schema.mbt`） | E070 | CLI 退出码 2；库层 `analyze` 不抛错，把不符写进计划 |
 | 输入过大 | `Engine::step` 开头的累计长度检查 `self.pos.offset >= self.opts.max_input_len`（`code/engine.mbt:304`） | E021 | 无部分结果；CLI 退出码 4 |
 | 嵌套过深 | `Engine::enter` 的压栈检查 `self.stack.length() >= self.opts.max_depth`（`code/engine_flow.mbt:164`） | E020 | 同上 |
 | 单 token 过长 | `Engine::push_char`（`code/engine_flow.mbt:611`）与 `Engine::push_bare_cu`（`code/engine_flow.mbt:805`）的缓冲长度检查 | E022 | 同上 |

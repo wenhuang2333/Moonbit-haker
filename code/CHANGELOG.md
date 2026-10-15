@@ -5,6 +5,67 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.5.0] - 2026-10-15
+
+第六轮优化版本（`优化.md`），主题是**从解析库转为 AI 输出安全运行时**：不再增加修复规则，
+而是把「这个值能不能用」变成一次调用就能拿到、并且可以回灌模型的对象。
+本轮新增 6 条需求（`FR-32` … `FR-37`），不改动任何既有规则与既有输出。
+
+### 新增
+
+- **安全档位（FR-32）**。`SafetyPolicy`：`permissive` / `interactive` / `execution` / `agent` / `strict`
+  五个具名档位，覆盖 `Options` 里与安全相关的字段（`mode`、`max_loss`、
+  `reject_ambiguous`、重复键、截断数字、深度与长度上限）。
+  `Options::with_policy` 只替换安全字段、保留协议字段（增量流、跳过前言）；
+  `SafetyPolicy::of_options` 能把一份 `Options` 读回成档位名，未知组合返回 `None` 而不是就近归类。
+  `agent` 档比 `execution` 多了资源上限（深度 64、输入 1 MiB）：一次工具调用的参数不该有 64 MiB。
+- **执行决策（FR-34）**。`ExecutionDecision`：`safe` / `cosmetic_repair` / `lossy_repair` /
+  `ambiguous` / `invalid`，把「修复了几处」与「能不能执行」分成两个问题，并给出可排序的风险。
+- **修复计划（FR-33）**。`RepairPlan` + `PlanOp`（规则、动作 `remove`/`insert`/`replace`/
+  `normalize`/`merge`/`wrap`、位置、严重度、歧义类、置信 *类别* 而不是概率、
+  是否丢信息）；`analyze(input, options?, readiness?, schema?)` **永不抛错**，把拒绝放在返回值里，
+  并带 `prompt()`（可直接回灌模型的提示）、`suggestions()`（按规则/歧义生成的具体指令）、
+  `summary()`、`explain_text()`、`to_json()`（机器通道，含 `value`、`retry`、`repairs_truncated`）。
+- **自愈闭环示例（FR-35）**。`examples/agent_loop`：四个 episode（相邻字符串 `E011`、截断 `E010`、
+  骨架不符 `E070`、无改进则放弃），把 `prompt()` 回灌给「模型」并重试，直到可执行或到达次数上限。
+- **骨架感知就绪（FR-36）**。`Schema` 文本 DSL（`{!key:type,?key:type}`，类型
+  `any|null|boolean|integer|number|string|[inner]|{...}`）与
+  `semantic_readiness`：同一份输入上给出「语法就绪」与「骨架就绪」两个分数，
+  以及必需成员的缺失/类型不符清单；CLI `explain --schema`、`readiness --schema`；
+  新错误码 `E070`（骨架声明错误，退出码 2）。
+- **流式 live 演示（FR-37）**。`static/demo/live.html`：四个真实场景（截断参数→重试、
+  歧义→重试、唯一读法→直接通过、长尾→19% 即可停），逐帧播放「模型流 / 实时结构 /
+  成员就绪 ✓◐ / 三个 readiness + verdict / 重试面板」。
+  打包入口 `jsonmendRegister3("live", …)` 与 `code/tests/demo_smoke.mjs` 的 14 条断言。
+- **独立第三方语料（FR-38，本次一并落地）**。内置 `nst/JSONTestSuite`（318 个文件，
+  MIT，commit `1ef36fa0`）与 `tests/eval/run_independent.py`：`y_` 误修 2/95、
+  `n_` 产出合法值 165/188（`json_repair` 166、`jsonrepair` 144）。
+
+### 变更
+
+- `Options::strict()` 与 `Options::for_agent()` 的构造改为引用 `SafetyPolicy`，档位只有一个定义。
+- CLI `explain` 默认按 agent 协议读取（等价于 `--skip-prose`）：调用方看的是模型的回答。
+- CLI `explain` 的两层就绪数字用「显示档」测量：数字是输入与声明的属性，
+  不接受被 `--policy strict` 之类改变（否则未闭合文档会变成「无法测量」）。
+- 版本 0.4.0 → 0.5.0。
+
+### 证据
+
+- `moon test --target all`：**129 × 4 = 516 通过，0 失败**（新增 34 条：policy 7、plan 22、schema 5）。
+- `bash tests/cli_smoke.sh`：**62 passed, 0 failed**（新增 14 条覆盖 `explain`、`--policy`、`--schema`、`E070`）。
+- `bash tests/examples.sh` 6/6；`node code/tests/demo_smoke.mjs` 通过（4 个入口 + live 帧）。
+- `tests/eval/run_eval.py`：1200/1200，四条预登记判据 PASS；
+  `run_ambiguity.py` + `check_amb_guard.py`：24 例对抗语料 + 守卫通过。
+- `tests/eval/run_independent.py`：`y_` 误修 **2/95**（均为重复键，见下），
+  `n_` 165/188 vs `json_repair` 166/188 vs `jsonrepair` 144/188。
+- `tests/eval/run_readiness.py`：7 个场景，4 个存在两层分数落差（最大 973‰ vs 260‰），
+  3 个两层同时到达末尾——蓄意收录「没有收益」的场景，见 `docs/READINESS.md`。
+- `bench/main.mbt` 新增 `bench_gate`：4.9 KiB × 20 次调用，
+  `analyze` = **1.00× repair**（66.5 µs/次），`analyze for_agent` = 1.36×，
+  `analyze +schema` = 1.38×，`semantic_readiness` = 34.25×（诊断用途，非热路径）。
+- 覆盖率：根包 2312/2651 = **87.2%**，`llm` 337/391 = 86.2%（新增文件把分母推大，
+  `plan.mbt` 71.5% 是当前最低项，已记入产品文档遗留问题）。
+
 ## [0.4.0] - 2026-10-15
 
 第五轮优化版本（`JSONMend 第五轮：优化、完善与扩展方向.md`），主题是**让证据经得起质疑**：

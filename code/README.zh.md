@@ -5,12 +5,42 @@
 | | |
 | --- | --- |
 | 模块 | `zhanshishan/jsonmend` |
-| 版本 | 0.4.0 |
+| 版本 | 0.5.0 |
 | 许可证 | Apache-2.0 |
 | 首选后端 | `wasm`（同时支持 `native` 与 `js`） |
-| 预编译产物 | [Release `v0.4.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.4.0)——Linux CLI、wasm 探针、浏览器包、`SHA256SUMS` |
+| 预编译产物 | [Release `v0.5.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.5.0)——Linux CLI、wasm 探针、浏览器包、`SHA256SUMS` |
+| 发行渠道 | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
 
 ## 特性
+
+### 0.5.0：把「能不能执行」变成一次调用
+
+- **安全档位 `SafetyPolicy`**：`permissive` / `interactive` / `execution` / `agent` / `strict` 五个具名档位，
+  覆盖 `Options` 里与安全相关的字段。`Options::with_policy` 只替换安全字段、保留协议字段
+  （增量流、跳过前言）；`SafetyPolicy::of_options` 能把一份 `Options` 反查成档位名，未知组合返回 `None`。
+- **一次调用拿到完整计划 `analyze`**：
+
+  ```moonbit
+  let plan = @jsonmend.analyze(text,
+    options=@jsonmend.Options::for_agent(),
+    schema=@jsonmend.Schema::parse("{!query:string,!limit:integer}"))
+  plan.decision          // Safe | CosmeticRepair | LossyRepair | Ambiguous | Invalid
+  plan.is_executable()   // 唯一需要判断的问题
+  plan.repairs           // 每条：规则、动作（remove/insert/replace/…）、位置、置信类别、是否丢信息
+  plan.prompt()          // 不能执行时，直接回灌给模型
+  plan.to_json()         // 机器通道：decision/exactness/value/retry/repairs/…
+  ```
+
+  `analyze` **永不抛错**：拒绝是返回值的一部分。`repair` 相对的开销是 1.00–1.03×。
+- **骨架感知就绪 `Schema` + `semantic_readiness`**：`{!query:string,!limit:integer}` 这样的声明，
+  同时给出「语法就绪」与「骨架就绪」两个分数，以及缺失/类型不符的成员清单。
+  CLI `jsonmend explain --schema '…'` 直接打印两层数字。
+- **自愈闭环示例**：`code/examples/agent_loop` 把 `plan.prompt()` 回灌给「模型」并重试，
+  四个 episode 覆盖 `E011` 歧义、`E010` 截断、`E070` 骨架不符与「无改进则放弃」。
+- **实时演示页**：`static/demo/live.html` 逐帧重放四条真实场景（截断→重试→通过、
+  歧义→重试→通过、唯一读法直接通过、长尾流在 19% 处即可停）。
+
+### 其余能力
 
 - **一次性修复**：`repair` 返回修复后的文本、修复记录列表以及输入的完整性。
 - **一次性解析**：`parse` 返回修复后的 `Json` 树，以及同样的修复记录。
@@ -217,6 +247,7 @@ execute : {"city":["Paris","London"]}
 | `E040` | `InvalidUtf8` | `feed_bytes` 遇到非法或截断的 UTF-8（载荷为字节偏移）。 |
 | `E050` | `InvalidOption` | 选项取值越界，或选项组合不成立（如 `collect_deltas` 与 `KeepFirst`）。 |
 | `E060` | `InvalidEvent` | `jsonmend/llm` 收到无法解释的事件负载。 |
+| `E070` | `SchemaError` | 骨架声明本身写错（括号不闭合、未知类型、成员重复）；CLI 退出码 2。 |
 
 `RepairCode::code`、`MendError::code` 和 `MendError::to_string` 分别给出稳定字符串（如 `R005`）、错误编号（如 `E020`）和单行诊断信息。完整参考见 [docs/ERRORS.md](docs/ERRORS.md)。
 
@@ -265,8 +296,16 @@ jsonmend [选项] [文件]
   --retry-hint        拒绝时在标准错误上打印可直接回灌模型的提示
   --chunk N           分块喂入：每次喂 N 个码元（≤1048576），用来验证流式路径（默认一次喂完）
   --explain           在标准错误上逐条解释修复，并打印精确度小结
+  --policy NAME       安全档位：permissive、interactive、execution、agent 或 strict
+  --schema DECL       骨架声明，例如 `{!query:string,!limit:integer}`；检查必需字段与类型
+                      与 explain 同用时打印语法就绪与骨架就绪两层数字
+  --json              与 explain 同用时打印机器可读的 JSON 计划，而不是文本块
   --batch             逐行读取 {"id","input"} JSON，逐行输出结果 JSON
                       与 --chunk N 同用可把每条输入按 N 字节分块喂入
+
+jsonmend explain [选项] [文件]
+  打印完整分析：修复了什么、为什么、风险多大、能不能执行；拒绝时给可直接回灌模型的提示。
+  退出码与 jsonmend 相同（可执行 0，拒绝 5）。
 
 jsonmend readiness [选项] [文件]
   打印字段就绪曲线：每个顶级字段在输入消耗到多少时已定稿。
@@ -304,7 +343,10 @@ jsonmend llm [选项] [文件]
 | `--batch` | 逐行读 `{"id","input"}`，逐行输出 `{"id","rc","exactness","codes","value","text"}`。 |
 | `llm` 子命令 | `jsonmend llm [--provider anthropic\|openai] [--sse] [--follow] [文件]`：把事件流喂给 provider 适配器。 |
 | `-h`、`--help` | 显示帮助。 |
-| `--version` | 显示版本（`jsonmend 0.4.0`）。 |
+| `--version` | 显示版本（`jsonmend 0.5.0`）。 |
+| `--policy NAME` | 安全档位：`permissive`、`interactive`、`execution`、`agent` 或 `strict`（见 `SafetyPolicy`）。 |
+| `--schema DECL` | 骨架声明，如 `{!query:string,!limit:integer}`；`explain` 会额外打印语法就绪与骨架就绪两层数字。 |
+| `--json` | 与 `explain` 同用：输出机器可读的 JSON 计划，而不是文本块。 |
 | 文件或 `-` | 读取文件；`-` 或缺省时读取标准输入。 |
 
 `--indent=N`、`--multi-root=MODE`、`--max-repairs=N`、`--max-loss=LEVEL`、`--provider=NAME`
@@ -331,7 +373,7 @@ cd code
 moon test                      # 默认后端（wasm-gc）
 moon test --target native      # 本机后端
 moon test --target js          # JavaScript 后端
-bash tests/cli_smoke.sh        # 48 项命令行断言
+bash tests/cli_smoke.sh        # 62 项命令行断言
 bash tests/examples.sh         # 示例输入与 code/examples/cases/*.expected 对照
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 python3 tests/eval/run_eval.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
@@ -341,9 +383,12 @@ python3 tests/eval/run_ambiguity.py --cli ./_build/native/release/build/cmd/json
 python3 tests/eval/refcompare.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 python3 tests/gen_llm_fixtures.py --check
 python3 tests/memory_baseline.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/eval/run_independent.py    # 内置 nst/JSONTestSuite，独立于自造语料
+python3 tests/eval/run_readiness.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe --check
+moon run examples/agent_loop --target native --release   # 自愈闭环
 ```
 
-| 测试集 | 规模 | 0.4.0 结果 |
+| 测试集 | 规模 | 0.5.0 结果 |
 | --- | --- | --- |
 | 黄金用例（规范附录 A、B） | 126 条 | 通过 |
 | 流式用例（S-001…S-021）与分块不变性 | 21 条 + 不变性检查 | 通过 |
@@ -356,16 +401,19 @@ python3 tests/memory_baseline.py --cli ./_build/native/release/build/cmd/jsonmen
 | 分块路径真值 | 1200 条 × 分块 1/3/7/随机 | 每条路径 1200/1200，零分歧 |
 | 真值评测（TC-EVAL） | 1200 条，协议先冻结 | 恢复率 100.00%，漏标 0，五条判据全 PASS（含 `eval-3` 新增的判据 3b） |
 | 属性与模糊测试（TC-P-01…TC-P-06） | 8 组 × 400 例 | 通过，无反例 |
-| 公共面（逐个 R 码与 E 码） | 22 + 10 个码的 9 项断言 | 通过 |
+| 安全档位 / 修复计划 / 骨架（0.5.0 新增） | 34 条（7 + 22 + 5） | 通过 |
+| 独立第三方语料（`nst/JSONTestSuite`） | 318 个文件（95 `y_` / 188 `n_` / 35 `i_`） | `y_` 误修 2/95（重复键），`n_` 有效值 165/188 vs `json_repair` 166/188、`jsonrepair` 144/188（[docs/EVAL_INDEPENDENT.md](docs/EVAL_INDEPENDENT.md)） |
+| 骨架就绪表 | 7 个场景 | 4 个存在落差（最大 713‰），3 个两层同时到达末尾（[docs/READINESS.md](docs/READINESS.md)） |
+| 公共面（逐个 R 码与 E 码） | 22 + 12 个码的断言 | 通过 |
 | 选项策略与字节输入 | 10 例 | 通过 |
-| 命令行冒烟（退出码 0/1/2/3/4/5/70） | 48 项断言 | 通过 |
+| 命令行冒烟（退出码 0/1/2/3/4/5/70） | 62 项断言，含 `explain` 14 条 | 通过 |
 | 差分语料（对照 `jsonrepair` / `json-repair`） | 402 条 | 202 处差异全部有文档解释，未解释 0 |
-| 库代码行覆盖率 | 根包 1378/1487 行、`llm` 包 223/243 行 | 92.7% / 91.8% |
+| 库代码行覆盖率 | 根包 2312/2651 行、`llm` 包 337/391 行 | 87.2% / 86.2% |
 
-三个后端结果一致：wasm-gc、native 与 JavaScript 均为 95 个测试全通过。`.github/workflows/ci.yml`
+三个后端结果一致：wasm-gc、native 与 JavaScript 均为 129 个测试全通过。`.github/workflows/ci.yml`
 在每次推送时执行同一组命令（含差分、真值评测与产物体积），因此上表是重新推导出来的结果，
 而不是一次性记录。0.4.0 的 `ci.yml` 与 `release.yml` 运行记录见仓库 Actions 页，
-`release.yml` 在 `v0.4.0` 标签上产出 [Release `JSONMend v0.4.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.4.0)
+`release.yml` 在 `v0.5.0` 标签上产出 [Release `JSONMend v0.5.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.5.0)
 （Linux CLI、wasm 探针、演示 bundle、`SHA256SUMS`）。
 复现步骤、阈值与两项已知未达标项见 [docs/REPRODUCE.md](docs/REPRODUCE.md)
 与 [docs/TRACEABILITY.md](docs/TRACEABILITY.md)。
@@ -402,6 +450,12 @@ moon run bench --target js --release
 就绪曲线取代了「95% 覆盖」：十分位 `0 10 21 30 41 51 61 71 80 90 100`，
 成本约 1.8 ms/KiB（它是测量工具，不是热路径）。
 
+0.5.0 另加了一组「安全层要多少钱」的基准（`bench` 的 `gate` 行）：同一份 4.9 KiB 工具调用、
+20 次调用，`analyze` 是 `repair` 的 **1.00–1.03 倍**（66–72 µs/次），
+`analyze` + `for_agent` 两道闸 **1.33–1.36 倍**，再加骨架检查 **1.38–1.45 倍**；
+`semantic_readiness` 是 **32.7–34.3 倍**（2.25–2.30 ms/4.9 KiB），
+因为它是按 1‰ 采样重放解析器的**诊断指标**，设计上就不是热路径。
+
 这些数字是观测值而非承诺：吞吐取决于输入形态、分块大小、快照频率与工具链版本。
 内存（12.95 MB 输入实测 177.9 MB，13.7 倍；同机 Node 10.6 倍、Python 14.3 倍，
 因此「4 倍」目标本身不现实）与产物大小另行测量。完整方法、表格与决策记录见
@@ -409,6 +463,11 @@ moon run bench --target js --release
 
 ## 已知限制
 
+- **`semantic_readiness` 很贵。** 2.25–2.30 ms / 4.9 KiB（`repair` 的 32.7–34.3 倍）：它按 1‰ 采样、每次都取快照并查路径。适合数据面板与离线审计，不适合放进每次 `feed` 的循环。
+- **骨架只认类型，不认约束。** 声明能表达 `integer` / `string` / `[inner]` / 嵌套对象，但不能表达「`limit` 必须 ≤ 100」这类约束。
+- **`plan.mbt` 覆盖率 71.5%（328/459）是当前最低项。** `explain_text` 与 `to_json` 的分支与字段组合多，测试只覆盖主路径；这是遗留的测试债，不是已知缺陷。
+- **live 演示页只重放四个固定场景。** 它是「同一份数据在两种读法下的对比」演示，不是任意流的通用可视化；浏览器验证在本机用 Playwright 做过，CI 只跑帧级断言。
+- **`Options::for_text()` 是预设，不是无树引擎。** 它关掉修复记录与缩进，但值仍然建树；真正的「只出文本」模式（`want_value = false`）仍未实现，见路线图。
 - **`FR-16` 事件接口是薄封装。** `feed_with` / `feed_bytes_with` 只是 `drain_deltas` 的迭代器形式，回调在 `feed` 内部运行，因此回调里不能再次喂同一个解析器；它不是独立的推送接口（理由见 [docs/ONEPAGE.md](docs/ONEPAGE.md)）。
 - **省略号的判定位于键位与值位之前。** `R020` 处理 `[1,...,3]`、`{"a":1,...}`，键位置的独立 `...` 也会被删除（`{...}` → `{}`，`{"a":...}` → `{}`）；`....`、`..` 与字符串内部的 `...` 不是省略号。
 - **残缺字面量前缀会无视后一个字符直接补全。** 例如裸词 `tru` 后跟意外字符时，会先补成 `true`，意外字符另行处理。
@@ -430,7 +489,11 @@ moon run bench --target js --release
 
 ## 路线图
 
-- ~~发布到 mooncakes.io~~：`zhanshishan/jsonmend` 0.3.0 已发布，0.4.0 随本轮发布。
+- ~~发布到 mooncakes.io~~：`zhanshishan/jsonmend` 0.3.0 / 0.4.0 已发布，0.5.0 随本轮发布。
+- ~~给浏览器演示页加一个播放「模型流」的标签页~~：`static/demo/live.html` 已落地（四个真实场景逐帧重放，含重试面板）。
+- ~~把就绪曲线扩展到「调用方真正需要的字段」~~：`Schema` + `semantic_readiness` 已落地（语法/骨架两层分数）。
+- **`--schema` 的约束语言**：目前只有类型，没有 `minimum` / `enum` / `maxLength` 之类的约束；下一步可以加一层「声明即校验」。
+- **把 `semantic_readiness` 做成增量**：现在是全量重放（32.7× `repair`），用 `FieldTracker` 的增量路径可以做到只在新成员定稿时计算。
 - 让增量流变便宜：把操作编码进可复用缓冲、共享路径前缀，目标从 1.40–1.46 倍降到 ≤1.11 倍。
   （场景基准显示这不在关键路径上，优先级因此下调。）
 - ~~`FR-16` 事件/回调接口~~：已以 `feed_with` 薄封装完成。

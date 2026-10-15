@@ -549,6 +549,88 @@ fn bench_readiness() -> Unit {
 }
 
 ///|
+/// The price of the safety layer (FR-32 … FR-36): repairing the same 4 KiB tool
+/// call four ways.
+///
+/// `repair` is the engine alone. `analyze` adds the plan the gate decides on.
+/// `for_agent` adds the two gates (exactness and ambiguity) and the protocol.
+/// `+schema` adds the skeleton check on top of that. Reported per document and
+/// as a ratio against the engine alone, because "how much does the decision
+/// cost" is the number a caller weighing the API needs.
+fn bench_gate() -> Unit {
+  let docs : Array[String] = []
+  let mut bytes = 0
+  for k = 0; k < 20; k = k + 1 {
+    let doc = make_call(4096 + k * 64)
+    docs.push(doc)
+    bytes = bytes + doc.length()
+  }
+  let schema = @mend.Schema::parse("{!name:string,!arguments:any}") catch {
+    _ => return
+  }
+  let agent = @mend.Options::for_agent()
+  let plain = median5(() => {
+    for doc in docs {
+      try {
+        let _ = @mend.repair(doc)
+      } catch {
+        _ => ()
+      }
+    }
+  })
+  let plan = median5(() => {
+    for doc in docs {
+      let _ = @mend.analyze(doc)
+    }
+  })
+  let gated = median5(() => {
+    for doc in docs {
+      let _ = @mend.analyze(doc, options=agent)
+    }
+  })
+  let checked = median5(() => {
+    for doc in docs {
+      let _ = @mend.analyze(doc, options=agent, schema~)
+    }
+  })
+  let ready = median5(() => {
+    for doc in docs {
+      try {
+        let _ = @mend.semantic_readiness(doc, schema)
+      } catch {
+        _ => ()
+      }
+    }
+  })
+  let rows : Array[(String, Double)] = [
+    ("repair", plain),
+    ("analyze", plan),
+    ("analyze for_agent", gated),
+    ("analyze +schema", checked),
+    ("semantic_readiness", ready),
+  ]
+  for row in rows {
+    let (name, ms) = row
+    println(
+      name +
+      "\t" +
+      docs.length().to_string() +
+      " calls, " +
+      bytes.to_string() +
+      " bytes\t" +
+      round1(ms) +
+      " ms\t" +
+      round2(ms * 1000.0 / docs.length().to_double()) +
+      " us/call\t" +
+      round2(ms / plain) +
+      "x repair\t" +
+      round1(mbps(bytes, ms)) +
+      " MB/s",
+    )
+  }
+}
+
+///|
 /// One `drain_deltas` round trip is the whole delta cost (I-2): report it per
 /// delta so the number can be compared with the 1 MB delta benchmark above.
 fn bench_delta_size() -> Unit {
@@ -614,5 +696,6 @@ fn main {
   bench_ttfv()
   bench_agent_scenario()
   bench_readiness()
+  bench_gate()
   bench_delta_size()
 }
