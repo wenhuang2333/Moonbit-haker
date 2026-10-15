@@ -8,6 +8,7 @@ enum CliAction {
   Version
   Llm
   Readiness
+  Explain
 }
 
 ///|
@@ -33,6 +34,9 @@ struct CliOpts {
   mut text : Bool
   mut follow : Bool
   mut path : String?
+  mut schema : String
+  mut policy : String
+  mut json_out : Bool
   mut action : CliAction
 }
 
@@ -51,9 +55,15 @@ fn help_text() -> String {
     "  --retry-hint        拒绝时在标准错误上打印可直接回灌模型的提示",
     "  --chunk N           分块喂入：每次喂 N 个码元（≤1048576），用来验证流式路径（默认一次喂完）",
     "  --explain           在标准错误上逐条解释修复，并打印精确度小结",
+    "  --policy NAME       安全档位：permissive、interactive、execution、agent 或 strict",
+    "  --schema DECL       骨架声明，例如 `{!query:string,!limit:integer}`；检查必需字段与类型",
+    "                      与 explain 同用时打印语法就绪与骨架就绪两层数字",
+    "  --json              与 explain 同用时打印机器可读的 JSON 计划，而不是文本块",
     "  --batch             逐行读取 {\"id\",\"input\"} JSON，逐行输出结果 JSON",
     "                      与 --chunk N 同用可把每条输入按 N 字节分块喂入",
-    "", "jsonmend readiness [选项] [文件]", "  打印字段就绪曲线：每个顶级字段在输入消耗到多少时已定稿。",
+    "", "jsonmend explain [选项] [文件]", "  打印完整分析：修复了什么、为什么、风险多大、能不能执行；拒绝时给可直接回灌模型的提示。",
+    "  退出码与 jsonmend 相同（可执行 0，拒绝 5）。", "", "jsonmend readiness [选项] [文件]",
+    "  打印字段就绪曲线：每个顶级字段在输入消耗到多少时已定稿。",
     "  --step N            每 N 个码元观察一次，默认按长度自适应",
     "", "jsonmend llm [选项] [文件]", "  把模型的事件流喂给 provider 适配器，每个工具调用输出一行结果 JSON。",
     "  --provider NAME     anthropic（默认）或 openai", "  --sse               输入是 SSE 文本（默认按每行一个事件 JSON 读取）",
@@ -123,6 +133,19 @@ fn parse_multi_root(s : String) -> @mend.MultiRoot? {
 }
 
 ///|
+/// `--policy` payload (FR-30): the named safety profiles.
+fn parse_policy_name(s : String) -> @mend.SafetyPolicy? {
+  match s {
+    "permissive" => Some(@mend.SafetyPolicy::permissive())
+    "interactive" => Some(@mend.SafetyPolicy::interactive())
+    "execution" => Some(@mend.SafetyPolicy::for_execution())
+    "agent" => Some(@mend.SafetyPolicy::for_agent())
+    "strict" => Some(@mend.SafetyPolicy::strict())
+    _ => None
+  }
+}
+
+///|
 /// `--max-loss` payload.
 fn parse_max_loss(s : String) -> @mend.Exactness? {
   match s {
@@ -158,6 +181,9 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
     text: false,
     follow: false,
     path: None,
+    schema: "",
+    policy: "",
+    json_out: false,
     action: Run,
   }
   let mut err = ""
@@ -169,6 +195,8 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
       o.action = Llm
     } else if i == 1 && a == "readiness" {
       o.action = Readiness
+    } else if i == 1 && a == "explain" {
+      o.action = Explain
     } else if a == "-h" || a == "--help" {
       o.action = Help
     } else if a == "--version" {
@@ -236,6 +264,54 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
       }
     } else if a == "--explain" {
       o.explain = true
+    } else if a == "--json" {
+      o.json_out = true
+    } else if a == "--policy" || a.has_prefix("--policy=") {
+      let value = if a == "--policy" {
+        consumed = 1
+        if i + 1 < args.length() {
+          args[i + 1]
+        } else {
+          ""
+        }
+      } else {
+        slice_tail(a, 9)
+      }
+      if parse_policy_name(value) is Some(_) {
+        o.policy = value
+      } else {
+        err = "--policy 需要 permissive、interactive、execution、agent 或 strict，收到 `" +
+          value +
+          "`"
+      }
+    } else if a == "--schema" || a.has_prefix("--schema=") {
+      let value = if a == "--schema" {
+        consumed = 1
+        if i + 1 < args.length() {
+          args[i + 1]
+        } else {
+          ""
+        }
+      } else {
+        slice_tail(a, 9)
+      }
+      if value == "" {
+        err = "--schema 缺少声明"
+      } else {
+        let mut ok = true
+        ignore(
+          @mend.Schema::parse(value) catch {
+            e => {
+              ok = false
+              err = e.to_string()
+              @mend.Schema::Any
+            }
+          },
+        )
+        if ok {
+          o.schema = value
+        }
+      }
     } else if a == "--batch" {
       o.batch = true
     } else if a == "--sse" {

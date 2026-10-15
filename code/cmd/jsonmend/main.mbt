@@ -68,6 +68,9 @@ fn error_exit_code(e : @mend.MendError) -> Int32 {
     @mend.StrictViolation(_, _, _) | @mend.AmbiguousRepair(_, _, _) => 5
     @mend.InvalidState(_) => 70
     @mend.InvalidOption(_) => 2
+    // A skeleton that is not satisfied is a refusal of the execution channel,
+    // so it shares exit code 5 with E010 and E011.
+    @mend.SchemaError(_) => 5
   }
 }
 
@@ -123,8 +126,14 @@ fn explain(repairs : Array[@mend.Repair], text : String) -> Unit {
 
 ///|
 /// The library options a parsed command line asks for.
-fn options_of(o : CliOpts) -> @mend.Options {
-  {
+///
+/// `agent_protocol` is set by `explain` and by nothing else: the caller of
+/// `explain` is an agent looking at a model's answer, so the answer may come
+/// wrapped in a sentence and a code fence. Every other subcommand is a filter
+/// over bytes the caller already has, and a filter does not get to ignore the
+/// bytes in front of the value without being asked (`--skip-prose`).
+fn options_of(o : CliOpts, agent_protocol? : Bool) -> @mend.Options {
+  let base : @mend.Options = {
     ..@mend.Options::default(),
     mode: if o.strict {
       @mend.Strict
@@ -133,11 +142,19 @@ fn options_of(o : CliOpts) -> @mend.Options {
     },
     indent: o.indent,
     multi_root: o.multi_root,
-    skip_prose: o.skip_prose,
+    skip_prose: o.skip_prose || agent_protocol.unwrap_or(false),
     quote_lookahead: o.quote_lookahead,
     max_repairs: o.max_repairs,
     max_loss: o.max_loss,
     reject_ambiguous: o.reject_ambiguous,
+  }
+  if o.policy == "" {
+    base
+  } else {
+    match parse_policy_name(o.policy) {
+      Some(p) => base.with_policy(p)
+      None => base
+    }
   }
 }
 
@@ -159,7 +176,7 @@ fn run() -> Unit {
     }
     Version => {
       // Keep in sync with `version` in moon.mod; cli_smoke.sh checks it.
-      println("jsonmend 0.4.0")
+      println("jsonmend 0.5.0")
       quit(0)
     }
     Llm => {
@@ -168,6 +185,10 @@ fn run() -> Unit {
     }
     Readiness => {
       run_readiness(o)
+      quit(0)
+    }
+    Explain => {
+      run_explain(o)
       quit(0)
     }
     Run => ()
@@ -309,6 +330,10 @@ fn run_readiness(o : CliOpts) -> Unit {
   println(sb.to_string())
   for f in sorted {
     println("field " + f.key + " " + f.permille.to_string())
+  }
+  match schema_of(o) {
+    Some(s) => print_readiness_lines(text, s, o.step, options_of(o))
+    None => ()
   }
   quit(0)
 }

@@ -16,6 +16,29 @@ trap 'rm -rf "$TMP"' EXIT
 pass=0
 fail=0
 
+# check_has <name> <expected exit> <needle> <out|err> -- <args...>
+# Like `check`, but asserts that one substring appears on the chosen stream,
+# which is what `explain` needs: its block is long by design.
+check_has() {
+  local name="$1" want_rc="$2" needle="$3" stream="$4"
+  shift 4
+  if [ "$#" -gt 0 ] && [ "$1" = "--" ]; then shift; fi
+  local out err rc
+  out="$(printf '%s' "$STDIN" | "$BIN" "$@" 2>"$TMP/err")"
+  rc=$?
+  err="$(cat "$TMP/err")"
+  local hay="$out"
+  [ "$stream" = err ] && hay="$err"
+  if [ "$rc" = "$want_rc" ] && printf '%s' "$hay" | grep -qF -- "$needle"; then
+    pass=$((pass + 1))
+    printf 'ok   %-34s rc=%s\n' "$name" "$rc"
+  else
+    fail=$((fail + 1))
+    printf 'FAIL %-34s rc=%s (want %s)\n     out=%s\n     err=%s\n' \
+      "$name" "$rc" "$want_rc" "$out" "$err"
+  fi
+}
+
 # check <name> <expected exit> <expected stdout> <expected stderr substring> -- <args...>
 # stdin is $STDIN.
 check() {
@@ -53,7 +76,7 @@ STDIN='' check "empty input" 3 '' "E001" --
 STDIN='hello world' check "no JSON value" 3 '' "E002" --
 STDIN='{"a":1}' check "unknown option" 2 '' "未知选项" -- --bogus
 STDIN='{"a":1}' check "--help exit code" 0 '' "" -- --help
-STDIN='{"a":1}' check "--version" 0 'jsonmend 0.4.0' "" -- --version
+STDIN='{"a":1}' check "--version" 0 'jsonmend 0.5.0' "" -- --version
 STDIN='{"a":1} {"b":2}' check "multi-root default" 0 '{"a":1}' "R016" -- --report
 STDIN='{"a":1} {"b":2}' check "--multi-root array" 0 '[{"a":1},{"b":2}]' "" -- --multi-root array
 STDIN='Here you go: {"a":1}' check "prose rejected by default" 3 '' "E002" --
@@ -297,6 +320,47 @@ if [ "$(printf '%s' "$out" | grep -c '"index"')" = 0 ]; then
 else
   fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "llm ignores ping/unknown" "$out"
 fi
+
+# ---------------------------------------------------------------------------
+# jsonmend explain (FR-32, FR-33): one block, and an exit code that says whether
+# the value may be executed.
+# ---------------------------------------------------------------------------
+
+STDIN='{"name":"Alice","age":18,}'
+check_has "explain cosmetic repair" 0 "SAFE TO EXECUTE" out -- explain
+check_has "explain prints the repaired value" 0 '"name":"Alice","age":18' out -- explain
+
+STDIN='{"words":["colour" "color"]}'
+check_has "explain blocks two readings" 5 "BLOCKED (two readings)" out -- explain --policy execution
+check_has "explain prints the retry prompt" 5 "E011" out -- explain --policy execution
+
+STDIN='{"name":"Alice'
+check_has "explain refuses a truncated value" 5 "REJECT (a value was changed)" out -- explain
+check_has "explain says what the model should change" 5 "Do not truncate string values." out -- explain
+
+STDIN='{"query":"MoonBit","limit":10}'
+check_has "explain passes the skeleton" 0 "SAFE TO EXECUTE" out -- explain --schema '{!query:string,!limit:integer}'
+STDIN='{"query":"MoonBit"}'
+check_has "explain refuses a missing member" 5 "missing limit" out -- explain --schema '{!query:string,!limit:integer}'
+check_has "explain reports both readiness numbers" 5 "syntax-ready" out -- explain --schema '{!query:string,!limit:integer}'
+STDIN='{"query":"MoonBit"}'
+check_has "bad skeleton is a usage error" 2 "E070" err -- explain --schema '{!a:'
+check_has "unknown policy is a usage error" 2 "permissive" err -- explain --policy lenient
+check_has "unreadable input" 3 "无法读取" err -- explain /nonexistent/jsonmend.json
+
+STDIN='{"query":"MoonBit","limit":10}'
+out="$(printf '%s' "$STDIN" | "$BIN" explain --json --schema '{!query:string,!limit:integer}')"
+if printf '%s' "$out" | grep -q '"decision":"safe"' &&
+   printf '%s' "$out" | grep -q '"schema_satisfied":2' &&
+   printf '%s' "$out" | grep -q '"schema_missing":\[\]'; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "explain --json carries the plan"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "explain --json carries the plan" "$out"
+fi
+
+# `readiness --schema` prints the two fractions next to the field curve.
+STDIN='{"a":1,"b":2222222222}'
+check_has "readiness --schema" 0 "schema-ready" out -- readiness --schema '{!a:integer,!b:integer}'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]
