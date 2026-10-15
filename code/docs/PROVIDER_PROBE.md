@@ -18,10 +18,12 @@ The probe never prints a secret: a hit is reported as its location and the
    prints the data blob, and only `-w` is ever used);
 4. `~/.netrc`, machine by machine.
 
-Exit status is `0` when at least one **LLM-provider** credential was found, `2`
-when none was, and `1` on a usage failure. A token that is real but cannot record
-a model stream — a CI token, a package registry token — is listed and does *not*
-make the probe succeed.
+Exit status is `0` when at least one **LLM-provider** credential was found and `2`
+when none was. `2` is also the code `argparse` uses for a bad argument, so a
+mistyped flag is indistinguishable from "no credential" by exit status alone —
+read stderr in that case. A token that is real but cannot record a model stream
+(a CI token, a package registry token) is listed and does *not* make the probe
+succeed.
 
 ```sh
 python3 code/tests/probe_provider_creds.py            # the report below
