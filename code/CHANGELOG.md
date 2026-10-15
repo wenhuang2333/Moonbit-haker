@@ -51,10 +51,13 @@
 
 - 真值语料 1200 条：`--batch` 基线、`--chunk 1/3/7/随机`、双 provider 工具流、
   双 provider 文本流，**8 条路径全部 1200/1200，零分歧**（`docs/EVAL_PATHS.md`）。
+- `eval-3`：`R022` 的判据修正后新增判据 3b（`null`→`None` 必须恢复原值且标 `lossy`），
+  **不排除任何用例**，1200 条上五条判据全 PASS。
 - 对抗歧义语料 `amb-1` 24 例：10 例歧义全部标记且全部拒绝，14 例对照全部放行，失败 0；
   同一批用例上 `jsonrepair` 静默给出 8 个值、`json_repair` 10 个（`docs/EVAL_AMBIGUITY.md`）。
 - 参照库对照：JSONMend 静默错值 0，`jsonrepair` 122，`json_repair` 189；
-  `--for-execution` 拒绝 243/1200 且放行的错值 0（`docs/EVAL_REFERENCE.md`）。
+  `--for-execution` 拒绝 **254/1200** 且放行的错值 0（`docs/EVAL_REFERENCE.md`；
+  `eval-3` 的标签修订使这 11 条 `null`→`None` 用例也进入拒绝集，见 `docs/EVAL_REGISTRATION.md` §11）。
 - 场景基准：4 KB 工具调用文档按 3 码元分块，0.08 µs/feed（摊还），290 000 次 feed 中
   0 次达到毫秒时钟分辨率；就绪曲线十分位 `0 10 21 30 41 51 61 71 80 90 100`（`docs/BENCHMARK.md`）。
 - 内存横向基线：12.95 MB 输入下 JSONMend 13.7 ×、Node 10.6 ×、Python 14.3 ×；
