@@ -53,6 +53,7 @@ fn err_text(e : MendError) -> String {
     InvalidUtf8(o) => "E040@" + o.to_string()
     InvalidOption(_m) => "E050"
     InvalidEvent(_m) => "E060"
+    SchemaError(_m) => "E070"
   }
 }
 

@@ -424,6 +424,9 @@ pub(all) suberror MendError {
   /// A provider event payload could not be interpreted (E060). Raised by the
   /// `jsonmend/llm` adapters; the payload is a fixed explanation.
   InvalidEvent(String)
+  /// A skeleton declaration could not be read, or a value does not satisfy it
+  /// (E070, FR-34). The payload is a fixed explanation.
+  SchemaError(String)
 }
 
 ///|
@@ -441,6 +444,7 @@ pub fn MendError::code(self : MendError) -> String {
     InvalidUtf8(_) => "E040"
     InvalidOption(_) => "E050"
     InvalidEvent(_) => "E060"
+    SchemaError(_) => "E070"
   }
 }
 
@@ -515,6 +519,10 @@ pub fn MendError::to_string(self : MendError) -> String {
     }
     InvalidEvent(msg) => {
       sb.write_string("E060 InvalidEvent: ")
+      sb.write_string(msg)
+    }
+    SchemaError(msg) => {
+      sb.write_string("E070 SchemaError: ")
       sb.write_string(msg)
     }
   }

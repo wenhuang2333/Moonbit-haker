@@ -175,6 +175,21 @@ pub fn RuleSet::is_enabled(self : RuleSet, code : RepairCode) -> Bool {
 }
 
 ///|
+/// Whether two rule sets enable exactly the same rules (FR-30). Used to decide
+/// whether an options value still matches a named safety profile.
+pub fn RuleSet::same_as(self : RuleSet, other : RuleSet) -> Bool {
+  if self.flags.length() != other.flags.length() {
+    return false
+  }
+  for i = 0; i < self.flags.length(); i = i + 1 {
+    if self.flags[i] != other.flags[i] {
+      return false
+    }
+  }
+  true
+}
+
+///|
 /// All options. Defaults are the ones documented in D04 4.6.
 pub(all) struct Options {
   mode : Mode
@@ -270,6 +285,41 @@ pub fn Options::for_llm() -> Options {
 /// quote, and from `lenient()`, which accepts both.
 pub fn Options::for_execution() -> Options {
   { ..Options::default(), max_loss: Cosmetic, reject_ambiguous: true, }
+}
+
+///|
+/// Profile for an agent loop that streams a tool call and hands a refusal back
+/// to the model (FR-28, FR-30): the execution policy's safety knobs plus the
+/// protocol an agent channel needs — the delta stream
+/// (`collect_deltas: true`, from `for_llm()`) so a consumer can follow the
+/// value as it is written, and `skip_prose: true` because a model that answers
+/// in a chat channel often prefixes the arguments with a sentence and the
+/// prefix is not part of the arguments.
+///
+/// The safety knobs are the agent profile's; what a *streaming* agent adds is
+/// protocol, so this is `SafetyPolicy::for_agent()` with the delta stream and
+/// prose handling turned on. There is exactly one definition of the agent
+/// profile, and `SafetyPolicy::of_options` reads it back.
+pub fn Options::for_agent() -> Options {
+  {
+    ..SafetyPolicy::for_agent().to_options(),
+    collect_deltas: true,
+    skip_prose: true,
+  }
+}
+
+///|
+/// Profile for a caller whose only output is the repaired text — a pipe, a log
+/// line, a file rewrite (FR-30). The value is what is wanted and nothing else
+/// is: no repair records are kept (they cost an allocation per repair and an
+/// array that grows with the input) and the text is compact.
+///
+/// This is a preset, not a separate engine mode: the tree is still built
+/// internally, because the duplicate-key policy, `+` concatenation and the
+/// `fill_null` replay all read the value that was already accepted (see
+/// `docs/RULES.md` §2.4 for why the value cannot simply be dropped).
+pub fn Options::for_text() -> Options {
+  { ..Options::default(), collect_repairs: false, indent: 0, want_text: true, }
 }
 
 ///|
