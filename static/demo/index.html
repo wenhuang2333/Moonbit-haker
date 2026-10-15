@@ -132,6 +132,9 @@
         globalThis.jsonmend[name] = fn;
       };
       globalThis.jsonmendRegister2 = globalThis.jsonmendRegister1;
+      // `live` takes three arguments; the hook shape is the same, since the
+      // bundle passes them positionally.
+      globalThis.jsonmendRegister3 = globalThis.jsonmendRegister1;
     </script>
     <script src="./jsonmend.js"></script>
     <script>

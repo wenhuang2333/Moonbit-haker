@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JSONMend Live — Don't wait for valid JSON</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fg: #1f2328;
+        --muted: #6a737d;
+        --line: #d8dee4;
+        --bg: #ffffff;
+        --panel: #f6f8fa;
+        --ok: #1a7f37;
+        --warn: #9a6700;
+        --bad: #cf222e;
+        --accent: #0969da;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #e6edf3;
+          --muted: #8b949e;
+          --line: #30363d;
+          --bg: #0d1117;
+          --panel: #161b22;
+          --ok: #3fb950;
+          --warn: #d29922;
+          --bad: #f85149;
+          --accent: #58a6ff;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 1.5rem 1rem 3rem;
+        font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+        color: var(--fg);
+        background: var(--bg);
+      }
+      main { max-width: 1040px; margin: 0 auto; }
+      h1 { font-size: 1.5rem; margin: 0 0 .15rem; letter-spacing: -.01em; }
+      h1 small { font-weight: 400; color: var(--muted); font-size: .85rem; }
+      p.lead { color: var(--muted); margin: .2rem 0 1.2rem; }
+      .tabs { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem; }
+      button {
+        font: inherit;
+        font-size: .85rem;
+        padding: .35rem .7rem;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--panel);
+        color: var(--fg);
+        cursor: pointer;
+      }
+      button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+      @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: .6rem .7rem;
+        min-height: 8rem;
+      }
+      .card h2 {
+        font-size: .72rem;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        color: var(--muted);
+        margin: 0 0 .4rem;
+      }
+      pre {
+        margin: 0;
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      .stream .cursor { background: var(--accent); color: #fff; }
+      .members { margin-top: .5rem; }
+      .member { font: 13px/1.7 ui-monospace, Menlo, monospace; }
+      .member .mark { display: inline-block; width: 1.1rem; }
+      .member.ready .mark { color: var(--ok); }
+      .member.open .mark { color: var(--warn); }
+      .member.open { color: var(--muted); }
+      .bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.2rem;
+        align-items: baseline;
+        margin-top: .9rem;
+        padding: .6rem .7rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        font: 13px/1.6 ui-monospace, Menlo, monospace;
+        min-height: 3rem;
+      }
+      .bar b { font-weight: 600; }
+      .verdict { font-weight: 600; }
+      .verdict.ok { color: var(--ok); }
+      .verdict.warn { color: var(--warn); }
+      .verdict.bad { color: var(--bad); }
+      .retry {
+        margin-top: .7rem;
+        border: 1px solid var(--warn);
+        border-radius: 8px;
+        padding: .6rem .7rem;
+        background: transparent;
+      }
+      .retry h2 { color: var(--warn); }
+      .meta { color: var(--muted); font-size: .82rem; margin-top: .5rem; }
+      footer { margin-top: 1.6rem; color: var(--muted); font-size: .82rem; }
+      code { font: 12px ui-monospace, Menlo, monospace; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>JSONMend Live <small>Don't wait for valid JSON.</small></h1>
+      <p class="lead">
+        模型是一个码元一个码元写 JSON 的。左边是它已经写出来的内容，右边是 JSONMend
+        现在就已经知道的结构 —— 以及现在能不能安全执行。
+      </p>
+
+      <div class="tabs" id="tabs"></div>
+
+      <div class="grid">
+        <section class="card stream">
+          <h2>LLM stream</h2>
+          <pre id="stream">—</pre>
+        </section>
+        <section class="card">
+          <h2>Live structure</h2>
+          <pre id="structure">—</pre>
+          <div class="members" id="members"></div>
+        </section>
+      </div>
+
+      <div class="bar" id="bar">
+        <span>exactness <b id="exactness">—</b></span>
+        <span>ambiguity <b id="ambiguity">—</b></span>
+        <span>syntax ready <b id="syntax">—</b></span>
+        <span>schema ready <b id="schema">—</b></span>
+        <span class="verdict" id="verdict">—</span>
+      </div>
+
+      <section class="retry" id="retry" hidden>
+        <h2>Refused — handed back to the model</h2>
+        <pre id="prompt">—</pre>
+      </section>
+
+      <p class="meta" id="meta">—</p>
+
+      <footer>
+        页面里的每一帧都来自同一个 <code>@mend.PartialParser</code> 与
+        <code>@mend.analyze</code>，用 MoonBit 编译成的
+        <code>jsonmend.js</code> 在浏览器里直接跑；没有第二个解析器，也没有为演示写的特例。
+        “schema ready”是声明过的必填参数全部定稿时消耗的输入比例，“execution ready”
+        是在此基础上确认当前前缀没有第二种读法。语法本身要到流的末尾才闭合 ——
+        这正是本项目想说的事：<b>不要等合法 JSON，要问我已经知道了什么。</b>
+      </footer>
+    </main>
+
+    <script>
+      // Host hooks: the MoonBit bundle calls these from its main function.
+      globalThis.jsonmendRegister1 = function (name, fn) {
+        globalThis.jsonmend = globalThis.jsonmend || {};
+        globalThis.jsonmend[name] = fn;
+      };
+      globalThis.jsonmendRegister2 = globalThis.jsonmendRegister1;
+      globalThis.jsonmendRegister3 = globalThis.jsonmendRegister1;
+    </script>
+    <script src="./jsonmend.js"></script>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const live = globalThis.jsonmend.live;
+
+      // Each scenario is a self-healing loop: the model's answers, in order.
+      // The third one is the point of the whole page: the gate accepts a
+      // cosmetic repair because it removes a reading instead of adding one.
+      const longTail = JSON.stringify({ query: "MoonBit", limit: 10, note: "…" });
+      const scenarios = [
+        {
+          tab: "截断的参数 → E010 → 重试",
+          tool: "search",
+          schema: "{!query:string,!limit:integer}",
+          attempts: ['{"query":"MoonBit","limit":', '{"query":"MoonBit","limit":10}'],
+        },
+        {
+          tab: "歧义 → E011 → 重试",
+          tool: "spell_check",
+          schema: "{!words:[string]}",
+          attempts: ['{"words":["colour" "color"]}', '{"words":["colour","color"]}'],
+        },
+        {
+          tab: "只有一个读法：直接通过",
+          tool: "search",
+          schema: "{!query:string,!limit:integer}",
+          attempts: ['{"query":"MoonBit" "limit":10}'],
+        },
+        {
+          tab: "更长的流：19% 就可以停",
+          tool: "search",
+          schema: "{!query:string,!limit:integer}",
+          attempts: [
+            JSON.stringify({
+              query: "MoonBit",
+              limit: 10,
+              note: "x".repeat(120),
+            }),
+          ],
+        },
+      ];
+
+      const state = { index: 0, attempt: 0, upto: 0, timer: null, paused: false };
+      const frames = (text) => {
+        const out = [];
+        const step = Math.max(1, Math.round(text.length / 90));
+        for (let i = 0; i <= text.length; i += step) out.push(Math.min(i, text.length));
+        if (out[out.length - 1] !== text.length) out.push(text.length);
+        return out;
+      };
+
+      function renderTabs() {
+        const tabs = $("tabs");
+        tabs.textContent = "";
+        scenarios.forEach((s, i) => {
+          const b = document.createElement("button");
+          b.textContent = s.tab;
+          b.setAttribute("aria-pressed", String(i === state.index));
+          b.onclick = () => {
+            state.index = i;
+            restart();
+          };
+          tabs.appendChild(b);
+        });
+      }
+
+      function paint(frame, attemptText) {
+        $("stream").textContent = attemptText.slice(0, frame.consumed);
+        $("structure").textContent = frame.snapshot || "—";
+        const members = $("members");
+        members.textContent = "";
+        for (const m of frame.members) {
+          const d = document.createElement("div");
+          d.className = "member " + (m.ready ? "ready" : "open");
+          d.innerHTML =
+            '<span class="mark">' + (m.ready ? "✓" : "◐") + "</span>" + m.key;
+          members.appendChild(d);
+        }
+        const plan = frame.schema || frame.plan;
+        $("exactness").textContent = plan.exactness.toUpperCase();
+        $("ambiguity").textContent = plan.ambiguous ? "YES" : "NONE";
+        const pct = (p) => (p < 0 ? "—" : (p / 10).toFixed(1) + "%");
+        $("syntax").textContent = pct(frame.syntax_ready);
+        $("schema").textContent = pct(frame.schema_ready);
+        const v = $("verdict");
+        if (frame.execution_ready) {
+          v.textContent = "EXECUTION: READY";
+          v.className = "verdict ok";
+        } else if (plan.decision === "ambiguous") {
+          v.textContent = "EXECUTION: BLOCKED (two readings)";
+          v.className = "verdict bad";
+        } else if (frame.completeness === "Complete") {
+          v.textContent = "EXECUTION: " + plan.label;
+          v.className = "verdict " + (plan.executable ? "ok" : "bad");
+        } else {
+          v.textContent = "EXECUTION: " + plan.label;
+          v.className = "verdict warn";
+        }
+        $("meta").textContent =
+          "attempt " +
+          (state.attempt + 1) +
+          " · " +
+          frame.consumed +
+          "/" +
+          frame.total +
+          " code units · " +
+          frame.completeness +
+          " · members ready " +
+          frame.ready +
+          "/" +
+          frame.seen +
+          (frame.declared_total
+            ? " · declared " + frame.declared + "/" + frame.declared_total
+            : "");
+      }
+
+      function showRetry(frame) {
+        const retry = $("retry");
+        const plan = frame.schema || frame.plan;
+        if (!plan.executable && plan.retry) {
+          retry.hidden = false;
+          $("prompt").textContent = plan.retry.prompt;
+        } else if (!plan.executable && frame.completeness === "Complete") {
+          retry.hidden = false;
+          $("prompt").textContent =
+            "The output was refused (" + plan.decision + ").";
+        } else {
+          retry.hidden = true;
+        }
+      }
+
+      function tick() {
+        const scenario = scenarios[state.index];
+        const text = scenario.attempts[state.attempt];
+        const steps = frames(text);
+        if (state.upto >= steps.length) {
+          // The attempt is finished. If the gate refused, show the feedback and
+          // move to the model's next answer; otherwise the tool runs.
+          const last = JSON.parse(live(text, text.length, scenario.schema));
+          showRetry(last);
+          if (!(last.schema || last.plan).executable && state.attempt + 1 < scenario.attempts.length) {
+            state.attempt += 1;
+            state.upto = 0;
+            state.timer = setTimeout(tick, 1200);
+            return;
+          }
+          state.paused = true;
+          $("meta").textContent += (last.schema || last.plan).executable
+            ? " · tool executed"
+            : " · gave up";
+          return;
+        }
+        const upto = steps[state.upto];
+        state.upto += 1;
+        const frame = JSON.parse(live(text, upto, scenario.schema));
+        paint(frame, text);
+        showRetry(frame);
+        state.timer = setTimeout(tick, 26);
+      }
+
+      function restart() {
+        clearTimeout(state.timer);
+        state.attempt = 0;
+        state.upto = 0;
+        state.paused = false;
+        $("retry").hidden = true;
+        $("prompt").textContent = "—";
+        renderTabs();
+        tick();
+      }
+
+      renderTabs();
+      restart();
+    </script>
+  </body>
+</html>

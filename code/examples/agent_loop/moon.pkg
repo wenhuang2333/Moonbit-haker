@@ -1,0 +1,7 @@
+import {
+  "zhanshishan/jsonmend" @mend,
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "native"
