@@ -216,6 +216,7 @@ cd code
 moon check --deny-warn && moon fmt --check     # 无警告、格式一致
 moon test && moon test --target native && moon test --target js
 bash tests/cli_smoke.sh && bash tests/examples.sh
+moon run examples/agent_gate --target native --release   # 拒绝 → 回灌 → 再执行
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 bash tests/bench.sh size                       # wasm-gc ≤ 150 KB（当前 103 784 B）
 node ../code/tests/demo_smoke.mjs              # 演示 bundle 仍可用

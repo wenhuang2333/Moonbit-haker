@@ -111,6 +111,32 @@ try {
 
 `snapshot()` 返回 `Snapshot`，字段为 `value`（`Json?`）、`completeness` 和 `open_path`；`finish()` 返回 `FinalResult`，含 `text`、`value`、`repairs` 和 `completeness`。`snapshot()` 从不抛错，也不改动解析器状态；`finish()` 只能调用一次，重复调用或在上一次致命错误之后再调用会抛出 `E030`。
 
+## 端到端示例：拒绝、回灌、再执行
+
+`examples/agent_gate/` 是一个可运行的程序（`moon run examples/agent_gate --target native --release`），
+它把「模型给了一份有两种读法的参数」这件事走完整条链路：
+
+```text
+== first attempt
+model   : {"city":["Paris" "London"]}
+gate    : E011 adjacent_strings - the gate cannot pick a reading
+refused : the gate refused to pick a reading
+prompt  :
+  JSONMend refused the arguments: E011 R006 InsertComma at line 1 column 18 (offset 17).
+  Reason: two adjacent strings may be two elements or one concatenated string
+  Ambiguity: adjacent_strings
+  Re-emit the arguments as valid JSON with exactly one reading.
+
+== re-emitted
+model   : {"city":["Paris","London"]}
+execute : {"city":["Paris","London"]}
+```
+
+`Options::for_execution()` 先查歧义、再查精确度：`["Paris" "London"]` 与 `"Par" + "is"`
+这类修复「取值没变但有两种读法」，只有歧义闸能拦住；`"Par` 这类截断则是 `E010`。
+两者的拒绝理由都会变成可直接回灌模型的提示（`RetryHint::to_prompt()`）。
+不带闸门时同一份输入照旧修复，只是把 `ambiguous` 标成 `true`——闸门是选择加入的。
+
 ## 选项
 
 `Options` 的全部字段如下，`@jsonmend.Options::default()` 即文档化的默认值。

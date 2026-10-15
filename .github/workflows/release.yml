@@ -1,5 +1,10 @@
-# Release artifacts (O-13): a tag produces a GitHub Release with the native
-# CLI, the wasm-gc probe, the browser demo bundle and their checksums.
+# Release artifacts (O-13): a tag produces a GitHub Release with the native CLI
+# for Linux and macOS, the wasm-gc probe, the browser demo bundle and their
+# checksums.
+#
+# The CLI is built on the runner whose operating system it targets, because a
+# MoonBit native build links against the host toolchain. Everything is packaged
+# in one final job so that a single `SHA256SUMS` covers every asset.
 
 name: Release
 
@@ -12,8 +17,8 @@ permissions:
   contents: write
 
 jobs:
-  artifacts:
-    name: Build and publish artifacts
+  web:
+    name: wasm probe and browser bundle
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -24,14 +29,9 @@ jobs:
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Build
+      - name: Build the probe and the demo bundle
         working-directory: code
         run: |
-          moon build cmd/jsonmend --target native --release
           moon build bench/probe --target wasm-gc --release
           moon build examples/web --target js --release
 
@@ -40,14 +40,70 @@ jobs:
           bash static/demo/build.sh
           git diff --exit-code -- static/demo/jsonmend.js
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-assets
+          path: |
+            code/_build/wasm-gc/release/build/bench/probe/probe.wasm
+            static/demo/jsonmend.js
+
+  cli:
+    name: CLI on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: jsonmend-linux-x86_64
+          - os: macos-latest
+            asset: jsonmend-macos-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the MoonBit toolchain
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - name: Build the CLI
+        working-directory: code
+        run: moon build cmd/jsonmend --target native --release
+
+      - name: Check the CLI runs
+        working-directory: code
+        run: |
+          printf '{"a":1,}' | ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+          ./_build/native/release/build/cmd/jsonmend/jsonmend.exe --version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: code/_build/native/release/build/cmd/jsonmend/jsonmend.exe
+
+  publish:
+    name: Publish the release
+    needs: [web, cli]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
       - name: Package
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp code/_build/native/release/build/cmd/jsonmend/jsonmend.exe dist/jsonmend-linux-x86_64
-          cp code/_build/wasm-gc/release/build/bench/probe/probe.wasm dist/jsonmend-probe.wasm
-          cp static/demo/jsonmend.js dist/jsonmend-demo.js
-          (cd dist && sha256sum jsonmend-linux-x86_64 jsonmend-probe.wasm jsonmend-demo.js > SHA256SUMS)
+          cp artifacts/jsonmend-linux-x86_64/jsonmend.exe dist/jsonmend-linux-x86_64
+          cp artifacts/jsonmend-macos-arm64/jsonmend.exe dist/jsonmend-macos-arm64
+          cp artifacts/web-assets/probe.wasm dist/jsonmend-probe.wasm
+          cp artifacts/web-assets/jsonmend.js dist/jsonmend-demo.js
+          chmod +x dist/jsonmend-linux-x86_64 dist/jsonmend-macos-arm64
+          (cd dist && sha256sum jsonmend-linux-x86_64 jsonmend-macos-arm64 jsonmend-probe.wasm jsonmend-demo.js > SHA256SUMS)
           cat dist/SHA256SUMS
 
       - name: Publish the release
@@ -59,6 +115,7 @@ jobs:
             --title "JSONMend $GITHUB_REF_NAME" \
             --notes-file code/CHANGELOG.md \
             dist/jsonmend-linux-x86_64 \
+            dist/jsonmend-macos-arm64 \
             dist/jsonmend-probe.wasm \
             dist/jsonmend-demo.js \
             dist/SHA256SUMS

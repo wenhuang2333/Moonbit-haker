@@ -111,6 +111,34 @@ try {
 
 `snapshot()` returns a `Snapshot` whose fields are `value` (`Json?`), `completeness`, and `open_path`; `finish()` returns a `FinalResult` with `text`, `value`, `repairs`, and `completeness`. `snapshot()` never raises and never mutates the parser; `finish()` may be called once and raises `E030` on a second call or after a fatal error.
 
+## End-to-end example: refuse, feed back, then execute
+
+`examples/agent_gate/` is a runnable program (`moon run examples/agent_gate --target native --release`)
+that walks the whole loop for a tool call whose arguments admit two readings:
+
+```text
+== first attempt
+model   : {"city":["Paris" "London"]}
+gate    : E011 adjacent_strings - the gate cannot pick a reading
+refused : the gate refused to pick a reading
+prompt  :
+  JSONMend refused the arguments: E011 R006 InsertComma at line 1 column 18 (offset 17).
+  Reason: two adjacent strings may be two elements or one concatenated string
+  Ambiguity: adjacent_strings
+  Re-emit the arguments as valid JSON with exactly one reading.
+
+== re-emitted
+model   : {"city":["Paris","London"]}
+execute : {"city":["Paris","London"]}
+```
+
+`Options::for_execution()` checks ambiguity before exactness: repairs such as
+`["Paris" "London"]` and `"Par" + "is"` keep the value the same but admit two readings,
+so only the ambiguity gate stops them, while a truncation such as `"Par` is `E010`.
+Either refusal turns into a prompt the model can be given again (`RetryHint::to_prompt()`).
+Without the gate the same input still repairs, with `ambiguous` set to `true` — the gate
+is opt-in.
+
 ## Options
 
 Every field of `Options`. `@jsonmend.Options::default()` is the documented default set.

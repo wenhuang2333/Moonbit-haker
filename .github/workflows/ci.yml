@@ -107,6 +107,10 @@ jobs:
       - name: Browser demo bundle smoke test
         run: node code/tests/demo_smoke.mjs
 
+      - name: Agent gate example (end to end)
+        working-directory: code
+        run: moon run examples/agent_gate --target native --release
+
   differential:
     name: Differential and benchmark
     runs-on: ubuntu-latest
