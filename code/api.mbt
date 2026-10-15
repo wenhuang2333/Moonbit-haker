@@ -57,6 +57,7 @@ pub(all) struct RepairResult {
   repairs : Array[Repair]
   completeness : Completeness
   repairs_truncated : Bool
+  exactness : Exactness
 }
 
 ///|
@@ -66,6 +67,7 @@ pub(all) struct ParseResult {
   repairs : Array[Repair]
   completeness : Completeness
   repairs_truncated : Bool
+  exactness : Exactness
 }
 
 ///|
@@ -74,6 +76,9 @@ pub(all) struct Snapshot {
   value : Json?
   completeness : Completeness
   open_path : Array[PathSegment]
+  /// Exactness of everything consumed so far. A snapshot is a display channel,
+  /// so this is informational; the execution channel is `finish`.
+  exactness : Exactness
 }
 
 ///|
@@ -84,6 +89,70 @@ pub(all) struct FinalResult {
   repairs : Array[Repair]
   completeness : Completeness
   repairs_truncated : Bool
+  exactness : Exactness
+}
+
+///|
+/// Operation of one `Delta` (FR-18). The names follow JSON Patch (RFC 6902)
+/// where an equivalent exists; `AppendText` has no RFC 6902 counterpart.
+pub(all) enum DeltaOp {
+  /// The value at `path` was created or replaced; `value` is its content.
+  Set
+  /// `text` was appended to the string at `path`.
+  AppendText
+  /// The container at `path` is complete; `value` is its final content.
+  Close
+  /// Reserved for a future retracting stream; never produced today.
+  Retract
+}
+
+///|
+/// One incremental change to the value built so far.
+pub(all) struct Delta {
+  /// JSON Pointer style path (RFC 6901): `Key` segments are object members,
+  /// `Index` segments are array positions, the root is the empty path.
+  path : Array[PathSegment]
+  op : DeltaOp
+  value : Json?
+  text : String
+}
+
+///|
+/// `DeltaOp` as a stable lowercase word, e.g. `append_text`.
+pub fn DeltaOp::name(self : DeltaOp) -> String {
+  match self {
+    Set => "set"
+    AppendText => "append_text"
+    Close => "close"
+    Retract => "retract"
+  }
+}
+
+///|
+/// Explicit `Eq` implementation for `DeltaOp`.
+pub impl Eq for DeltaOp with fn equal(self : DeltaOp, other : DeltaOp) -> Bool {
+  self.name() == other.name()
+}
+
+///|
+/// Explicit `Eq` extension for `DeltaOp`.
+pub extend DeltaOp with Eq::{not_equal, equal}
+
+///|
+/// Render a path as an RFC 6901 JSON Pointer, e.g. `/items/0/name`.
+pub fn Delta::pointer(self : Delta) -> String {
+  let sb = StringBuilder()
+  for seg in self.path {
+    sb.write_char('/')
+    match seg {
+      Key(k) =>
+        sb.write_string(
+          k.replace_all(old="~", new="~0").replace_all(old="/", new="~1"),
+        )
+      Index(i) => sb.write_string(i.to_string())
+    }
+  }
+  sb.to_string()
 }
 
 ///|
@@ -130,8 +199,62 @@ pub fn PartialParser::feed_bytes(
 
 ///|
 /// Snapshot the value parsed so far. Never raises, never mutates the parser.
+///
+/// The returned value may share structure with the parser's cache, so it must
+/// be treated as immutable; use `snapshot_copy` when the caller needs to
+/// mutate it (FR-13).
 pub fn PartialParser::snapshot(self : PartialParser) -> Snapshot {
   self.engine.snapshot()
+}
+
+///|
+/// A deep copy of the snapshot: safe to mutate without disturbing the parser
+/// or any earlier snapshot (FR-13).
+pub fn PartialParser::snapshot_copy(self : PartialParser) -> Snapshot {
+  let s = self.engine.snapshot()
+  {
+    value: match s.value {
+      Some(v) => Some(copy_json(v))
+      None => None
+    },
+    completeness: s.completeness,
+    open_path: s.open_path.copy(),
+    exactness: s.exactness,
+  }
+}
+
+///|
+/// Deep copy of a `Json` value.
+pub fn copy_json(v : Json) -> Json {
+  match v {
+    Json::Array(items) => Json::array(items.map(copy_json))
+    Json::Object(map) => {
+      let out : Map[String, Json] = Map([])
+      for k, item in map {
+        out[k] = copy_json(item)
+      }
+      Json::object(out)
+    }
+    _ => v
+  }
+}
+
+///|
+/// Take the deltas recorded since the previous call (FR-18).
+///
+/// Requires `Options::for_llm()` (or any options with `collect_deltas: true`);
+/// otherwise this raises `E050`. Applying the returned operations in order to
+/// the value obtained from the previous drain yields the current
+/// `snapshot().value`.
+pub fn PartialParser::drain_deltas(
+  self : PartialParser,
+) -> Array[Delta] raise MendError {
+  if !self.engine.opts.collect_deltas {
+    raise InvalidOption(
+      "drain_deltas requires collect_deltas: use Options::for_llm()",
+    )
+  }
+  self.engine.drain_deltas()
 }
 
 ///|
@@ -166,6 +289,7 @@ pub fn repair(
     repairs: fin.repairs,
     completeness: fin.completeness,
     repairs_truncated: fin.repairs_truncated,
+    exactness: fin.exactness,
   }
 }
 
@@ -185,6 +309,7 @@ pub fn parse(input : String, options? : Options) -> ParseResult raise MendError 
     repairs: fin.repairs,
     completeness: fin.completeness,
     repairs_truncated: fin.repairs_truncated,
+    exactness: fin.exactness,
   }
 }
 

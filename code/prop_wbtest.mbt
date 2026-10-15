@@ -8,8 +8,39 @@
 // `feed_try`, `finish_try`) come from `stream_wbtest.mbt`.
 
 ///|
-/// Cases generated per property.
-let tc_cases : Int32 = 400
+/// Cases generated per property by default.
+let tc_cases_default : Int32 = 400
+
+///|
+/// Cases generated per property. `JSONMEND_LONGRUN=N` raises the count, which
+/// is how the nightly workflow runs the same properties for much longer
+/// (O-6). The seed of every property is a constant, so a failure is always
+/// reproducible at the default count as well.
+fn tc_cases() -> Int32 {
+  match @env.get_env_var("JSONMEND_LONGRUN") {
+    Some(v) => {
+      let mut n = 0
+      let mut ok = v.length() > 0
+      for i = 0; i < v.length(); i = i + 1 {
+        let c = v.at(i).to_int()
+        if c < 0x30 || c > 0x39 {
+          ok = false
+        } else {
+          n = n * 10 + (c - 0x30)
+          if n > 1000000 {
+            ok = false
+          }
+        }
+      }
+      if ok && n > 0 {
+        n
+      } else {
+        tc_cases_default
+      }
+    }
+    None => tc_cases_default
+  }
+}
 
 ///|
 /// Tiny deterministic LCG. The state is `Int64` so that the classic
@@ -509,7 +540,7 @@ fn tc_path_ok(v : Json, path : Array[PathSegment]) -> Bool {
 ///|
 /// Every generated "valid" document really is valid JSON.
 test "TC-P-00 generator soundness" {
-  for doc in tc_valid_docs(20261014L, tc_cases) {
+  for doc in tc_valid_docs(20261014L, tc_cases()) {
     if !is_valid_json(doc) {
       println(doc)
       assert_true(false, msg="generator emitted a document core JSON rejects")
@@ -531,7 +562,7 @@ test "TC-P-01 repaired output is valid JSON" {
     skip_prose: true,
   }
   let multi : Options = { ..Options::default(), multi_root: AsArray, }
-  for input in tc_fuzz_inputs(20261015L, tc_cases) {
+  for input in tc_fuzz_inputs(20261015L, tc_cases()) {
     tc_check_valid(input, opts, "TC-P-01 default")
     tc_check_valid(input, indent2, "TC-P-01 indent")
     tc_check_valid(input, lookahead, "TC-P-01 lookahead")
@@ -547,7 +578,7 @@ test "TC-P-01 repaired output is valid JSON" {
 /// TC-P-02 (a): repairing a repaired text is the identity with no records.
 test "TC-P-02 repair is idempotent" {
   let opts = Options::default()
-  for input in tc_fuzz_inputs(20261016L, tc_cases) {
+  for input in tc_fuzz_inputs(20261016L, tc_cases()) {
     let first = attempt(input, opts)
     if first.err == "" {
       let second = attempt(first.text, opts)
@@ -565,7 +596,7 @@ test "TC-P-02 repair is idempotent" {
 /// repaired text re-parses to the same `Json` value.
 test "TC-P-02 valid documents are the fixed point" {
   let opts = Options::default()
-  for doc in tc_valid_docs(20261017L, tc_cases) {
+  for doc in tc_valid_docs(20261017L, tc_cases()) {
     let o = attempt(doc, opts)
     if o.err != "" || o.recs != "" {
       println(doc)
@@ -588,7 +619,7 @@ test "TC-P-02 valid documents are the fixed point" {
 test "TC-P-03 chunk invariance" {
   let opts = Options::default()
   let r = tc_lcg(20261018L)
-  for _case = 0; _case < tc_cases; _case = _case + 1 {
+  for _case = 0; _case < tc_cases(); _case = _case + 1 {
     let input = tc_fuzz_input(r)
     let one = attempt(input, opts)
     let want = one.text + " | " + one.recs + " | " + one.err
@@ -616,7 +647,7 @@ test "TC-P-03 chunk invariance" {
 test "TC-P-04 truncated documents complete to valid JSON" {
   let opts = Options::default()
   let r = tc_lcg(20261019L)
-  for _case = 0; _case < tc_cases; _case = _case + 1 {
+  for _case = 0; _case < tc_cases(); _case = _case + 1 {
     let doc = tc_doc(r)
     let n = doc.length()
     let fc = tc_first_content(doc)
@@ -653,7 +684,7 @@ test "TC-P-04 truncated documents complete to valid JSON" {
 test "TC-P-05 snapshots are monotonic after completion" {
   let opts = Options::default()
   let r = tc_lcg(20261020L)
-  for _case = 0; _case < tc_cases; _case = _case + 1 {
+  for _case = 0; _case < tc_cases(); _case = _case + 1 {
     let doc = tc_doc(r)
     let chunks = tc_chunks(r, doc, 1 + r.below(4))
     // Trailing whitespace keeps the document valid while guaranteeing that
@@ -811,7 +842,7 @@ fn tc_soup(r : TcLcg) -> String {
 test "TC-P-06 token soup" {
   let opts = Options::default()
   let r = tc_lcg(20261021L)
-  for _case = 0; _case < tc_cases; _case = _case + 1 {
+  for _case = 0; _case < tc_cases(); _case = _case + 1 {
     let input = tc_soup(r)
     let first = attempt(input, opts)
     if first.err == "" {

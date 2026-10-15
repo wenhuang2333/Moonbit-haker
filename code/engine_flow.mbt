@@ -164,7 +164,9 @@ fn Engine::start_key_char(
 }
 
 ///|
-/// Push a container frame, enforcing `max_depth` (E020).
+/// Push a container frame, enforcing `max_depth` (E020). When delta tracking is
+/// on, the new container is announced at the path of the slot it occupies
+/// (FR-18).
 fn Engine::enter(
   self : Engine,
   kind : FrameKind,
@@ -173,7 +175,17 @@ fn Engine::enter(
   if self.stack.length() >= self.opts.max_depth {
     raise DepthLimit(self.opts.max_depth, p.offset)
   }
-  self.stack.push(new_frame(kind, p, false))
+  let track = self.opts.collect_deltas
+  let path = if track { self.slot_path() } else { [] }
+  let f = new_frame(kind, p, false)
+  if track {
+    f.path = path
+    f.announced = true
+  }
+  self.stack.push(f)
+  if track {
+    self.delta_enter(path, kind)
+  }
 }
 
 ///|
@@ -525,6 +537,9 @@ fn Engine::value_done(self : Engine, v : Json) -> Unit raise MendError {
       Json::String(s) =>
         if self.concat_last(s) {
           self.report(ConcatStrings, self.concat_pos)
+          if self.opts.collect_deltas {
+            self.push_delta(AppendText, self.concat_target_path(), None, s)
+          }
           return
         }
       _ => ()
@@ -537,15 +552,23 @@ fn Engine::value_done(self : Engine, v : Json) -> Unit raise MendError {
       None => {
         self.root = Some(v)
         self.phase = PEpilogue
+        if self.opts.collect_deltas {
+          self.delta_land([], v)
+        }
       }
     }
     return
   }
   let idx = self.stack.length() - 1
   self.stack[idx].dirty = true
+  let track = self.opts.collect_deltas
+  let path = if track { self.child_path(idx) } else { [] }
   if self.stack[idx].synthetic {
     self.stack[idx].items.push(v)
     self.stack[idx].ctx = CArrCommaOrEnd
+    if track {
+      self.delta_land(path, v)
+    }
     return
   }
   match self.stack[idx].kind {
@@ -553,6 +576,9 @@ fn Engine::value_done(self : Engine, v : Json) -> Unit raise MendError {
       self.stack[idx].items.push(v)
       self.stack[idx].ctx = CArrCommaOrEnd
       self.stack[idx].after_comma = false
+      if track {
+        self.delta_land(path, v)
+      }
     }
     FObj =>
       match self.stack[idx].last_key {
@@ -576,13 +602,29 @@ fn Engine::assign(
   k : String,
   v : Json,
 ) -> Unit raise MendError {
+  let track = self.opts.collect_deltas
   if self.stack[idx].map.contains(k) {
+    // Merging two duplicates only loses information when the two values differ.
+    let kept = self.stack[idx].map[k]
+    let sev = if json_equal(kept, v) { Info } else { Warning }
     match self.opts.duplicate_keys {
       KeepLast => {
-        self.report(MergeDuplicateKey, self.stack[idx].key_pos)
+        self.report(
+          MergeDuplicateKey,
+          self.stack[idx].key_pos,
+          severity=Some(sev),
+        )
         self.stack[idx].map[k] = v
+        if track {
+          self.delta_land(self.child_path(idx), v)
+        }
       }
-      KeepFirst => self.report(MergeDuplicateKey, self.stack[idx].key_pos)
+      KeepFirst =>
+        self.report(
+          MergeDuplicateKey,
+          self.stack[idx].key_pos,
+          severity=Some(sev),
+        )
       AsError =>
         raise StrictViolation(
           MergeDuplicateKey,
@@ -592,6 +634,9 @@ fn Engine::assign(
     }
   } else {
     self.stack[idx].map[k] = v
+    if track {
+      self.delta_land(self.child_path(idx), v)
+    }
   }
 }
 
@@ -630,6 +675,10 @@ fn Engine::start_string(
   self.parts_len = 0
   self.esc = 0
   self.pending_high = 0
+  self.delta_str_reported = 0
+  if self.opts.collect_deltas {
+    self.delta_open_string(is_key)
+  }
 }
 
 ///|
@@ -891,6 +940,9 @@ fn Engine::finish_string(self : Engine, is_key : Bool) -> Unit raise MendError {
     self.stack[idx].last_key = Some(text)
     self.stack[idx].key_pos = self.tok_start
     self.stack[idx].ctx = CObjColon
+    if self.opts.collect_deltas {
+      self.delta_pending_key()
+    }
   } else {
     self.value_done(Json::string(text))
   }
@@ -973,7 +1025,7 @@ fn Engine::classify_bare(
       LNull => Json::null()
       LNone => Json::null()
     }
-    self.emit_literal(v, text == canon, start)
+    self.emit_literal(v, text == canon, text.length() == canon.length(), start)
     return
   }
   if is_non_finite(lower) {
@@ -1001,12 +1053,57 @@ fn Engine::emit_literal(
   self : Engine,
   v : Json,
   exact : Bool,
+  cased : Bool,
   start : Position,
 ) -> Unit raise MendError {
   if !exact {
-    self.report(ConvertLiteral, start)
+    // `True`/`FALSE` are re-cased and lose nothing (`NormalizeLiteral`, Info);
+    // `tru`/`nul` are completed and do invent a value, which stays a
+    // `Warning` under `ConvertLiteral` (BR-12).
+    if cased {
+      self.report(NormalizeLiteral, start)
+    } else {
+      self.report(ConvertLiteral, start)
+    }
   }
   self.value_done(v)
+}
+
+///|
+/// Structural equality of two parsed values, used to decide whether merging a
+/// duplicate key actually dropped information.
+fn json_equal(a : Json, b : Json) -> Bool {
+  match (a, b) {
+    (Json::Null, Json::Null) => true
+    (Json::True, Json::True) => true
+    (Json::False, Json::False) => true
+    (Json::Number(x, ..), Json::Number(y, ..)) => x == y
+    (Json::String(x), Json::String(y)) => x == y
+    (Json::Array(x), Json::Array(y)) => {
+      let mut ok = x.length() == y.length()
+      let mut i = 0
+      while ok && i < x.length() {
+        if !json_equal(x[i], y[i]) {
+          ok = false
+        }
+        i = i + 1
+      }
+      ok
+    }
+    (Json::Object(x), Json::Object(y)) => {
+      let mut ok = x.length() == y.length()
+      if ok {
+        for k, v in x {
+          match y.get(k) {
+            Some(w) => if !json_equal(v, w) { ok = false }
+            None => ok = false
+          }
+        }
+      }
+      ok
+    }
+    _ => false
+  }
 }
 
 ///|
@@ -1078,12 +1175,17 @@ fn Engine::emit_bare_word(
       self.stack[idx].last_key = Some(text)
       self.stack[idx].key_pos = start
       self.stack[idx].ctx = CObjColon
+      if self.opts.collect_deltas {
+        self.delta_pending_key()
+      }
     }
     BareValue => {
       if self.stack.length() == 0 {
         raise NoJsonFound(start.offset)
       }
-      self.report(QuoteBareWord, start)
+      // A bare word in value position is a guess, not a notation fix: it is
+      // recorded as `Warning` so that `Exactness` becomes `Lossy` (FR-17).
+      self.report(QuoteBareWord, start, slot=ValueSlot)
       self.value_done(Json::string(text))
     }
   }
@@ -1208,6 +1310,9 @@ fn Engine::unwind_top(self : Engine) -> Bool raise MendError {
     if f.dirty {
       self.root = Some(Json::array(f.items))
       self.phase = PEpilogue
+      if self.opts.collect_deltas && f.announced {
+        self.delta_land([], Json::array(f.items))
+      }
       return true
     }
     return false
@@ -1252,7 +1357,9 @@ fn Engine::finish_engine(self : Engine) -> FinalResult raise MendError {
   }
   if self.utf8_need != 0 {
     self.utf8_need = 0
-    raise InvalidUtf8(0)
+    // The sequence was truncated by the end of the input: point at where it
+    // started, in absolute byte coordinates (BR-22).
+    raise InvalidUtf8(self.utf8_start)
   }
   self.snap_stamp = self.snap_stamp + 1
   if self.concat_pending {
@@ -1280,6 +1387,7 @@ fn Engine::finish_engine(self : Engine) -> FinalResult raise MendError {
         repairs: self.reps,
         completeness: Complete,
         repairs_truncated: self.repairs_truncated,
+        exactness: self.exactness,
       }
     }
     None => {
@@ -1455,6 +1563,7 @@ fn Engine::snapshot(self : Engine) -> Snapshot {
     value: self.snapshot_value(),
     completeness: self.completeness(),
     open_path: self.open_path(),
+    exactness: self.exactness,
   }
   self.snap_cache = Some(s)
   self.snap_cache_stamp = self.snap_stamp

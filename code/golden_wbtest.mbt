@@ -50,6 +50,7 @@ fn err_text(e : MendError) -> String {
     InvalidState(_m) => "E030"
     InvalidUtf8(o) => "E040@" + o.to_string()
     InvalidOption(_m) => "E050"
+    InvalidEvent(_m) => "E060"
   }
 }
 
@@ -204,7 +205,7 @@ fn cases_a() -> Array[Case] {
     ok("G-055", "[1,,2]", "[1,2]", "R005@3"),
     ok("G-056", "[,1]", "[1]", "R005@1"),
     ok(
-      "G-060", "[True,False,None]", "[true,false,null]", "R012@1,R012@6,R012@12",
+      "G-060", "[True,False,None]", "[true,false,null]", "R022@1,R022@6,R022@12",
     ),
     ok("G-061", "[undefined]", "[null]", "R012@1"),
     ok(
@@ -223,7 +224,7 @@ fn cases_a() -> Array[Case] {
       { ..Options::default(), non_finite: AsError, },
       "E010(R012@1)",
     ),
-    ok("G-065", "[TRUE,Null]", "[true,null]", "R012@1,R012@6"),
+    ok("G-065", "[TRUE,Null]", "[true,null]", "R022@1,R022@6"),
     ok("G-070", "[+1,.5,5.,007]", "[1,0.5,5,7]", "R011@1,R011@4,R011@7,R011@10"),
     ok("G-071", "[-.5]", "[-0.5]", "R011@1"),
     ok("G-072", "[12345678901234567890]", "[12345678901234567890]", ""),

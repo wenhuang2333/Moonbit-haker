@@ -398,3 +398,80 @@ test "S-021 R019 survives a chunk boundary" {
   assert_eq(fin.text, whole.text)
   assert_eq(fin.repairs.length(), whole.repairs.length())
 }
+
+// ---------------------------------------------------------------------------
+// BR-22: every offset carried by a fatal error is absolute and independent of
+// how the caller split the input into `feed` / `feed_bytes` calls (O-7).
+// ---------------------------------------------------------------------------
+
+///|
+/// Feed one byte chunk, returning `""` or the flattened error.
+fn feed_bytes_try(p : PartialParser, bs : Bytes) -> String {
+  try {
+    p.feed_bytes(bs)
+    ""
+  } catch {
+    e => err_text(e)
+  }
+}
+
+///|
+/// Finish, returning `""` or the flattened error.
+fn finish_err(p : PartialParser) -> String {
+  try {
+    ignore(p.finish())
+    ""
+  } catch {
+    e => err_text(e)
+  }
+}
+
+///|
+test "E040 offset is absolute, not chunk relative" {
+  // A stray 0xFF at absolute byte offset 2, delivered three different ways.
+  let whole : Bytes = [b'[', b'1', b'\xFF']
+  let p0 = PartialParser::new()
+  assert_eq(feed_bytes_try(p0, whole), "E040@2")
+  let p1 = PartialParser::new()
+  assert_eq(feed_bytes_try(p1, [b'[']), "")
+  assert_eq(feed_bytes_try(p1, [b'1', b'\xFF']), "E040@2")
+  let p2 = PartialParser::new()
+  assert_eq(feed_bytes_try(p2, [b'[', b'1']), "")
+  assert_eq(feed_bytes_try(p2, [b'\xFF']), "E040@2")
+  // A valid UTF-8 prefix before the stray byte must not shift the offset.
+  let p3 = PartialParser::new()
+  assert_eq(feed_bytes_try(p3, [b'[', b'"', b'\xC3', b'\xA9', b'"', b',']), "")
+  assert_eq(feed_bytes_try(p3, [b'\xFF']), "E040@6")
+}
+
+///|
+test "E040 offset is absolute when a sequence is truncated at end of input" {
+  // `0xC3` starts a two byte sequence that never completes.
+  let p0 = PartialParser::new()
+  assert_eq(feed_bytes_try(p0, [b'[', b'1', b',', b'\xC3']), "")
+  assert_eq(finish_err(p0), "E040@3")
+  let p1 = PartialParser::new()
+  assert_eq(feed_bytes_try(p1, [b'[', b'1', b',']), "")
+  assert_eq(feed_bytes_try(p1, [b'\xC3']), "")
+  assert_eq(finish_err(p1), "E040@3")
+  // A bad continuation byte is reported at its own absolute offset.
+  let p2 = PartialParser::new()
+  assert_eq(feed_bytes_try(p2, [b'[', b'"', b'\xC3']), "")
+  assert_eq(feed_bytes_try(p2, [b'A']), "E040@3")
+}
+
+///|
+test "E021 and E022 offsets are absolute across chunks" {
+  let small : Options = { ..Options::default(), max_input_len: 10, }
+  let one = attempt("[1,2,3,4,5,6]", small)
+  assert_eq(one.err, "E021(10,@10)")
+  let p = PartialParser::new(options=small)
+  assert_eq(feed_try(p, "[1,2,"), "")
+  assert_eq(feed_try(p, "3,4"), "")
+  assert_eq(feed_try(p, "5,6]"), "E021(10,@10)")
+  let tok5 : Options = { ..Options::default(), max_token_len: 5, }
+  assert_eq(attempt("[\"abcdef\"]", tok5).err, "E022(5,@1)")
+  let p2 = PartialParser::new(options=tok5)
+  assert_eq(feed_try(p2, "[\"abc"), "")
+  assert_eq(feed_try(p2, "def\"]"), "E022(5,@1)")
+}

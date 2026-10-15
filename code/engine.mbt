@@ -38,6 +38,11 @@ priv struct Frame {
   mut last_comma : Position
   synthetic : Bool
   mut dirty : Bool
+  /// Full delta path of this container (FR-18); empty unless delta tracking is
+  /// on, in which case it is the path at which the container was announced.
+  mut path : Array[PathSegment]
+  /// Whether a `Set` delta was emitted for this container.
+  mut announced : Bool
 }
 
 ///|
@@ -121,6 +126,15 @@ priv struct Engine {
   mut utf8_need : Int32
   mut utf8_cp : Int32
   mut utf8_min : Int32
+  mut utf8_start : Int32
+  mut fed_bytes : Int32
+  /// Worst exactness seen so far (FR-17), updated even when records are not
+  /// collected.
+  mut exactness : Exactness
+  /// Deltas recorded since the last `drain_deltas` (FR-18).
+  mut deltas : Array[Delta]
+  /// Code units of the string being scanned already reported as `AppendText`.
+  mut delta_str_reported : Int32
 }
 
 ///|
@@ -158,6 +172,8 @@ fn new_frame(kind : FrameKind, start : Position, synthetic : Bool) -> Frame {
     last_comma: start,
     synthetic,
     dirty: false,
+    path: [],
+    announced: false,
   }
 }
 
@@ -271,32 +287,62 @@ fn Engine::make(opts : Options) -> Engine {
     utf8_need: 0,
     utf8_cp: 0,
     utf8_min: 0,
+    utf8_start: 0,
+    fed_bytes: 0,
+    exactness: Exact,
+    deltas: [],
+    delta_str_reported: 0,
   }
   if opts.multi_root is AsArray {
-    e.stack.push(new_frame(FArr, start, true))
+    let f = new_frame(FArr, start, true)
+    if opts.collect_deltas {
+      f.path = []
+      f.announced = true
+      e.push_delta(Set, [], Some(Json::array([])), "")
+    }
+    e.stack.push(f)
   }
   e
 }
 
 ///|
-/// Record a repair, or raise `E010` when the rule is disabled or the parser
-/// runs in strict mode (D09 9.5).
+/// Record a repair, or raise `E010` when the rule is disabled, the parser runs
+/// in strict mode, or the repair would make the result riskier than
+/// `Options::max_loss` (D09 9.5, FR-17).
 fn Engine::report(
   self : Engine,
   code : RepairCode,
   p : Position,
+  slot~ : Slot = KeySlot,
+  severity~ : Severity? = None,
 ) -> Unit raise MendError {
+  // A few codes are only notation-level in some situations: quoting a key,
+  // re-casing a literal, merging two identical duplicate keys. Those sites
+  // pass an explicit severity; everything else derives it from the code.
+  let severity = match severity {
+    Some(s) => s
+    None => code.severity_in(slot)
+  }
   if self.opts.mode is Strict || !self.opts.rules.is_enabled(code) {
     raise StrictViolation(code, p, code.message())
   }
+  let level = if severity is Warning { Lossy } else { Cosmetic }
+  if !level.within(self.opts.max_loss) {
+    raise StrictViolation(
+      code,
+      p,
+      "exactness " +
+      level.name() +
+      " exceeds max_loss " +
+      self.opts.max_loss.name(),
+    )
+  }
+  if level.rank() > self.exactness.rank() {
+    self.exactness = level
+  }
   if self.opts.collect_repairs {
     if self.reps.length() < self.opts.max_repairs {
-      self.reps.push({
-        code,
-        position: p,
-        severity: code.severity(),
-        message: code.message(),
-      })
+      self.reps.push({ code, position: p, severity, message: code.message(), })
     } else {
       self.repairs_truncated = true
     }
@@ -400,19 +446,26 @@ fn Engine::step(self : Engine, u : UInt16) -> Unit raise MendError {
 
 ///|
 /// Feed raw UTF-8 bytes (FR-12). Invalid bytes raise `E040`.
+///
+/// The payload of `E040` is an absolute byte offset from the start of the whole
+/// input, counted across every `feed_bytes` call, so the diagnostic does not
+/// depend on how the caller split the stream into chunks (BR-22).
 fn Engine::feed_bytes(self : Engine, bs : Bytes) -> Unit raise MendError {
   for i = 0; i < bs.length(); i = i + 1 {
     self.feed_byte(bs[i].to_char().to_int(), i)
   }
+  self.fed_bytes = self.fed_bytes + bs.length()
 }
 
 ///|
-/// Feed one UTF-8 byte.
+/// Feed one UTF-8 byte. `idx` is the offset inside the current chunk; the
+/// absolute offset is `fed_bytes + idx` (BR-22).
 fn Engine::feed_byte(
   self : Engine,
   b : Int32,
   idx : Int32,
 ) -> Unit raise MendError {
+  let abs = self.fed_bytes + idx
   if self.utf8_need == 0 {
     if b < 0x80 {
       self.step(b.to_uint16())
@@ -422,32 +475,35 @@ fn Engine::feed_byte(
       self.utf8_need = 1
       self.utf8_cp = b & 0x1F
       self.utf8_min = 0x80
+      self.utf8_start = abs
       return
     }
     if b >= 0xE0 && b <= 0xEF {
       self.utf8_need = 2
       self.utf8_cp = b & 0x0F
       self.utf8_min = 0x800
+      self.utf8_start = abs
       return
     }
     if b >= 0xF0 && b <= 0xF4 {
       self.utf8_need = 3
       self.utf8_cp = b & 0x07
       self.utf8_min = 0x10000
+      self.utf8_start = abs
       return
     }
-    raise InvalidUtf8(idx)
+    raise InvalidUtf8(abs)
   }
   if b < 0x80 || b > 0xBF {
     self.utf8_need = 0
-    raise InvalidUtf8(idx)
+    raise InvalidUtf8(abs)
   }
   self.utf8_cp = (self.utf8_cp << 6) | (b & 0x3F)
   self.utf8_need = self.utf8_need - 1
   if self.utf8_need == 0 {
     let cp = self.utf8_cp
     if cp < self.utf8_min || cp > 0x10FFFF {
-      raise InvalidUtf8(idx)
+      raise InvalidUtf8(self.utf8_start)
     }
     if cp <= 0xFFFF {
       self.step(cp.to_uint16())

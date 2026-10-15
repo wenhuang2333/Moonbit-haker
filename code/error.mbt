@@ -25,7 +25,7 @@ pub impl Eq for Severity with fn equal(self : Severity, other : Severity) -> Boo
 pub extend Severity with Eq::{not_equal, equal}
 
 ///|
-/// Repair codes. The string form (`R001` … `R021`) is stable: a code never
+/// Repair codes. The string form (`R001` … `R022`) is stable: a code never
 /// changes meaning once released, and codes are only ever appended.
 pub(all) enum RepairCode {
   StripFence
@@ -49,6 +49,10 @@ pub(all) enum RepairCode {
   ConcatStrings
   DropEllipsis
   SkipProse
+  /// A literal was only re-cased (`True` -> `true`). Nothing was invented, so
+  /// this is `Info`; a literal that had to be *completed* stays
+  /// `ConvertLiteral`, which is `Warning`.
+  NormalizeLiteral
 }
 
 ///|
@@ -86,6 +90,7 @@ pub fn RepairCode::number(self : RepairCode) -> Int32 {
     ConcatStrings => 19
     DropEllipsis => 20
     SkipProse => 21
+    NormalizeLiteral => 22
   }
 }
 
@@ -125,8 +130,29 @@ pub fn RepairCode::name(self : RepairCode) -> String {
     ConcatStrings => "ConcatStrings"
     DropEllipsis => "DropEllipsis"
     SkipProse => "SkipProse"
+    NormalizeLiteral => "NormalizeLiteral"
   }
 }
+
+///|
+/// Where a repaired token sits in the grammar (BR-07a).
+pub(all) enum Slot {
+  /// An object member name.
+  KeySlot
+  /// Any value position.
+  ValueSlot
+}
+
+///|
+/// Explicit `Eq` implementation for `Slot`.
+pub impl Eq for Slot with fn equal(self : Slot, other : Slot) -> Bool {
+  (self is KeySlot && other is KeySlot) ||
+  (self is ValueSlot && other is ValueSlot)
+}
+
+///|
+/// Explicit `Eq` extension for `Slot`.
+pub extend Slot with Eq::{not_equal, equal}
 
 ///|
 /// Default severity of a repair code. `QuoteBareWord` is context dependent and
@@ -141,8 +167,22 @@ pub fn RepairCode::severity(self : RepairCode) -> Severity {
     | InsertComma
     | InsertColon
     | EscapeControl
-    | ConcatStrings => Info
+    | ConcatStrings
+    | MismatchedCloser
+    | DropExtraCloser
+    | SkipProse
+    | NormalizeLiteral => Info
     _ => Warning
+  }
+}
+
+///|
+/// Severity of a code in a given slot. Only `QuoteBareWord` differs: quoting a
+/// member name is a notation fix, quoting a value invents a string (BR-07a).
+pub fn RepairCode::severity_in(self : RepairCode, slot : Slot) -> Severity {
+  match (self, slot) {
+    (QuoteBareWord, ValueSlot) => Warning
+    _ => self.severity()
   }
 }
 
@@ -172,7 +212,82 @@ pub fn RepairCode::message(self : RepairCode) -> String {
     ConcatStrings => "string concatenation merged"
     DropEllipsis => "ellipsis placeholder dropped"
     SkipProse => "leading prose skipped"
+    NormalizeLiteral => "literal re-cased"
   }
+}
+
+///|
+/// How much of a result was invented rather than read from the input (FR-17).
+///
+/// The three levels are ordered: `Exact` is the safest, `Lossy` the riskiest.
+/// `Options::max_loss` compares against this order.
+///
+/// * `Exact` — no repair was recorded, so the value is exactly what the input
+///   said (a valid document, possibly with trailing whitespace).
+/// * `Cosmetic` — only notation-level repairs (`Info` severity) were recorded:
+///   quotes normalised, a comment or a code fence removed, a missing comma or
+///   colon inserted, a control character escaped. No value was guessed.
+/// * `Lossy` — at least one `Warning` severity repair was recorded: a value was
+///   invented, dropped, truncated or replaced.
+pub(all) enum Exactness {
+  Exact
+  Cosmetic
+  Lossy
+}
+
+///|
+/// Explicit `Eq` implementation for `Exactness`.
+pub impl Eq for Exactness with fn equal(self : Exactness, other : Exactness) -> Bool {
+  (self is Exact && other is Exact) ||
+  (self is Cosmetic && other is Cosmetic) ||
+  (self is Lossy && other is Lossy)
+}
+
+///|
+/// Explicit `Eq` extension for `Exactness`.
+pub extend Exactness with Eq::{not_equal, equal}
+
+///|
+/// Risk rank of an exactness level: `Exact` 0, `Cosmetic` 1, `Lossy` 2.
+pub fn Exactness::rank(self : Exactness) -> Int32 {
+  match self {
+    Exact => 0
+    Cosmetic => 1
+    Lossy => 2
+  }
+}
+
+///|
+/// Whether `self` is at most as risky as `limit`.
+pub fn Exactness::within(self : Exactness, limit : Exactness) -> Bool {
+  self.rank() <= limit.rank()
+}
+
+///|
+/// Stable lowercase name, e.g. `exact`.
+pub fn Exactness::name(self : Exactness) -> String {
+  match self {
+    Exact => "exact"
+    Cosmetic => "cosmetic"
+    Lossy => "lossy"
+  }
+}
+
+///|
+/// Aggregate the exactness of a result from its repair records (FR-17).
+///
+/// The level is the highest risk among the records: no records is `Exact`, any
+/// `Warning` is `Lossy`, otherwise `Cosmetic`.
+pub fn exactness_of(repairs : Array[Repair]) -> Exactness {
+  if repairs.length() == 0 {
+    return Exact
+  }
+  for r in repairs {
+    if r.severity is Warning {
+      return Lossy
+    }
+  }
+  Cosmetic
 }
 
 ///|
@@ -218,6 +333,9 @@ pub(all) suberror MendError {
   InvalidState(String)
   InvalidUtf8(Int32)
   InvalidOption(String)
+  /// A provider event payload could not be interpreted (E060). Raised by the
+  /// `jsonmend/llm` adapters; the payload is a fixed explanation.
+  InvalidEvent(String)
 }
 
 ///|
@@ -233,6 +351,7 @@ pub fn MendError::code(self : MendError) -> String {
     InvalidState(_) => "E030"
     InvalidUtf8(_) => "E040"
     InvalidOption(_) => "E050"
+    InvalidEvent(_) => "E060"
   }
 }
 
@@ -289,6 +408,10 @@ pub fn MendError::to_string(self : MendError) -> String {
     }
     InvalidOption(msg) => {
       sb.write_string("E050 InvalidOption: ")
+      sb.write_string(msg)
+    }
+    InvalidEvent(msg) => {
+      sb.write_string("E060 InvalidEvent: ")
       sb.write_string(msg)
     }
   }

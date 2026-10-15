@@ -4,7 +4,7 @@
 // machine-checked half of `docs/RULES.md` and `docs/ERRORS.md`.
 
 ///|
-/// All 21 repair codes in table order.
+/// All 22 repair codes in table order.
 fn all_repair_codes() -> Array[RepairCode] {
   [
     StripFence,
@@ -28,13 +28,14 @@ fn all_repair_codes() -> Array[RepairCode] {
     ConcatStrings,
     DropEllipsis,
     SkipProse,
+    NormalizeLiteral,
   ]
 }
 
 ///|
 test "TC-E-API-01 repair code table is complete and self consistent" {
   let codes = all_repair_codes()
-  assert_eq(codes.length().to_string(), "21")
+  assert_eq(codes.length().to_string(), "22")
   for i = 0; i < codes.length(); i = i + 1 {
     let c = codes[i]
     assert_eq(c.number().to_string(), (i + 1).to_string())
@@ -55,8 +56,19 @@ test "TC-E-API-01 repair code table is complete and self consistent" {
   // the code string is R + zero padded number
   assert_eq(RepairCode::StripFence.code(), "R001")
   assert_eq(RepairCode::SkipProse.code(), "R021")
+  assert_eq(RepairCode::NormalizeLiteral.code(), "R022")
   assert_eq(RepairCode::FixNumber.severity() == Warning, true)
   assert_eq(RepairCode::EscapeControl.severity() == Info, true)
+  // notation-only repairs are Info; a completion or a dropped value is Warning
+  assert_eq(RepairCode::MismatchedCloser.severity() == Info, true)
+  assert_eq(RepairCode::DropExtraCloser.severity() == Info, true)
+  assert_eq(RepairCode::SkipProse.severity() == Info, true)
+  assert_eq(RepairCode::NormalizeLiteral.severity() == Info, true)
+  assert_eq(RepairCode::ConvertLiteral.severity() == Warning, true)
+  assert_eq(RepairCode::CloseString.severity() == Warning, true)
+  // only `QuoteBareWord` depends on the slot
+  assert_eq(RepairCode::QuoteBareWord.severity_in(KeySlot) == Info, true)
+  assert_eq(RepairCode::QuoteBareWord.severity_in(ValueSlot) == Warning, true)
 }
 
 ///|
@@ -73,7 +85,7 @@ test "TC-E-API-02 every fatal error exposes a code and a message" {
     InvalidOption("x"),
   ]
   let want = [
-    "E001", "E002", "E010", "E020", "E021", "E022", "E030", "E040", "E050",
+    "E001", "E002", "E010", "E020", "E021", "E022", "E030", "E040", "E050", "E060",
   ]
   for i = 0; i < errors.length(); i = i + 1 {
     assert_eq(errors[i].code(), want[i])

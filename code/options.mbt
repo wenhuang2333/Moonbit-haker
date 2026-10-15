@@ -194,6 +194,12 @@ pub(all) struct Options {
   rules : RuleSet
   indent : Int32
   max_repairs : Int32
+  /// Highest exactness a result may have (FR-17). `Lossy` accepts anything and
+  /// therefore never changes behaviour.
+  max_loss : Exactness
+  /// Record incremental deltas so that `PartialParser::drain_deltas` can return
+  /// them (FR-18). Off by default: tracking costs work and memory.
+  collect_deltas : Bool
 }
 
 ///|
@@ -218,7 +224,47 @@ pub fn Options::default() -> Options {
     rules: RuleSet::all(),
     indent: 0,
     max_repairs: 10000,
+    max_loss: Lossy,
+    collect_deltas: false,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Presets (FR-19). `Options` has eighteen fields; most callers only need one
+// of three profiles.
+// ---------------------------------------------------------------------------
+
+///|
+/// The documented defaults: lenient, every rule on, no exactness gate, no
+/// delta tracking. Equivalent to `Options::default()`.
+pub fn Options::lenient() -> Options {
+  Options::default()
+}
+
+///|
+/// Reject any input that needs a repair: the first recorded repair becomes
+/// `E010`. Equivalent to `{ ..Options::default(), mode: Strict }`.
+pub fn Options::strict() -> Options {
+  { ..Options::default(), mode: Strict, }
+}
+
+///|
+/// Profile for consuming a large language model's tool-call arguments
+/// (FR-18, FR-19): the documented defaults plus `collect_deltas`, so that
+/// `PartialParser::drain_deltas` is available. `duplicate_keys` stays
+/// `KeepLast` and `incomplete_number` stays `Drop`, which are the two settings
+/// a delta stream can express.
+pub fn Options::for_llm() -> Options {
+  { ..Options::default(), collect_deltas: true, }
+}
+
+///|
+/// Profile for a caller that will execute the parsed value (FR-17): notation
+/// repairs are accepted, but anything that invented, dropped or truncated a
+/// value raises `E010`. Distinct from `strict()`, which rejects even a
+/// normalised quote.
+pub fn Options::for_execution() -> Options {
+  { ..Options::default(), max_loss: Cosmetic, }
 }
 
 ///|
@@ -238,5 +284,19 @@ pub fn Options::validate(self : Options) -> Unit raise MendError {
   }
   if self.max_repairs <= 0 {
     raise InvalidOption("max_repairs must be a positive integer")
+  }
+  if self.collect_deltas {
+    // A delta stream cannot take back a container it already announced, so a
+    // duplicate key whose new value is a container cannot be ignored.
+    if self.duplicate_keys is KeepFirst {
+      raise InvalidOption(
+        "collect_deltas requires duplicate_keys KeepLast or AsError: KeepFirst drops a value whose container was already announced",
+      )
+    }
+    if self.incomplete_number is TrimToValid {
+      raise InvalidOption(
+        "collect_deltas requires incomplete_number Drop: an unfinished number cannot be streamed as a delta",
+      )
+    }
   }
 }
