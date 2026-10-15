@@ -41,9 +41,11 @@ moon test --target native      # 本机后端
 moon test --target js          # JS 后端
 ```
 
-期望：129 个测试全部通过（黄金用例 126 条、流式用例 6 块含 21 组断言、属性测试 8 组
-每组 400 例、精确度 240 例、增量流、`llm` 适配器 19 例，以及 0.5.0 新增的
-安全档位 7 例、修复计划 22 例、骨架 5 例）。任一后端失败都视为发布阻塞。
+期望：170 个测试全部通过（0.6.0 发布提交 `cce9ba67` 的 `ci.yml` 第 22 次运行实测；
+0.5.0 时是 129 条，增量来自流式语义安全 `stream_readiness` 与标量根守卫的用例）。
+0.5.0 的构成为黄金用例 126 条、流式用例 6 块含 21 组断言、属性测试 8 组每组 400 例、
+精确度 240 例、增量流、`llm` 适配器 19 例，以及 0.5.0 新增的安全档位 7 例、修复计划
+22 例、骨架 5 例。任一后端失败都视为发布阻塞。
 
 长跑（O-6）：把每个属性的用例数从 400 提到 N（上限 1 000 000），本机 1 000 000 例
 约 41 s（本机实测：400 → 0.12 s、4 000 → 0.23 s、40 000 → 1.75 s、1 000 000 → 41.2 s）。夜间工作流 `.github/workflows/nightly.yml` 用同一变量跑 1 000 000 例。
@@ -59,17 +61,17 @@ JSONMEND_LONGRUN=1000000 moon test --target native
 cd code
 moon coverage clean                     # 清掉上一轮的 .trace 文件，避免计数错位
 moon test --enable-coverage
-moon coverage report -f summary -p zhanshishan/jsonmend      # 根包 2371/2661 = 89.1%
+moon coverage report -f summary -p zhanshishan/jsonmend      # 根包 2850/3063 = 93.0%
 moon coverage report -f summary -p zhanshishan/jsonmend/llm  # llm 包 337/391 = 86.2%
-moon coverage report -f summary                               # 含 bench：2708/3469 = 78.1%
+moon coverage report -f summary                               # 含 bench：3187/3907 = 81.6%
 ```
 
-上表三个数字取自 GitHub Actions 的 `ci.yml` 第 18 次运行（run
-`38759105731`，`f94f9121`，2026-10-15T15:18Z）下载的日志：`-p` 报告末尾的
-`Total: 2371/2661`、完整报告末尾的 `Total: 2708/3469`，`llm` 包由完整报告里
-`llm/*` 六个文件相加得到（57+32+74+55+53+66 = 337，分母 70+34+82+59+55+91 =
-391）。此前这里写的是 `2312/2651`、`2649/3415`，差 59 行覆盖 / 10 行分母、
-bench 从 373 行涨到 417 行 —— 那是更早一次提交的数字，已经过期。
+上表三个数字取自 `ci.yml` 第 22 次运行（run `38781104341`，`cce9ba67`，即 0.6.0
+发布提交，2026-10-15T17:53Z）下载的日志：`-p` 报告末尾的 `Total: 2850/3063`、完整
+报告末尾的 `Total: 3187/3907`；`llm` 包由完整报告里 `llm/*` 六个文件相加得到
+（57+32+74+55+53+66 = 337，分母 70+34+82+59+55+91 = 391），该值自 0.5.0 起未变。
+`bench/main.mbt` 以 `0/453` 计入完整报告的分母。第 18 次运行（`f94f9121`）给出的
+是 `2371/2661` 与 `2708/3469`，那是上一版提交的数字，已随 0.6.0 一并更新。
 
 `cmd/jsonmend` 在覆盖率报告里会因 `quit()` 的 native 实现而抛内部错误，属已知的
 工具链限制，因此只对根包与 `llm` 包设口径。
@@ -79,7 +81,7 @@ bench 从 373 行涨到 417 行 —— 那是更早一次提交的数字，已�
 ```bash
 cd code
 moon build cmd/jsonmend --target native --release
-bash tests/cli_smoke.sh                       # 62 项断言，全部 ok 才算通过
+bash tests/cli_smoke.sh                       # 77 项断言，全部 ok 才算通过
 bash tests/examples.sh                        # 示例输入与期望输出逐字节对照
 bash tests/cli_smoke.sh ./path/to/jsonmend.exe  # 指定其它可执行文件
 ```
