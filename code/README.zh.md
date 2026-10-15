@@ -5,7 +5,7 @@
 | | |
 | --- | --- |
 | 模块 | `wenhuang2333/jsonmend` |
-| 版本 | 0.2.0 |
+| 版本 | 0.3.0 |
 | 许可证 | Apache-2.0 |
 | 首选后端 | `wasm`（同时支持 `native` 与 `js`） |
 
@@ -14,7 +14,7 @@
 - **一次性修复**：`repair` 返回修复后的文本、修复记录列表以及输入的完整性。
 - **一次性解析**：`parse` 返回修复后的 `Json` 树，以及同样的修复记录。
 - **流式部分解析**：`PartialParser` 支持任意分块地 `feed`（或 `feed_bytes`），随时 `snapshot()`，最后 `finish()`。
-- **修复记录**：每次修改都带有稳定编号（`R001`…`R021`）、位置（UTF-16 偏移加 1 基的行列号）、严重级别和固定英文消息。
+- **修复记录**：每次修改都带有稳定编号（`R001`…`R022`）、位置（UTF-16 偏移加 1 基的行列号）、严重级别和固定英文消息。
 - **严格模式**：`Mode::Strict` 把第一条修复记录升级为致命错误 `E010`；逐规则开关关闭某条规则时同样如此。
 - **资源限制**：嵌套深度、输入总长度、单个 token 长度（`E020`/`E021`/`E022`）。
 - **多种策略**：重复键、非有限数、多根值、Markdown 围栏、前导说明文字、引号歧义、输出缩进。
@@ -127,6 +127,8 @@ try {
 | `rules` | `RuleSet` | `RuleSet::all()` | 逐规则开关；关闭某条规则会让对应编号抛 `E010`。 |
 | `indent` | `Int32` | `0` | 输出缩进空格数；`0` 表示紧凑输出。 |
 | `max_repairs` | `Int32` | `10000` | 最多保留多少条修复记录；超出后仍继续修复，但结果把 `repairs_truncated` 置为 `true`。 |
+| `max_loss` | `Exactness` | `Lossy` | 可接受的最大信息损失；记录到更严重的修复时抛 `E010`（默认值等于不设限）。 |
+| `collect_deltas` | `Bool` | `false` | 是否记录增量补丁；打开后 `drain_deltas()` 可用，与 `KeepFirst`、`TrimToValid` 不兼容。 |
 
 非法取值（`max_depth <= 0`、`max_input_len <= 0`、`max_token_len <= 0`、`max_repairs <= 0`、`indent < 0`）由 `Options::validate` 抛出 `E050`；`repair`、`parse` 和 `PartialParser::new` 都会替你调用校验。
 
@@ -157,12 +159,17 @@ try {
 | `R019` | `ConcatStrings` | 合并相邻的字符串拼接（`["a" + "b"]` 得到 `["ab"]`）。 |
 | `R020` | `DropEllipsis` | 删除值位置的 `...` 占位。 |
 | `R021` | `SkipProse` | 跳过 JSON 值之前的说明文字。 |
+| `R022` | `NormalizeLiteral` | 字面量只是大小写变体（`True`、`FALSE`），字符数与规范写法相同。 |
 
 ## 修复记录与错误码
 
 库严格区分两类信号：修复记录是信息性的，随结果返回；致命错误会中止处理，以 `MendError` 抛出。
 
 一条 `Repair` 包含 `code : RepairCode`、`position : Position`、`severity : Severity` 和 `message : String`。`Position.offset` 从 0 开始按 UTF-16 码元计数，`line` 与 `column` 从 1 开始。`Severity::Info` 表示值未变、只是记法被规范化；`Severity::Warning` 表示内容可能被补出、丢弃或改动。消息是固定模板，绝不嵌入用户输入。
+
+严重级别是**精确度标签**（`Exactness`）的唯一依据：无记录为 `Exact`，只有 `Info` 记录为 `Cosmetic`，
+出现任一 `Warning` 记录为 `Lossy`。`Options.max_loss` 在第一条超出上限的记录处抛
+`E010 StrictViolation`（消息里带着那条修复码），CLI 对应 `--max-loss exact|cosmetic|lossy`。
 
 | 编号 | 错误 | 触发条件 |
 | --- | --- | --- |
@@ -174,7 +181,8 @@ try {
 | `E022` | `TokenLimit` | 单个 token 超过 `max_token_len`。 |
 | `E030` | `InvalidState` | 在 `finish` 之后继续 `feed`，或重复 `finish`、在致命错误后 `finish`。 |
 | `E040` | `InvalidUtf8` | `feed_bytes` 遇到非法或截断的 UTF-8（载荷为字节偏移）。 |
-| `E050` | `InvalidOption` | 选项取值越界。 |
+| `E050` | `InvalidOption` | 选项取值越界，或选项组合不成立（如 `collect_deltas` 与 `KeepFirst`）。 |
+| `E060` | `InvalidEvent` | `jsonmend/llm` 收到无法解释的事件负载。 |
 
 `RepairCode::code`、`MendError::code` 和 `MendError::to_string` 分别给出稳定字符串（如 `R005`）、错误编号（如 `E020`）和单行诊断信息。完整参考见 [docs/ERRORS.md](docs/ERRORS.md)。
 
@@ -238,11 +246,16 @@ jsonmend [选项] [文件]
 | `--skip-prose` | 跳过 JSON 之前的说明文字。 |
 | `--quote-lookahead` | 启用引号歧义前瞻。 |
 | `--max-repairs N` | 最多保留多少条修复记录（默认 10000）；被截断时另向标准错误打印一行提示。 |
+| `--max-loss LEVEL` | `exact`、`cosmetic` 或 `lossy`（默认）：超出即退出码 5，并指出是哪条修复。 |
+| `--explain` | 逐条打印级别、位置与带插入符的片段，末尾给出精确度小结。 |
+| `--batch` | 逐行读 `{"id","input"}`，逐行输出 `{"id","rc","exactness","codes","value","text"}`。 |
+| `llm` 子命令 | `jsonmend llm [--provider anthropic\|openai] [--sse] [--follow] [文件]`：把事件流喂给 provider 适配器。 |
 | `-h`、`--help` | 显示帮助。 |
-| `--version` | 显示版本（`jsonmend 0.2.0`）。 |
+| `--version` | 显示版本（`jsonmend 0.3.0`）。 |
 | 文件或 `-` | 读取文件；`-` 或缺省时读取标准输入。 |
 
-`--indent=N`、`--multi-root=MODE`、`--max-repairs=N` 和用空格分隔的写法等价。
+`--indent=N`、`--multi-root=MODE`、`--max-repairs=N`、`--max-loss=LEVEL`、`--provider=NAME`
+和用空格分隔的写法等价。
 
 退出码：
 
@@ -251,9 +264,9 @@ jsonmend [选项] [文件]
 | `0` | 成功；输出中仍可能包含修复。 |
 | `1` | `--check` 发现需要修复。 |
 | `2` | 用法错误（未知选项、选项取值非法，或 `E050`）。 |
-| `3` | 输入无效（`E001`/`E002`/`E040`，或文件无法读取）。 |
+| `3` | 输入无效（`E001`/`E002`/`E040`/`E060`，或文件无法读取）。 |
 | `4` | 触发资源限制（`E020`/`E021`/`E022`）。 |
-| `5` | 严格模式违规（`E010`）。 |
+| `5` | 严格模式违规（`E010`，含 `--max-loss` 超限）。 |
 | `70` | 内部错误（`E030`）。 |
 
 浏览器演示的源码位于 `examples/web`，构建好的页面是 `static/demo/index.html`，可以直接用浏览器打开。该包导出三个「字符串进、字符串出」的入口：`repair_text`、`report_text` 和 `snapshot_text`（返回某个前缀的值、完整性与打开路径），并通过 `globalThis.jsonmendRegister*` 注册到宿主页面，因此页面内没有第二份实现。重新生成 bundle 用 `bash static/demo/build.sh`；构建步骤与无头校验见 [docs/REPRODUCE.md](docs/REPRODUCE.md)。
@@ -265,29 +278,35 @@ cd code
 moon test                      # 默认后端（wasm-gc）
 moon test --target native      # 本机后端
 moon test --target js          # JavaScript 后端
-bash tests/cli_smoke.sh        # 25 项命令行断言
+bash tests/cli_smoke.sh        # 36 项命令行断言
 bash tests/examples.sh         # 示例输入与 code/examples/cases/*.expected 对照
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/eval/run_eval.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/gen_llm_fixtures.py --check
 ```
 
-| 测试集 | 规模 | 0.2.0 结果 |
+| 测试集 | 规模 | 0.3.0 结果 |
 | --- | --- | --- |
 | 黄金用例（规范附录 A、B） | 126 条 | 通过 |
-| 流式用例（S-001…S-020）与分块不变性 | 20 条 + 不变性检查 | 通过 |
+| 流式用例（S-001…S-021）与分块不变性 | 21 条 + 不变性检查 | 通过 |
+| 精确度标签（TC-X-01） | 18 行手写表 + 240 例属性 | 通过 |
+| 增量流重放（TC-DELTA） | 400 + 400 份文档，7 组选项剖面 | 通过 |
+| 大模型适配器（TC-LLM） | 9 个夹具 × 双 provider，19 例 | 通过 |
+| 真值评测（TC-EVAL） | 1200 条，协议先冻结 | 恢复率 100.00%，漏标 0 |
 | 属性与模糊测试（TC-P-01…TC-P-06） | 8 组 × 400 例 | 通过，无反例 |
-| 公共面（逐个 R 码与 E 码） | 21 + 9 个码的 9 项断言 | 通过 |
+| 公共面（逐个 R 码与 E 码） | 22 + 10 个码的 9 项断言 | 通过 |
 | 选项策略与字节输入 | 10 例 | 通过 |
-| 命令行冒烟（退出码 0/1/2/3/4/5/70） | 25 项断言 | 通过 |
+| 命令行冒烟（退出码 0/1/2/3/4/5/70） | 36 项断言 | 通过 |
 | 差分语料（对照 `jsonrepair` / `json-repair`） | 402 条 | 202 处差异全部有文档解释，未解释 0 |
-| 库代码行覆盖率 | 1137/1223 行 | 93.0% |
+| 库代码行覆盖率 | 根包 1378/1487 行、`llm` 包 223/243 行 | 92.7% / 91.8% |
 
-三个后端结果一致：wasm-gc、native 与 JavaScript 均为 32 个测试块全通过。`.github/workflows/ci.yml` 在每次推送时执行同一组命令，因此上表是重新推导出来的结果，而不是一次性记录。
+三个后端结果一致：wasm-gc、native 与 JavaScript 均为 69 个测试全通过。`.github/workflows/ci.yml` 在每次推送时执行同一组命令，因此上表是重新推导出来的结果，而不是一次性记录。
 复现步骤、阈值与两项已知未达标项见 [docs/REPRODUCE.md](docs/REPRODUCE.md)
 与 [docs/TRACEABILITY.md](docs/TRACEABILITY.md)。
 
 ## 与 jsonrepair 的差异
 
-JSONMend 不是 `jsonrepair` 的移植，也不追求逐字节一致的输出。若干差异是有意为之、且已文档化的策略选择：根值之后的尾随内容默认保留第一个值而不是合并，Markdown 围栏默认去除，重复键默认保留最后一个值，未完成的数字在快照中默认不出现，严格模式与逐规则开关也没有直接对应物。差分工具在手工编写与自动变异的语料上同时运行 `jsonrepair`（TypeScript/Node）与 `json-repair`（Python），比较解析后的值，并对每一处差异分类。在随 0.2.0 提交的那份报告中，202 处差异全部有文档化的成因，没有无法解释的差异。方法与分类结果、参照库版本见 [docs/DIVERGENCES.md](docs/DIVERGENCES.md)；规则与需求的映射见 [docs/TRACEABILITY.md](docs/TRACEABILITY.md)。
+JSONMend 不是 `jsonrepair` 的移植，也不追求逐字节一致的输出。若干差异是有意为之、且已文档化的策略选择：根值之后的尾随内容默认保留第一个值而不是合并，Markdown 围栏默认去除，重复键默认保留最后一个值，未完成的数字在快照中默认不出现，严格模式与逐规则开关也没有直接对应物。差分工具在手工编写与自动变异的语料上同时运行 `jsonrepair`（TypeScript/Node）与 `json-repair`（Python），比较解析后的值，并对每一处差异分类。0.3.0 的改动没有让这份报告变动一个字节：精确度标签与规则编号调整不改变任何取值。在随 0.3.0 提交的那份报告中，202 处差异全部有文档化的成因，没有无法解释的差异。方法与分类结果、参照库版本见 [docs/DIVERGENCES.md](docs/DIVERGENCES.md)；规则与需求的映射见 [docs/TRACEABILITY.md](docs/TRACEABILITY.md)。
 
 ## 性能
 
@@ -298,7 +317,15 @@ moon run bench --target native --release
 moon run bench --target js --release
 ```
 
-在 2026 年的 Apple 芯片笔记本上，native 实测 41–43 MB/s，js 实测 19–37 MB/s（同一台机器多次观测的中位数，不同轮次可差 ±15%）。这些数字是观测值而非承诺：吞吐取决于输入形态、分块大小、快照频率与工具链版本，内存与产物大小另行测量。完整方法与表格见 [docs/BENCHMARK.md](docs/BENCHMARK.md)，复现步骤见 [docs/REPRODUCE.md](docs/REPRODUCE.md)。
+在 2026 年的 Apple 芯片笔记本上，native 实测合法 JSON 41–42 MB/s、瑕疵 JSON
+83–87 MB/s、单个超长字符串 594 MB/s，js 实测 22–39 MB/s（同机多次观测的中位数，
+不同轮次可差 ±15%）。同一轮还测了两个对流式真正重要的数字：**首个可见值**出现在
+文档长度的 0.7% 处（工具调用载荷的中位数），打开 `collect_deltas` 的代价是基线的
+**1.39–1.51 倍**——后一个数字是**已知未达标项**，不是成绩。
+
+这些数字是观测值而非承诺：吞吐取决于输入形态、分块大小、快照频率与工具链版本。
+内存（17.6–38.0 倍输入，同样未达标）与产物大小另行测量。完整方法、表格与决策记录见
+[docs/BENCHMARK.md](docs/BENCHMARK.md)，复现步骤见 [docs/REPRODUCE.md](docs/REPRODUCE.md)。
 
 ## 已知限制
 
@@ -312,24 +339,33 @@ moon run bench --target js --release
 - **`Json` 数字遵循 core 的表示。** 超大整数在树中可能损失精度，但修复后的文本保留数字原文。
 - **`quote_lookahead` 默认关闭。** 开启后，缺少逗号的连续字符串会偏向解释为字符串内容。
 - **修复记录受 `max_repairs` 限制（默认 10000 条）。** 超出后仍会继续修复但不再记录，结果把 `repairs_truncated` 置为 `true`，CLI 另向标准错误打印提示。
+- **增量补丁流正确但不便宜。** 每次变更都要分配一个 `Delta` 与一份路径数组，1 MB 文档产生约 19.5 万条记录，耗时是基线的 1.39–1.51 倍；紧凑增量缓冲是既定修法。
+- **`--skip-prose` 只能跳过容器根之前的说明文字。** 标量根带前缀文字（`Sure!\n42`）仍会抛 `E002`。
+- **`DeltaOp::Retract` 从不发出。** 它存在于枚举里以固定契约，默认 `KeepLast` 策略不需要撤回。
+- **内存是输入的 17.6–38.0 倍。** 预算是 4 倍；要达到必须做「只直出文本、不建树」的模式。
+- **JS 后端仍会为每个码元分配一个 `Position`。** n/2n/4n 比值因此会到 2.3–2.8（阈值 2.3）；绝对吞吐远高于 5 MB/s 下限，因此记录为决策而不是立即修。
 - **解析器实例非线程安全。** 每个输入流应使用独立实例。
 
 ## 路线图
 
+- 发布到 mooncakes.io（只差一次交互式 `moon login`，其余已就绪）。
+- 让增量流变便宜：把操作编码进可复用缓冲、共享路径前缀，目标从 1.39–1.51 倍降到 ≤1.11 倍。
 - 增加 `FR-16` 事件/回调接口，让流式消费方不必做全量快照拷贝。
-- 继续扩大差分语料（多根嵌套文档、更深的变异），并为流式路径补内存预算测试。
-- 发布到 mooncakes.io，并保留可复现构建记录。
+- 增加只直出文本的模式（`want_value = false`），让流式路径达到 4 倍输入的内存预算；当前是 17.6–38.0 倍。
+- 给浏览器演示页加一个播放录制事件流的标签页，让标签与参数生长不用终端就能看见。
+- 把引擎的「当前位置」与「已记录位置」分离，消除 JS 后端的每码元分配。
+- 继续扩大差分语料，并为流式路径补内存预算测试。
 - 保持 `docs/RULES.md`、`docs/ERRORS.md`、`docs/DIVERGENCES.md`、`docs/BENCHMARK.md` 与 `docs/TRACEABILITY.md` 与代码同步。
 
 ## 贡献
 
-- `CONTRIBUTING.md`（随 0.2.0 交付）覆盖开发环境、测试运行方式、提交规范，以及如何新增修复规则——规则变更必须同时更新 `docs/RULES.md`、`docs/TRACEABILITY.md` 与 golden 测试。
+- `CONTRIBUTING.md`（随发布交付）覆盖开发环境、测试运行方式、提交规范，以及如何新增修复规则——规则变更必须同时更新 `docs/RULES.md`、`docs/TRACEABILITY.md` 与 golden 测试。
 - Issue 模板覆盖缺陷（输入、选项、期望与实际输出、后端）和新规则建议。
-- `SECURITY.md`（随 0.2.0 交付）说明问题上报方式：本库处理的是不可信输入。
+- `SECURITY.md`（随发布交付）说明问题上报方式：本库处理的是不可信输入。
 
 ## 许可证与致谢
 
-JSONMend 以 Apache License 2.0 发布（`code/moon.mod` 中 `license = "Apache-2.0"`）。`LICENSE`/`NOTICE` 文件属于 0.2.0 的发布清单。
+JSONMend 以 Apache License 2.0 发布（`code/moon.mod` 中 `license = "Apache-2.0"`）。`LICENSE`/`NOTICE` 文件属于发布清单。
 
 - [jsonrepair](https://github.com/josdejong/jsonrepair)（TypeScript）与 [json-repair](https://github.com/mangiucugna/json_repair)（Python）在差分报告中作为行为参照。它们仅用于对照，未内嵌任何代码。
 - MoonBit 核心库（`moonbitlang/core/json`、`moonbitlang/core/string`）提供 `Json` 类型与字符串处理。

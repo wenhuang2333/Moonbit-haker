@@ -3,12 +3,15 @@
 状态取值：**通过**（有可复现证据）、**削减**（有意未实现或有已知未达标项，原因见备注）。
 所有证据都在本仓库内可复现，命令见 `docs/REPRODUCE.md`。
 
+`FR-21` … `FR-26` 是 0.3.0 新增的需求，来自本轮优化建议（`I-1` … `I-5`），
+编号在本仓库内连续，不与 D06 原文冲突（D06 止于 FR-20）。
+
 ## 功能需求
 
 | 需求 | 名称 | 优先级 | 业务规则 | 测试用例 | 证据 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | FR-01 | 一次性修复 | P0 | BR-01 BR-04 | TC-G 全部、TC-P-01 | `golden_wbtest.mbt` 126 条（附录 A 77 + 附录 B 49）；`prop_wbtest.mbt` TC-P-01 400 例 × 4 组选项 | 通过 |
-| FR-02 | 修复报告 | P0 | BR-19 BR-20 | TC-G（记录字段）、TC-E-API | 记录含 code/position/severity/message；`error_api_wbtest.mbt` 校验 21 条规则的表完整性；CLI `--report` | 通过 |
+| FR-02 | 修复报告 | P0 | BR-19 BR-20 | TC-G（记录字段）、TC-E-API | 记录含 code/position/severity/message；`error_api_wbtest.mbt` 校验 22 条规则的表完整性；CLI `--report` | 通过 |
 | FR-03 | 值输出 | P0 | BR-01 | TC-G-VAL、TC-P-01 | `parse` 返回 `Json`；TC-P-02b 校验 `parse` 与文本一致 | 通过 |
 | FR-04 | 合法输入恒等 | P0 | BR-02 BR-03 | TC-P-02b | 合法文档零记录、文本逐字不变 | 通过 |
 | FR-05 | 截断补全 | P0 | BR-13 | TC-G-BR13、TC-P-04 | `{"a":{"b":[1,2` → `{"a":{"b":[1,2]}}`；400 例随机截断后 `finish` 全部合法 | 通过 |
@@ -23,10 +26,16 @@
 | FR-14 | 引号歧义前瞻 | P1 | BR-06 | TC-G-BR06L | `quote_lookahead` 黄金用例 + 属性测试选项组 | 通过 |
 | FR-15 | 多根值 | P1 | BR-15 | TC-O-03、TC-D | 三种策略（KeepFirst/AsArray/AsError）行为固定；差分探针证明与参照一致 | 通过 |
 | FR-16 | 事件接口 | P2 | BR-16 | — | 未实现 | 削减（P2，0.2.0 未做） |
-| FR-17 | 命令行 | P1 | BR-17 | TC-C-01 | `tests/cli_smoke.sh` 25 项断言全绿；退出码 0/1/2/3/4/5/70 全覆盖 | 通过 |
+| FR-17 | 命令行 | P1 | BR-17 | TC-C-01 | `tests/cli_smoke.sh` 36 项断言全绿；退出码 0/1/2/3/4/5/70 全覆盖 | 通过 |
 | FR-18 | 浏览器演示 | P1 | — | TC-W-01 | `static/demo/index.html` 由 MoonBit JS 产物驱动，Playwright 无头验证通过（无 console 错误） | 通过 |
 | FR-19 | 拼接与省略号 | P2 | BR-21 | TC-G-BR21 | `...` 删除（R020，G-301…G-303）；`"a" + "b"` 合并（R019，G-300、G-300b…G-300e，覆盖根值/数组/对象与流式 S-021） | 通过 |
 | FR-20 | 缩进输出 | P2 | — | TC-G-INDENT | CLI `--indent 2` 与 `Options.indent` | 通过 |
+| FR-21 | 精确度标签与执行安全闸 | P0 | BR-13 BR-19 | TC-EVAL、TC-X-01 | `Exactness` 进入四个结果类型；`max_loss` 在超限的第一条记录处抛 `E010`；`exactness_wbtest.mbt` 的 240 例属性 + 18 行手写表；真值评测漏标率 0（`docs/EVAL.md`） | 通过 |
+| FR-22 | 增量补丁流 | P1 | BR-16 | TC-DELTA | `delta_wbtest.mbt`：400 份生成文档 + 400 份变异输入上「增量重放 == 快照」，另有 7 组选项剖面、RFC 6901 指针、空 drain、选项冲突 | 通过（吞吐未达标，见 NFR） |
+| FR-23 | 大模型工具流适配器 | P1 | BR-16 | TC-LLM | `code/llm/`：9 个夹具 × 双 provider，`moon test` 65→69 例；CLI `jsonmend llm`（`--provider`、`--sse`、`--follow`） | 通过 |
+| FR-24 | 真值评测 | P1 | — | TC-EVAL | `tests/eval/corpus.py` 1200 条（协议先冻结于 `docs/EVAL_REGISTRATION.md`）；`run_eval.py` 四条预登记判据全 PASS | 通过 |
+| FR-25 | 长跑属性测试 | P1 | — | TC-P-LONG | `JSONMEND_LONGRUN=N` 提高每个属性的用例数；`.github/workflows/nightly.yml` 以 1 000 000 例夜间运行 | 通过 |
+| FR-26 | 修复解释输出 | P2 | BR-20 | TC-C-01 | CLI `--explain`：级别 + 位置 + 插入符片段 + 精确度小结 | 通过 |
 
 ## 非功能需求
 
@@ -41,19 +50,21 @@
 | NFR-ROB-02 | 资源限制 | TC-E-API-03、黄金 E020/E021/E022 | 深度/长度/token 上限抛 E020/E021/E022；`Options::validate` 拒绝非法上限 | 通过 |
 | NFR-PERF-01 | 线性时间 | TC-B-01 | 翻倍比值 native 2.0/2.0（4 次观测 2.0–2.3）；JS 4n 档 2.3–2.8（8 次观测，中位数 2.5），**超过 2.3 阈值** | native 通过；**JS 未稳定达标**（根因与改法见 `docs/BENCHMARK.md`「JS 后端的线性度问题」） |
 | NFR-PERF-02 | 吞吐 | TC-B-02 | native 41–43 MB/s、JS 19–37 MB/s（阈值 20 / 5） | 通过 |
-| NFR-PERF-03 | 流式开销 | TC-B-03 | 1 码元分块 23.3 MB/s（64 KB 分块的 56%）；`snapshot` 状态未变时命中记忆化（1000 次重复 10.8 ms） | 通过 |
-| NFR-PERF-04 | 内存 | TC-B-04 | CLI 按 64 KB 分块读入并单次 `fread` 取块，12.95 MB 对象数组输入峰值 230.6 MB（17.8 × 输入），**仍超出 4 × 输入 + O(深度) 的预算** | 削减（原因见 `docs/BENCHMARK.md`；需要「只产出文本、不建树」的模式） |
-| NFR-SIZE-01 | 产物体积 | TC-B-05 | wasm-gc release 98 247 B（95.9 KiB），上限 150 KB | 通过 |
-| NFR-PORT-01 | 跨后端一致 | TC-X-01 | `moon test`（wasm-gc）、`--target native`、`--target js` 均 32/32 通过 | 通过 |
+| NFR-PERF-03 | 流式开销 | TC-B-03 | 1 码元分块 23.6 MB/s（64 KB 分块的 58%）；`snapshot` 状态未变时命中记忆化（1000 次重复 11.1 ms） | 通过 |
+| NFR-PERF-05 | 增量流开销 | TC-B-07 | `collect_deltas` 打开后耗时是基线的 1.39–1.44 倍（native）、1.14–1.36 倍（JS），**未达到「不低于基线 90%」** | 削减（每条变更分配一个 `Delta` 与路径数组；见 `docs/BENCHMARK.md`） |
+| NFR-PERF-06 | 首个可见值 | TC-B-08 | 工具调用文档中位数：首个值出现在文档长度 0.7% 处；「95% 覆盖」判据为 95.3%（对象结构决定，几乎无收益） | 通过（指标已量化） |
+| NFR-PERF-04 | 内存 | TC-B-04 | CLI 按 64 KB 分块读入并单次 `fread` 取块，12.95 MB 对象数组输入峰值 231.4 MB（17.6 × 输入），**仍超出 4 × 输入 + O(深度) 的预算** | 削减（原因见 `docs/BENCHMARK.md`；需要「只产出文本、不建树」的模式） |
+| NFR-SIZE-01 | 产物体积 | TC-B-05 | wasm-gc release 103 784 B（101.4 KiB），上限 150 KB | 通过 |
+| NFR-PORT-01 | 跨后端一致 | TC-X-01 | `moon test`（wasm-gc）、`--target native`、`--target js` 均 69/69 通过 | 通过 |
 | NFR-DET-01 | 确定性 | TC-X-02 | 固定种子的 LCG；同一输入重复运行输出逐字节相同 | 通过 |
-| NFR-API-01 | 接口稳定 | TC-R-02 | 公共面：`repair`/`parse`/`is_valid_json`、`PartialParser` 5 个方法、5 个结果类型、6 个策略枚举、`RuleSet` 4 个方法、`RepairCode`/`MendError` 查询函数 | 通过 |
+| NFR-API-01 | 接口稳定 | TC-R-02 | 公共面：`repair`/`parse`/`is_valid_json`、`PartialParser` 6 个方法、`Exactness`/`Delta` 等 8 个结果类型、6 个策略枚举、`RuleSet` 4 个方法、`RepairCode`/`MendError` 查询函数；`jsonmend/llm` 子包 6 个入口 | 通过 |
 | NFR-API-02 | 易用 | TC-DOC-01 | `README.md` / `README.zh.md`：安装、三行快速开始、流式示例、选项表、CLI 帮助 | 通过 |
-| NFR-DOC-01 | 文档完整 | TC-DOC-02 | `docs/` 七份文档 + `CHANGELOG.md` + `LICENSE` + `NOTICE` | 通过 |
-| NFR-TEST-01 | 覆盖率 | TC-COV-01 | `moon test --enable-coverage` + `moon coverage report -f summary -p wenhuang2333/jsonmend`：库代码 1137/1223 行 = **93.0%**（不加 `-p` 时 `bench/main.mbt` 也计入，得 1137/1393 = 81.6%） | 通过 |
+| NFR-DOC-01 | 文档完整 | TC-DOC-02 | `docs/` 十份文档（含评测协议与结果、AI 使用说明）+ `CHANGELOG.md` + `LICENSE` + `NOTICE` | 通过 |
+| NFR-TEST-01 | 覆盖率 | TC-COV-01 | `moon test --enable-coverage` + `moon coverage report -f summary -p wenhuang2333/jsonmend`：根包 **1378/1487 = 92.7%**，`-p wenhuang2333/jsonmend/llm` 为 223/243 = 91.8%（不加 `-p` 时 `bench/main.mbt` 也计入，得 1601/2002 = 80.0%）；`cmd/jsonmend` 因 `quit()` 无法出报告 | 通过 |
 | NFR-SEC-01 | 安全 | TC-P-06、TC-P-07 | 错误消息模板固定、不回显输入；资源上限防止病态输入耗尽内存；无外部依赖 | 通过 |
 | NFR-COMP-01 | 合规 | TC-L-01 | `LICENSE`（Apache-2.0 全文）、`NOTICE`（依赖与参照实现许可证：`jsonrepair` ISC、`json-repair` MIT） | 通过 |
 | NFR-MNT-01 | 可维护 | TC-R-03 | `moon check --deny-warn` 零警告、`moon fmt --check` 干净、`docs/REPRODUCE.md` 一键复现；`.github/workflows/ci.yml` 在两个 job 中执行同一组命令，并已在 GitHub Actions 上跑通（run #1 `eff1ad2`、run #2 `169353e`、run #5 `9bf0a08` 均 success，run #5 覆盖本轮代码改动） | 通过 |
-| NFR-REL-01 | 可发布 | TC-R-01 | `moon.mod` v0.2.0 + Apache-2.0 + repository；`moon package` 产出 128 KB 包；未发布到 mooncakes.io | 削减（未发布到注册表） |
+| NFR-REL-01 | 可发布 | TC-R-01 | `moon.mod` v0.3.0 + Apache-2.0 + repository；`moon package` 通过；未发布到 mooncakes.io | 削减（未发布到注册表） |
 
 ## 反向覆盖
 
@@ -82,3 +93,5 @@
 | NFR-PERF-01（JS） | JS 产物每码元构造一个 `Position` 对象 | 4n/2n 达 2.3–2.8，超出 2.3；需把当前位置与历史位置分离 |
 | NFR-PERF-04 内存预算 | 完整解析树常驻内存 | 12.95 MB 输入峰值 230.6 MB（单个 10 MB 字符串为 38 倍）；需要「只产出文本、不建树」的模式才能达标 |
 | NFR-REL-01 发布 | 未发布到 mooncakes.io（`moon whoami` 未登录） | 只能通过仓库源码使用 |
+| NFR-PERF-05 增量流开销 | 每条变更分配一个 `Delta` 记录与一份路径数组 | 1.39–1.51 × 基线耗时；需紧凑增量缓冲 |
+| NFR-PERF-06「95% 覆盖」判据 | JSON 对象只有接近闭合才「几乎完整」 | 该判据结构性不敏感（95.3%）；「首个可见值」0.7% 才是有效指标 |

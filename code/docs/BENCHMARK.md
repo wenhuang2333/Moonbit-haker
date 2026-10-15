@@ -1,6 +1,6 @@
 # 基准报告（TC-B）
 
-本文记录 JSONMend 0.2.0 的实测性能。所有数字都是**同一台机器上的一次观测**，
+本文记录 JSONMend 0.3.0 的实测性能。所有数字都是**同一台机器上的一次观测**，
 不是性能承诺；阈值判定见 `docs/TRACEABILITY.md` 的 NFR 一栏。
 
 ## 环境
@@ -25,70 +25,82 @@ bash code/tests/bench.sh size     # 只量产物体积
 基准程序（`code/bench/main.mbt`）用 `@env.now()` 计时，每档至少 100 ms，取 5 轮中位数，
 自动放大重复次数；语料在计时前生成。输入分 1 KB、100 KB、1 MB、10 MB 四档，
 覆盖合法 JSON、重度瑕疵 JSON、深层嵌套（64 / 512 层）与超长字符串（1 MB 单串）。
+0.3.0 另加两档：**增量流**（`collect_deltas`，见下）与 **TTFV**（首个可见值出现的位置）。
 
 ## 结果：native（release）
 
 ```
-throughput	valid	1079	0.0 ms	42.0 MB/s
-throughput	valid	104056	2.3 ms	42.7 MB/s
-throughput	valid	1064856	24.4 ms	41.6 MB/s
-throughput	valid	10643280	243.0 ms	41.8 MB/s
-throughput	flawed	1091	0.0 ms	74.1 MB/s
-throughput	flawed	102445	1.2 ms	78.4 MB/s
-throughput	flawed	1048622	12.1 ms	82.6 MB/s
-throughput	flawed	10485824	126.0 ms	79.4 MB/s
+throughput	valid	1079	0.0 ms	41.0 MB/s
+throughput	valid	104056	2.3 ms	42.2 MB/s
+throughput	valid	1064856	24.8 ms	40.9 MB/s
+throughput	valid	10643280	248.0 ms	40.9 MB/s
+throughput	flawed	1091	0.0 ms	76.5 MB/s
+throughput	flawed	102445	1.2 ms	80.1 MB/s
+throughput	flawed	1048622	11.6 ms	86.5 MB/s
+throughput	flawed	10485824	121.0 ms	82.6 MB/s
 deep	depth 64	0.0 ms
-deep	depth 512	0.0 ms
-long-string	1 MB	1.7 ms	580.0 MB/s
-parse-only	1 MB	24.0 ms	42.3 MB/s
-linearity	n	23.8 ms
-linearity	2n	48.3 ms	ratio 2.0
-linearity	4n	96.5 ms	ratio 2.0
-stream	chunk 1	43.7 ms	23.3 MB/s
+deep	depth 512	0.1 ms
+long-string	1 MB	1.7 ms	594.1 MB/s
+parse-only	1 MB	25.0 ms	40.6 MB/s
+linearity	n	24.4 ms
+linearity	2n	49.0 ms	ratio 2.0
+linearity	4n	99.0 ms	ratio 2.0
+stream	chunk 1	43.0 ms	23.6 MB/s
 stream	chunk 16	27.8 ms	36.6 MB/s
-stream	chunk 1024	24.8 ms	40.9 MB/s
-stream	chunk 65536	24.6 ms	41.3 MB/s
-stream	snapshot every 1024	46.3 ms	21.9 MB/s
-stream	snapshot every 65536	25.0 ms	40.6 MB/s
-snapshot	repeat 1000x without feeding	10.8 ms
+stream	chunk 1024	25.5 ms	39.8 MB/s
+stream	chunk 65536	25.0 ms	40.6 MB/s
+stream	snapshot every 1024	46.0 ms	22.1 MB/s
+stream	snapshot every 65536	25.5 ms	39.8 MB/s
+snapshot	repeat 1000x without feeding	11.1 ms
+deltas	chunk 1024	35.0 ms	29.0 MB/s	138.6% of baseline	194992 deltas
+deltas	chunk 65536	36.3 ms	28.0 MB/s	143.9% of baseline	194706 deltas
+ttfv	call 312	first 5.1%	ttfv95 97.4%	label at first exact
+ttfv	call 1131	first 1.4%	ttfv95 96.2%	label at first exact
+ttfv	call 4349	first 0.4%	ttfv95 95.3%	label at first exact
+ttfv	median over 20 documents	first 0.7%	ttfv95 95.3%
 ```
 
 ## 结果：JavaScript 后端（release，node）
 
 ```
-throughput	valid	1079	0.0 ms	31.2 MB/s
-throughput	valid	104056	3.4 ms	29.2 MB/s
-throughput	valid	1064856	33.7 ms	30.2 MB/s
-throughput	valid	10643280	504.0 ms	20.1 MB/s
-throughput	flawed	1091	0.0 ms	50.2 MB/s
-throughput	flawed	102445	1.9 ms	51.8 MB/s
-throughput	flawed	1048622	21.2 ms	47.2 MB/s
-throughput	flawed	10485824	264.0 ms	37.9 MB/s
+throughput	valid	1079	0.0 ms	39.0 MB/s
+throughput	valid	104056	3.2 ms	31.1 MB/s
+throughput	valid	1064856	32.8 ms	31.0 MB/s
+throughput	valid	10643280	469.0 ms	21.6 MB/s
+throughput	flawed	1091	0.0 ms	42.6 MB/s
+throughput	flawed	102445	1.8 ms	55.7 MB/s
+throughput	flawed	1048622	20.0 ms	50.0 MB/s
+throughput	flawed	10485824	244.0 ms	41.0 MB/s
 deep	depth 64	0.0 ms
 deep	depth 512	0.1 ms
-long-string	1 MB	3.6 ms	280.0 MB/s
-parse-only	1 MB	39.3 ms	25.8 MB/s
-linearity	n	39.3 ms
-linearity	2n	81.5 ms	ratio 2.1
-linearity	4n	204.0 ms	ratio 2.5
-stream	chunk 1	63.0 ms	16.1 MB/s
-stream	chunk 16	43.0 ms	23.6 MB/s
-stream	chunk 1024	40.0 ms	25.4 MB/s
-stream	chunk 65536	39.7 ms	25.6 MB/s
-stream	snapshot every 1024	50.0 ms	20.3 MB/s
-stream	snapshot every 65536	39.7 ms	25.6 MB/s
-snapshot	repeat 1000x without feeding	14.6 ms
+long-string	1 MB	3.5 ms	287.1 MB/s
+parse-only	1 MB	37.7 ms	27.0 MB/s
+linearity	n	37.0 ms
+linearity	2n	81.0 ms	ratio 2.2
+linearity	4n	193.0 ms	ratio 2.4
+stream	chunk 1	57.0 ms	17.8 MB/s
+stream	chunk 16	39.7 ms	25.6 MB/s
+stream	chunk 1024	38.7 ms	26.3 MB/s
+stream	chunk 65536	38.7 ms	26.3 MB/s
+stream	snapshot every 1024	52.0 ms	19.5 MB/s
+stream	snapshot every 65536	38.7 ms	26.3 MB/s
+snapshot	repeat 1000x without feeding	14.1 ms
+deltas	chunk 1024	47.7 ms	21.3 MB/s	114.4% of baseline	194992 deltas
+deltas	chunk 65536	51.5 ms	19.7 MB/s	135.5% of baseline	194706 deltas
+ttfv	median over 20 documents	first 0.7%	ttfv95 95.3%
 ```
 
 ## 判定
 
 | 需求 | 阈值 | 实测 | 结论 |
 | --- | --- | --- | --- |
-| NFR-PERF-01 线性时间 | 输入翻倍耗时不超过 2.3 倍 | native 2.0 / 2.0（4 次观测 2.0–2.3）；JS 2.1 / **2.5**（8 次观测 4n 档 2.3–2.8） | native 达标；**JS 未稳定达标**（见下） |
-| NFR-PERF-02 吞吐 | native ≥ 20 MB/s，JS ≥ 5 MB/s（合法 JSON） | native 41.6–42.7，JS 20.1–31.2 | 达标 |
-| NFR-PERF-03 流式开销 | `feed` 摊还 O(块长)；`snapshot` 为 O(树大小) | 1 码元分块仍有 23.3 MB/s（native，为 64 KB 分块的 56%）；`snapshot every 1024` 21.9 MB/s、`every 65536` 40.6 MB/s | 达标（快照成本随调用频率线性增长） |
+| NFR-PERF-01 线性时间 | 输入翻倍耗时不超过 2.3 倍 | native 2.0 / 2.0（多次观测 2.0–2.3）；JS 2.2 / **2.4**（多次观测 4n 档 2.3–2.8） | native 达标；**JS 未稳定达标**（见下） |
+| NFR-PERF-02 吞吐 | native ≥ 20 MB/s，JS ≥ 5 MB/s（合法 JSON） | native 40.9–42.2，JS 21.6–39.0 | 达标 |
+| NFR-PERF-03 流式开销 | `feed` 摊还 O(块长)；`snapshot` 为 O(树大小) | 1 码元分块仍有 23.6 MB/s（native，为 64 KB 分块的 58%）；`snapshot every 1024` 22.1 MB/s、`every 65536` 39.8 MB/s | 达标（快照成本随调用频率线性增长） |
+| NFR-PERF-05 增量流开销 | 记录增量时吞吐不低于不开增量基线的 90% | native 138.6% / 143.9% 耗时；JS 114.4% / 135.5% 耗时 | **未达标**（见下） |
+| NFR-PERF-06 首个可见值 | 报告实测位置即可（无阈值，用于产品评估） | 工具调用文档中位数：首个值出现在文档长度的 **0.7%**，95% 内容出现在 95.3% | 已实测，见下 |
 | NFR-PERF-04 内存 | 峰值 ≤ 4 × 输入 + O(深度) | 见下节，实测约 18–38 × 输入 | **未达标**，已在限制一节说明 |
-| NFR-SIZE-01 产物体积 | wasm-gc release ≤ 150 KB（未压缩） | 98 247 B（95.9 KiB）（`bench/probe`） | 达标 |
+| NFR-SIZE-01 产物体积 | wasm-gc release ≤ 150 KB（未压缩） | 103 784 B（101.4 KiB）（`bench/probe`） | 达标 |
 
 ### JS 后端的线性度问题（未达标项）
 
@@ -104,7 +116,45 @@ JS 后端 4n/2n 比值在同机 8 次运行中为 `2.3, 2.4, 2.4, 2.5, 2.5, 2.5,
 因此该改法已回滚。正确做法是把「当前位置」（三个 `Int32` 字段）与「历史位置」
 （不可变 `Position`）分离，只在 token 边界物化位置结构；详见根 `README.md` 路线图。
 
-深层嵌套（512 层）耗时低于计时分辨率（0.1 ms），说明显式栈没有引入额外开销。
+深层嵌套（512 层）耗时 0.1 ms，说明显式栈没有引入额外开销。
+
+### 增量流的开销（未达标项）
+
+打开 `Options::collect_deltas` 后，每次 `drain_deltas()` 返回自上次 drain 以来的变更。
+实测（1 MB 合法 JSON，同一分块下与不开增量对比）：
+
+| 分块 | native 耗时 | 相对基线 | JS 耗时 | 相对基线 | 记录条数 |
+| --- | --- | --- | --- | --- | --- |
+| 1024 | 35.0 ms（29.0 MB/s） | 138.6% | 47.7 ms（21.3 MB/s） | 114.4% | 194 992 |
+| 65536 | 36.3 ms（28.0 MB/s） | 143.9% | 51.5 ms（19.7 MB/s） | 135.5% | 194 706 |
+
+也就是说吞吐降到基线的 70%（native）/ 74–87%（JS），**低于 90% 的登记目标**。
+194 992 条记录对应约 15 000 个元素，即每个元素平均 13 条——原因是每一条记录都要
+新分配一个 `Delta` 记录与一份路径数组（`frame_path().copy()` + `push`），
+而路径长度随深度增长。两条可选的优化路线写在根 `README.md` 的路线图里：
+紧凑增量缓冲（把 `op|path|text` 编码进一块可复用的 `Bytes`，只在 drain 时物化
+`Array[Delta]`）与路径前缀共享。本轮没有做，如实记录。
+
+### 首个可见值（TTFV）
+
+登记在 `docs/EVAL_REGISTRATION.md` 的指标是「快照覆盖最终取值 95% 时已消耗的输入比例」，
+基线（先收完再修）为 1.0。实测：
+
+| 文档 | 首个可见值 | 95% 覆盖 | 首值处的标签 |
+| --- | --- | --- | --- |
+| 工具调用 312 码元 | 5.1% | 97.4% | exact |
+| 工具调用 1 131 码元 | 1.4% | 96.2% | exact |
+| 工具调用 4 349 码元 | 0.4% | 95.3% | exact |
+| 20 份混合文档（中位数） | **0.7%** | 95.3% | — |
+
+两个数字要分开读：
+
+- **95% 覆盖这一档几乎没有收益**（95.3%，基线 1.0）。这是结构决定的：工具调用的参数是
+  一个对象，对象只有接近闭合时才「几乎完整」。这条判据在 JSON 对象上不敏感，
+  如实记录而不是换个更好看的指标。
+- **首个可见值只有 0.7%** 才是产品上的收益：界面可以在收到第一个字符后就渲染出结构，
+  并在同一时刻拿到精确度标签（本例中 `exact`），而不必等到流结束。`jsonmend llm --follow`
+  就是这个行为的可运行示例。
 
 两次快照调用的去重：`snapshot` 在引擎状态未变化时直接返回上一次的结果
 （`Engine.snap_stamp` 记忆化），因此 `snapshot repeat 1000x`（1 MB 输入，取 1000 次
@@ -116,13 +166,16 @@ JS 后端 4n/2n 比值在同机 8 次运行中为 `2.3, 2.4, 2.4, 2.5, 2.5, 2.5,
 
 | 输入 | 峰值 RSS | 相对输入 | 说明 |
 | --- | --- | --- | --- |
-| 0.62 MB（对象数组） | 15.2 MB | 24.6 × | 固定开销（运行时约 1.9 MB + 解析树 + 输出缓冲）在小输入上占比更高 |
-| 3.17 MB（对象数组） | 58.5 MB | 18.4 × | — |
-| 6.37 MB（对象数组） | 115.2 MB | 18.1 × | — |
-| 12.95 MB（对象数组） | 230.6 MB | 17.8 × | `--check` 与正常输出的峰值相同，说明峰值来自解析树，而不是输出拼接 |
-| 8.46 MB（纯数组） | 195.2 MB | 23.1 × | 元素多、字符串短时每个值的固定开销占比更高 |
+| 0.62 MB（对象数组） | 15.3 MB | 24.3 × | 固定开销（运行时约 2.2 MB + 解析树 + 输出缓冲）在小输入上占比更高 |
+| 3.17 MB（对象数组） | 59.1 MB | 18.4 × | — |
+| 6.37 MB（对象数组） | 116.4 MB | 18.0 × | — |
+| 12.95 MB（对象数组） | 231.4 MB | 17.6 × | `--check` 与正常输出的峰值相同，说明峰值来自解析树，而不是输出拼接 |
+| 8.46 MB（纯数组） | 169.2 MB | 20.0 × | 元素多、字符串短时每个值的固定开销占比更高 |
 | 10.00 MB（单个字符串） | 380.2 MB | 38.0 × | 一个 token 被复制三次：`parts` → `parts_text()` → `Json::string` |
-| `{}`（进程基线） | 1.9 MB | — | — |
+| `{}`（进程基线） | 2.2 MB | — | — |
+
+（0.3.0 复测。峰值与 0.2.0 同机对照为 +1% 以内：新增的精确度水位与
+关闭状态的增量钩子都不分配内存。）
 
 CLI 按 64 KB 分块读入并直接喂给解析器（`code/cmd/jsonmend/io.mbt`），每个块用一次
 `fread`（`moonbit_fread_ffi`）取回，不再把整个输入读成一份 `Bytes` 再复制。同机 A/B：
@@ -142,13 +195,12 @@ CLI 是「读文件 → 修复 → 写 stdout」，因此它的吞吐同时受�
 
 | 语料 | 输入 | 耗时 | 吞吐 | 峰值 RSS |
 | --- | --- | --- | --- | --- |
-| 对象数组 | 0.62 MB | 0.030 s | 20.6 MB/s | 15.1 MB |
-| 对象数组 | 3.17 MB | 0.120 s | 26.4 MB/s | 58.3 MB |
-| 对象数组 | 6.37 MB | 0.230 s | 27.7 MB/s | 115.0 MB |
-| 对象数组 | 12.95 MB | 0.470 s | 27.6 MB/s | 230.6 MB |
-| 纯数组 | 8.46 MB | 0.350 s | 24.2 MB/s | 195.1 MB |
-| 单串 | 8.00 MB | 0.220 s | 36.4 MB/s | 276.0 MB |
-| 缩进 JSON | 10.10 MB | 0.270 s | 37.4 MB/s | 122.1 MB |
+| 对象数组 | 0.62 MB | 0.040 s | 15.7 MB/s | 15.3 MB |
+| 对象数组 | 3.17 MB | 0.110 s | 29.3 MB/s | 59.1 MB |
+| 对象数组 | 6.37 MB | 0.230 s | 28.1 MB/s | 116.4 MB |
+| 对象数组 | 12.95 MB | 0.470 s | 28.0 MB/s | 231.4 MB |
+| 纯数组 | 8.46 MB | 0.320 s | 26.4 MB/s | 169.2 MB |
+| 单串 | 10.00 MB | 0.280 s | 35.7 MB/s | 380.2 MB |
 
 读取方式 A/B（同一二进制两次构建、同一语料、交替 7 次取中位数）：
 
@@ -164,20 +216,34 @@ CLI 是「读文件 → 修复 → 写 stdout」，因此它的吞吐同时受�
 结论：逐字节 `fgetc` 会把 CLI 压在约 25 MB/s，成为端到端瓶颈（引擎本身 42 MB/s）；
 改为每块一次 `fread` 后 CLI 与引擎的差距缩小到约 30%。
 
+### JS 后端的性能决策记录（O-11）
+
+| 项 | 内容 |
+| --- | --- |
+| 现象 | JS 后端 4n/2n 比值中位数 2.4–2.5，超过 2.3 的线性阈值；10 MB 档吞吐从 31.0 降到 21.6 MB/s |
+| 归因 | `moonc` 生成的 JS 里 `Position` 是对象，`advance()` 每推进一个输入码元就 `new Position(...)`：10 MB 输入约一千万个短生命周期对象，活堆越大 GC 扫描越贵 |
+| 已尝试 | 把 `Position` 字段改成 `mut` 并原地更新。**回滚**：引擎把 `tok_start` / `fence_start` 等历史位置与当前位置共用同一个对象，原地更新会连带改掉历史位置，5 个黄金/流式用例失败（`R001@19 != R001@0`、`E022(5,@7) != E022(5,@2)`） |
+| 决策 | 0.3.0 不修。理由：这是产物层面的分配模式问题，正确改法是把「当前位置」（三个 `Int32` 字段）与「历史位置」（不可变 `Position`）分离，只在 token 边界物化位置结构，属于引擎内部重构；而 JS 后端的绝对吞吐（21.6–39.0 MB/s）远高于 5 MB/s 的验收下限，线性度只影响 10 MB 以上的浏览器场景 |
+| 下一步 | 若 10 MB 以上的浏览器输入成为真实场景：先做「当前位置内联为三个 `Int32`」的改动，再用本节的 10 MB 档复测 |
+
 ## 产物体积（TC-B-05）
 
 | 产物 | 大小 | 说明 |
 | --- | --- | --- |
-| `bench/probe`（wasm-gc release） | 98 247 B（95.9 KiB） | 最小消费者：调用 `repair`、`PartialParser`、`is_valid_json`，代表库的真实增量体积 |
-| `examples/web`（JS release） | 269 715 B（263 KiB） | 浏览器演示页的完整 bundle（含运行时） |
+| `bench/probe`（wasm-gc release） | 103 784 B（101.4 KiB） | 最小消费者：调用 `repair`、`PartialParser`、`is_valid_json`，代表库的真实增量体积 |
+| `examples/web`（JS release） | 290 885 B（284.1 KiB） | 浏览器演示页的完整 bundle（含运行时）；同一文件即 `static/demo/jsonmend.js` |
+| `cmd/jsonmend`（native release） | 638 816 B（623.8 KiB） | 命令行可执行文件（macOS arm64） |
 
 ## 备注
 
 - 瑕疵 JSON 比合法 JSON 更快（native 48–56 MB/s）：合法 JSON 会完整构建
   `Json` 值，而大量瑕疵语料在更早的分支上就被丢弃或短路。
 - 字符串批处理快路径（`Engine::push_run`）把连续普通字符一次并入，超长字符串
-  1 MB 达到 native 535 MB/s、JS 277 MB/s；`parse-only` 档（只建树不产文本）
-  仍受 `Json` 分配限制，native 38.3 MB/s。
+  1 MB 达到 native 594 MB/s、JS 287 MB/s；`parse-only` 档（只建树不产文本）
+  仍受 `Json` 分配限制，native 40.6 MB/s。
+- 0.3.0 新增的精确度标签与增量流没有改变默认路径的开销：`Exactness` 只是一个
+  `Int32` 枚举水位，`max_loss` 是一条比较，`collect_deltas` 关闭时每个钩子只多一次分支。
+  同机对照：0.2.0 与本轮在同一台机器上合法 JSON 均为 41–43 MB/s。
 - JS 后端在 10 MB 档降到 20.3 MB/s，主要来自字符串拼接与 `Json` 对象的分配；
   仍高于 5 MB/s 的下限。
 - 数字与机器强相关（散热、后台负载、Node 版本）。复现时请以 `bench.sh` 的

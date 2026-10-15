@@ -41,8 +41,16 @@ moon test --target native      # 本机后端
 moon test --target js          # JS 后端
 ```
 
-期望：32 个测试块全部通过（黄金用例 126 条、流式用例 6 块含 21 组断言、属性测试 8 组，
-每组 400 例）。任一后端失败都视为发布阻塞。
+期望：69 个测试全部通过（黄金用例 126 条、流式用例 6 块含 21 组断言、属性测试 8 组
+每组 400 例、精确度 240 例、增量流、`llm` 适配器 19 例）。任一后端失败都视为发布阻塞。
+
+长跑（O-6）：把每个属性的用例数从 400 提到 N（上限 1 000 000），本机 1 000 000 例
+约 50 s。夜间工作流 `.github/workflows/nightly.yml` 用同一变量跑 1 000 000 例。
+
+```bash
+cd code
+JSONMEND_LONGRUN=1000000 moon test --target native
+```
 
 覆盖率（`-p` 限定到库包，否则 `bench/main.mbt` 会以 0% 计入分母）：
 
@@ -50,16 +58,20 @@ moon test --target js          # JS 后端
 cd code
 moon coverage clean                     # 清掉上一轮的 .trace 文件，避免计数错位
 moon test --enable-coverage
-moon coverage report -f summary -p wenhuang2333/jsonmend   # 库代码 1137/1223 = 93.0%
-moon coverage report -f summary                             # 含 bench：1137/1393 = 81.6%
+moon coverage report -f summary -p wenhuang2333/jsonmend      # 根包 1378/1487 = 92.7%
+moon coverage report -f summary -p wenhuang2333/jsonmend/llm  # llm 包 223/243 = 91.8%
+moon coverage report -f summary                               # 含 bench：1586/2002 = 79.2%
 ```
+
+`cmd/jsonmend` 在覆盖率报告里会因 `quit()` 的 native 实现而抛内部错误，属已知的
+工具链限制，因此只对根包与 `llm` 包设口径。
 
 ## 3. 命令行冒烟测试（TC-C-01）
 
 ```bash
 cd code
 moon build cmd/jsonmend --target native --release
-bash tests/cli_smoke.sh                       # 25 项断言，全部 ok 才算通过
+bash tests/cli_smoke.sh                       # 36 项断言，全部 ok 才算通过
 bash tests/examples.sh                        # 示例输入与期望输出逐字节对照
 bash tests/cli_smoke.sh ./path/to/jsonmend.exe  # 指定其它可执行文件
 ```
@@ -103,6 +115,28 @@ bash code/tests/bench.sh native
 ```
 
 结果与 `docs/BENCHMARK.md` 对照；绝对值随机器变化，判定阈值见该文档。
+`bench/main.mbt` 另输出 `deltas`（增量流开销，NFR-PERF-05）与 `ttfv`（首个可见值，NFR-PERF-06）。
+
+## 5b. 真值评测（TC-EVAL）
+
+协议先冻结（`docs/EVAL_REGISTRATION.md` 的版本号与数据集 sha256），再跑：
+
+```bash
+cd code
+moon build cmd/jsonmend --target native --release
+python3 tests/eval/run_eval.py \
+  --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+```
+
+1200 条用例（19 个变异族 + 1 个对照组，每族 60 条，固定种子 `20261015`）经 `--batch` 一次性喂入，
+产出 `docs/EVAL.md`。四条预登记判据全 PASS 时退出码为 0，`--allow-fail` 可只看报告。
+语料本身可校验：`python3 tests/eval/corpus.py` 打印数据集指纹。
+
+`llm` 夹具由生成脚本与 MoonBit 内嵌副本同源产出，检查是否同步：
+
+```bash
+python3 tests/gen_llm_fixtures.py --check
+```
 
 ## 6. 浏览器演示页（TC-W-01）
 
@@ -147,7 +181,7 @@ moon check --deny-warn && moon fmt --check     # 无警告、格式一致
 moon test && moon test --target native && moon test --target js
 bash tests/cli_smoke.sh && bash tests/examples.sh
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
-bash tests/bench.sh size                       # wasm-gc ≤ 150 KB（当前 98 247 B）
+bash tests/bench.sh size                       # wasm-gc ≤ 150 KB（当前 103 784 B）
 node ../code/tests/demo_smoke.mjs              # 演示 bundle 仍可用
 ```
 

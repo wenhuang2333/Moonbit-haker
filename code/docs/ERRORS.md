@@ -5,7 +5,7 @@ JSONMend 有两条完全分开的信号通道（ADR-006，规格 D09 9.1）：
 - **致命错误**：类型为 `MendError`（`code/error.mbt:211`），通过 `raise` 抛出。一旦抛出，本次调用失败，**不返回任何部分结果**，已经生成的文本全部丢弃；调用方只能捕获错误或让进程退出。
 - **修复记录**：类型为 `Repair`（`code/error.mbt:201`），字段为 `code`、`position`、`severity`、`message`。它**永远不是致命错误**，随 `RepairResult` / `ParseResult` / `FinalResult` 一起返回，表示"改了什么、改在哪里、有多严重"。
 
-`MendError` 共 9 个变体，每个变体都有稳定的 `code()` 字符串（`E001` … `E050`）与一行 `to_string()` 诊断。`RepairCode` 共 21 个变体，`code()` 为 `R001` … `R021`，`message()` 为固定英文模板（不含用户输入，避免日志注入，D09 9.7）。本文只记录 9 个致命错误码；修复码的含义见 D09 9.4。
+`MendError` 共 10 个变体，每个变体都有稳定的 `code()` 字符串（`E001` … `E060`）与一行 `to_string()` 诊断。`RepairCode` 共 22 个变体，`code()` 为 `R001` … `R022`，`message()` 为固定英文模板（不含用户输入，避免日志注入，D09 9.7）。本文只记录 10 个致命错误码；修复码的含义见 D09 9.4。
 
 `to_string()` 的格式为 `{code()} {变体名}: {说明}`，`E010` 额外携带位置与触发的修复码。
 
@@ -208,7 +208,7 @@ JSONMend 有两条完全分开的信号通道（ADR-006，规格 D09 9.1）：
 - `code()`：`E050`
 - 载荷：`String msg`。
 - `to_string()` 模板：`E050 InvalidOption: {msg}`
-- 触发条件：`Options::validate`（`code/options.mbt:224`）中的四条检查：
+- 触发条件：`Options::validate` 中的检查：
 
   ```moonbit
   if self.max_depth <= 0 {
@@ -225,6 +225,15 @@ JSONMend 有两条完全分开的信号通道（ADR-006，规格 D09 9.1）：
   }
   ```
 
+  0.3.0 起另有三条与选项组合有关的检查（同样抛 `E050`）：
+
+  ```text
+  collect_deltas requires duplicate_keys KeepLast or AsError: KeepFirst drops a
+  value whose container was already announced
+  collect_deltas requires incomplete_number Drop: an unfinished number cannot be
+  streamed as a delta
+  ```
+
   `PartialParser::new`、`repair`、`parse` 在入口调用 `opts.validate()`（`code/api.mbt:100/157/171`）。
 - CLI 退出码：**2**（命令行用法错误）。
 - 示例：选项 `max_depth = 0`，`to_string()` 输出
@@ -232,6 +241,17 @@ JSONMend 有两条完全分开的信号通道（ADR-006，规格 D09 9.1）：
   ```text
   E050 InvalidOption: max_depth must be a positive integer
   ```
+
+### E060 InvalidEvent
+
+- `code()`：`E060`
+- 载荷：`String msg`。
+- `to_string()` 模板：`E060 InvalidEvent: {msg}`
+- 触发条件：`jsonmend/llm` 适配器收到一行不是合法 JSON 的事件负载
+  （`ToolStream::push_event`，`code/llm/llm.mbt`）。
+- CLI 退出码：**3**（输入无效）。
+- 说明：事件负载是完整 JSON 文档，因此用严格解析器读；读不动说明调用方给错了流，
+  属于输入问题而不是内部错误。
 
 ## 严格模式升级
 
@@ -300,9 +320,9 @@ if self.opts.collect_repairs {
 | 0 | 成功（可能有修复） | — |
 | 1 | `--check` 模式下发现需要修复的内容 | — |
 | 2 | 命令行用法错误 | E050 |
-| 3 | 输入无效 | E001 E002 E040 |
+| 3 | 输入无效 | E001 E002 E040 E060 |
 | 4 | 资源限制 | E020 E021 E022 |
-| 5 | 严格模式违规 | E010 |
+| 5 | 严格模式违规（含 `--max-loss` 超限） | E010 |
 | 70 | 内部错误 | E030（内部不可达） |
 
 补充说明：

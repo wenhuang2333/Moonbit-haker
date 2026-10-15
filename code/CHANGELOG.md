@@ -5,6 +5,83 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.3.0] - 2026-10-15
+
+第四轮优化版本（`JSONMend 优化完善与创新方向建议.md` 的 I-1…I-6 / O-1…O-15），主题是**让「修好了」这件事可以被执行方信任**：
+修复结果现在携带一个三级的精确度标签，调用方可以在执行之前拒绝它。
+
+### 新增
+
+- **精确度标签（FR-19 / I-1）**。`Exactness` 三级：`Exact`（完全没修）、
+  `Cosmetic`（只改了记法，取值没变）、`Lossy`（发明或丢弃了信息）。
+  `RepairResult`、`ParseResult`、`Snapshot`、`FinalResult` 都带 `exactness` 字段。
+- **执行安全闸**。`Options::max_loss`（默认 `Lossy`，即不改变既有行为）在
+  记录到超出上限的修复时立刻抛 `E010 StrictViolation`，错误里带着触发的那条修复码；
+  CLI 对应 `--max-loss exact|cosmetic|lossy`，复用退出码 5。
+  这样「先修再执行」可以变成「修的同时判断能不能执行」。
+- **`Options` 预设**：`lenient()`（等于默认）、`strict()`、`for_llm()`（开增量流）、
+  `for_execution()`（`max_loss: Cosmetic`）。
+- **增量补丁流（FR-18 / I-2）**。`Options::collect_deltas` 打开后，
+  `PartialParser::drain_deltas()` 返回 `Array[Delta]`（`Set` / `AppendText` / `Close` /
+  `Retract`），路径用 JSON Pointer（RFC 6901）。契约由属性测试保证：
+  把增量依次应用到上一次的快照上，结果与 `snapshot().value` 逐值相同。
+  与 `KeepFirst` 重复键策略、`TrimToValid` 未完成数字不兼容，`validate()` 会拒绝。
+- **`jsonmend/llm` 子包（FR-22 / I-3）**：Anthropic 细粒度工具流
+  （`content_block_delta` → `input_json_delta` → `partial_json`）与
+  OpenAI 兼容流（`choices[].delta.tool_calls[].function.arguments`）的适配器，
+  支持多路并发工具调用、SSE 行解析（`SseBuffer`）、截断（`max_tokens`）时
+  自动收尾并标 `Lossy`。9 个夹具（`llm/fixtures/*.jsonl`）由生成脚本与
+  MoonBit 内嵌副本同源产出。
+- **CLI `jsonmend llm`**：把录制的事件流喂给适配器，每个工具调用输出一行 JSON，
+  `--follow` 每次增量都输出一行（演示「边收边展示」）。
+- **CLI `--batch`**：逐行读 `{"id","input"}`、逐行输出
+  `{"id","rc","exactness","codes","value","text"}`，让评测脚本不必为每个用例
+  起一个进程。
+- **CLI `--explain`**：逐条修复打印级别、位置与带插入符的代码片段，末尾给出
+  精确度小结。
+- **R022 `NormalizeLiteral`**：`True`/`FALSE` 这类只改大小写的字面量单独成码
+  （Info）。此前它与「补全字面量」（`tru` → `true`，确实造值）共用 R012（Warning），
+  导致纯记法修复被误报为信息损失。**R001–R021 的含义没有任何变化，码只追加。**
+- **`E060 InvalidEvent`**：`jsonmend/llm` 遇到无法解释的事件负载时抛出。
+- **真值评测（I-4）**：`tests/eval/corpus.py` 生成 1200 条带真值的用例
+  （20 族单点变异，60 条/族），`tests/eval/run_eval.py` 驱动 `--batch` 并生成
+  `docs/EVAL.md`。协议先冻结在 `docs/EVAL_REGISTRATION.md`（含数据集 sha256）。
+  当前结果：恢复率 **100.00%**，漏标率 **0**，四条预登记判据全部 PASS。
+- **长跑属性测试（O-6）**：`JSONMEND_LONGRUN=N` 把每个属性的用例数从 400 提到 N，
+  夜间工作流用 1,000,000（本机约 50 s）。
+- **夜间与发布工作流**：`.github/workflows/nightly.yml`（长跑 + 差分 + 评测）、
+  `.github/workflows/release.yml`（tag 触发，产出 native CLI、wasm 探针、演示
+  bundle 与 `SHA256SUMS`）。
+
+### 变更
+
+- **`E040` 偏移量改为绝对**：`feed_bytes` 此前把非法 UTF-8 的偏移量报成块内相对值，
+  同一个输入换个分块大小就报不同的位置。现在所有错误偏移量都是相对输入起点的
+  绝对偏移（坏续字节报自身位置，过长/超范围/结尾截断报序列起点）。
+  `E021`/`E022` 复核确认本来就是绝对的，新增回归测试。
+- **标签精度**：`R015`/`R017`/`R021` 由 Warning 降为 Info（只改记法）；
+  `R018` 在两次取值结构相等时记为 Info。记法类修复的 `lossy` 误报
+  从 300/900 降到 0/900。
+- `RepairCode` 21 → 22 条；`MendError` 9 → 10 个变体（新增 `E060`）。
+- 模块版本 0.2.0 → 0.3.0。
+
+### 性能
+
+本机（Apple Silicon，native release）观测值：
+
+| 项目 | 数值 |
+|------|------|
+| 合法 JSON 1 KB / 100 KB / 1 MB / 10 MB | 35.7 / 35.7 / 33.0 / 29.3 MB/s |
+| 有缺陷 JSON 1 MB | 70.0 MB/s |
+| 超长字符串 1 MB | 520 MB/s |
+| 流式 chunk 1 / 16 / 1024 / 65536 | 16.1 / 25.4 / 30.5 / 32.5 MB/s |
+| 增量流（chunk 1024 / 65536） | 基线耗时的 141.7% / 151.0% |
+| 首个可见值的偏移量（工具调用文档中位数） | 文档长度的 **0.7%** |
+
+增量流目前是基线的 1.42–1.51 倍耗时（吞吐约为基线的 66–71%），
+**未达到 I-2 登记的 90% 目标**：每个变更都要新分配一个 `Delta` 与一份路径数组。
+下一轮的方向是紧凑增量缓冲（见 `产品文档.md` 第 14 节）。
+
 ## [0.2.0] - 2026-10-15（待发布）
 
 第二轮优化版本。`moon package` 已能产出

@@ -5,7 +5,7 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 | | |
 | --- | --- |
 | Module | `wenhuang2333/jsonmend` |
-| Version | 0.2.0 |
+| Version | 0.3.0 |
 | License | Apache-2.0 |
 | Preferred target | `wasm` (also builds for `native` and `js`) |
 
@@ -14,7 +14,10 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 - **One-shot repair** with `repair`: repaired text, a list of repair records, and the completeness of the input.
 - **One-shot parsing** with `parse`: the repaired input as a `Json` tree plus the same records.
 - **Streaming partial parsing** with `PartialParser`: `feed` (or `feed_bytes`) any number of chunks, take `snapshot()` at any time, then `finish()`.
-- **Repair records** for every change: stable code (`R001`…`R021`), position (UTF-16 offset plus 1-based line/column), severity, and a fixed English message.
+- **Repair records** for every change: stable code (`R001`…`R022`), position (UTF-16 offset plus 1-based line/column), severity, and a fixed English message.
+- **Exactness labels**: every result carries `Exact` / `Cosmetic` / `Lossy`, derived from the severities of the records. `Options::max_loss` turns the first repair that exceeds the budget into a fatal `E010`, so "repair, then execute the arguments" cannot happen silently.
+- **Incremental deltas**: with `Options::collect_deltas`, `drain_deltas()` returns `Set` / `AppendText` / `Close` operations with RFC 6901 JSON Pointer paths, so a consumer can patch its own view instead of re-reading snapshots.
+- **LLM provider adapters** in the `jsonmend/llm` sub-package: Anthropic fine-grained tool streaming and OpenAI-compatible tool-call deltas, plus an SSE framer; `jsonmend llm` on the command line.
 - **Strict mode** (`Mode::Strict`) turns the first repair into a fatal `E010`, and per-rule switches disable individual rules the same way.
 - **Resource limits**: nesting depth, total input length, and single-token length (`E020`/`E021`/`E022`).
 - **Policies** for duplicate keys, non-finite numbers, multiple root values, Markdown fences, leading prose, ambiguous quotes, and output indentation.
@@ -127,6 +130,8 @@ Every field of `Options`. `@jsonmend.Options::default()` is the documented defau
 | `rules` | `RuleSet` | `RuleSet::all()` | Per-rule switches; disabling a rule makes that code raise `E010`. |
 | `indent` | `Int32` | `0` | Output indentation in spaces; `0` renders compact JSON. |
 | `max_repairs` | `Int32` | `10000` | Maximum number of repair records kept; beyond it repairs still apply but the result sets `repairs_truncated`. |
+| `max_loss` | `Exactness` | `Lossy` | Highest acceptable exactness. The first record that exceeds it raises `E010` with that code and position. `Options::for_execution()` sets `Cosmetic`. |
+| `collect_deltas` | `Bool` | `false` | Collect incremental deltas; read them with `PartialParser::drain_deltas()`. Cannot be combined with `duplicate_keys: KeepFirst` or `incomplete_number: TrimToValid`. |
 
 Invalid values (`max_depth <= 0`, `max_input_len <= 0`, `max_token_len <= 0`, `max_repairs <= 0`, `indent < 0`) raise `E050` from `Options::validate`, which `repair`, `parse`, and `PartialParser::new` call for you.
 
@@ -157,6 +162,7 @@ Every change is one record whose code is stable. The full dictionary, with examp
 | `R019` | `ConcatStrings` | Merge adjacent string concatenation (`["a" + "b"]` becomes `["ab"]`). |
 | `R020` | `DropEllipsis` | Drop an `...` placeholder in a value position. |
 | `R021` | `SkipProse` | Skip leading prose before the JSON value. |
+| `R022` | `NormalizeLiteral` | Re-case a literal (`True`, `NULL`) without changing which value it denotes. `Info` when only the case changes; `Warning` when characters are also added or dropped (`R012`). |
 
 ## Repair records and error codes
 
@@ -174,7 +180,8 @@ A `Repair` carries `code : RepairCode`, `position : Position`, `severity : Sever
 | `E022` | `TokenLimit` | A token exceeds `max_token_len`. |
 | `E030` | `InvalidState` | `feed` after `finish`, or `finish` called twice or after a fatal error. |
 | `E040` | `InvalidUtf8` | Invalid or truncated UTF-8 in `feed_bytes` (payload is the byte offset). |
-| `E050` | `InvalidOption` | An option value is out of range. |
+| `E050` | `InvalidOption` | An option value is out of range, or a combination is invalid (`collect_deltas` with `KeepFirst`/`TrimToValid`). |
+| `E060` | `InvalidEvent` | `jsonmend/llm` received an event payload it cannot interpret. |
 
 `RepairCode::code`, `MendError::code`, and `MendError::to_string` produce the stable strings (`R005`, `E020`, and a one-line diagnostic respectively). The full reference is in [docs/ERRORS.md](docs/ERRORS.md).
 
@@ -238,8 +245,12 @@ Flags and their meanings:
 | `--skip-prose` | Skip prose before the JSON value. |
 | `--quote-lookahead` | Enable quote-ambiguity lookahead. |
 | `--max-repairs N` | Maximum number of repair records to keep (default 10000); a truncated run also prints a note to standard error. |
+| `--max-loss LEVEL` | Exactness ceiling: `exact`, `cosmetic`, or `lossy` (default). Exceeding it exits with code 5. |
+| `--explain` | Print every record with severity, position and a caret snippet, plus an exactness summary, to standard error. |
+| `--batch` | Read `{"id","input"}` objects line by line and write one result object per line. |
+| `llm` (subcommand) | Feed a provider event stream through the adapter: `jsonmend llm [--provider anthropic\|openai] [--sse] [--follow] [file]`. |
 | `-h`, `--help` | Show help. |
-| `--version` | Show the version (`jsonmend 0.2.0`). |
+| `--version` | Show the version (`jsonmend 0.3.0`). |
 | file, or `-` | Read a file; `-` or an omitted argument reads standard input. |
 
 `--indent=N`, `--multi-root=MODE`, and `--max-repairs=N` are accepted as equivalent to the space-separated forms.
@@ -251,9 +262,9 @@ Exit codes:
 | `0` | Success; the output may still contain repairs. |
 | `1` | `--check` found that repairs are needed. |
 | `2` | Usage error (unknown flag, bad option value, or `E050`). |
-| `3` | Invalid input (`E001`/`E002`/`E040`, or an unreadable file). |
+| `3` | Invalid input (`E001`/`E002`/`E040`/`E060`, or an unreadable file). |
 | `4` | Resource limit reached (`E020`/`E021`/`E022`). |
-| `5` | Strict-mode violation (`E010`). |
+| `5` | Strict-mode violation (`E010`, including a `--max-loss` breach). |
 | `70` | Internal error (`E030`). |
 
 The browser demo lives in `examples/web`; the built page is `static/demo/index.html` and can be opened directly from disk. The package exports three plain `String`-in/`String`-out entry points — `repair_text`, `report_text`, and `snapshot_text` (value, completeness, and open path for a prefix) — and registers them on the host page through `globalThis.jsonmendRegister*`, so the page contains no second implementation. Rebuild the bundle with `bash static/demo/build.sh`; the steps and the headless check are in [docs/REPRODUCE.md](docs/REPRODUCE.md).
@@ -265,32 +276,41 @@ cd code
 moon test                      # default backend (wasm-gc)
 moon test --target native      # host backend
 moon test --target js          # JavaScript backend
-bash tests/cli_smoke.sh        # 25 command line assertions
+bash tests/cli_smoke.sh        # 36 command line assertions
 bash tests/examples.sh         # example inputs vs code/examples/cases/*.expected
 node ../code/tests/demo_smoke.mjs   # the committed browser bundle still answers
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/eval/run_eval.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/gen_llm_fixtures.py --check
 ```
 
-| Suite | Size | Result (0.2.0) |
+| Suite | Size | Result (0.3.0) |
 | --- | --- | --- |
 | Golden cases (spec appendices A and B) | 126 | pass |
-| Documented streaming cases (S-001…S-020) + chunk invariance | 20 + invariance checks | pass |
-| Property and fuzz tests (TC-P-01…TC-P-06) | 8 groups × 400 cases | pass, no counterexample |
-| Public surface (every `R` code and `E` code) | 9 assertions over 21 + 9 codes | pass |
-| Option policies and byte input | 10 cases | pass |
-| Command line smoke (exit codes 0/1/2/3/4/5/70) | 25 assertions | pass |
+| Documented streaming cases (S-001…S-021) + chunk invariance | 21 + invariance checks | pass |
+| Property and fuzz tests (TC-P-01…TC-P-06) | 8 groups × 400 cases (`JSONMEND_LONGRUN` raises it; nightly runs 1 000 000) | pass, no counterexample |
+| Exactness labels | hand-written table + 240 property cases + the `max_loss` gate | pass |
+| Incremental deltas (replay == snapshot) | 400 generated + 400 mutated documents | pass |
+| LLM adapters (both providers, 9 fixtures) | 19 tests | pass |
+| Public surface (every `R` code and `E` code) | 22 + 10 codes checked field by field | pass |
+| Ground-truth evaluation (protocol frozen first) | 1200 cases (19 mutation families + 1 control × 60) | recovery **100.00%**, 0 mislabelled, 4/4 pre-registered criteria PASS |
+| Command line smoke (exit codes 0/1/2/3/4/5/70) | 36 assertions | pass |
 | Differential corpus against `jsonrepair` / `json-repair` | 402 cases | 202 divergences, all documented, 0 unexplained |
-| Line coverage of the library | 1137/1223 lines | 93.0% |
+| Line coverage of the library | 1378/1487 lines (root), 223/243 (`llm`) | 92.7% / 91.8% |
 
-Cross-backend results are identical: 32 test blocks pass on wasm-gc, native and
+Cross-backend results are identical: 69 tests pass on wasm-gc, native and
 JavaScript. `.github/workflows/ci.yml` runs the same commands on every push, so
 the numbers above are re-derived rather than trusted. Reproduction steps,
-thresholds and the two known shortfalls are in
+thresholds and the known shortfalls are in
 [docs/REPRODUCE.md](docs/REPRODUCE.md) and [docs/TRACEABILITY.md](docs/TRACEABILITY.md).
+The evaluation protocol and its revision history are in
+[docs/EVAL_REGISTRATION.md](docs/EVAL_REGISTRATION.md) and
+[docs/EVAL.md](docs/EVAL.md); how AI tooling was used is in
+[docs/AI_USAGE.md](docs/AI_USAGE.md).
 
 ## Differences from jsonrepair
 
-JSONMend is not a port of `jsonrepair` and does not aim for byte-identical output. Several differences are deliberate, documented policy choices: trailing content after the root value keeps the first value by default instead of merging it, Markdown fences are stripped by default, duplicate keys keep the last value, unfinished numbers are dropped from snapshots, and strict mode plus per-rule switches have no direct equivalent. A differential harness runs `jsonrepair` (TypeScript/Node) and `json-repair` (Python) over a corpus of hand-written and mutated inputs, compares parsed values, and classifies every divergence. In the committed 0.2.0 report, all 202 divergences had a documented cause and none was unexplained. The method, the classification, and the reference-library versions are in [docs/DIVERGENCES.md](docs/DIVERGENCES.md); rule-to-requirement mapping is in [docs/TRACEABILITY.md](docs/TRACEABILITY.md).
+JSONMend is not a port of `jsonrepair` and does not aim for byte-identical output. Several differences are deliberate, documented policy choices: trailing content after the root value keeps the first value by default instead of merging it, Markdown fences are stripped by default, duplicate keys keep the last value, unfinished numbers are dropped from snapshots, and strict mode plus per-rule switches have no direct equivalent. The 0.3.0 changes did not move the report by a single byte: exactness labels and rule renumbering do not change any value. A differential harness runs `jsonrepair` (TypeScript/Node) and `json-repair` (Python) over a corpus of hand-written and mutated inputs, compares parsed values, and classifies every divergence. In the committed 0.3.0 report, all 202 divergences had a documented cause and none was unexplained. The method, the classification, and the reference-library versions are in [docs/DIVERGENCES.md](docs/DIVERGENCES.md); rule-to-requirement mapping is in [docs/TRACEABILITY.md](docs/TRACEABILITY.md).
 
 ## Performance
 
@@ -301,7 +321,19 @@ moon run bench --target native --release
 moon run bench --target js --release
 ```
 
-On a 2026 Apple-silicon laptop, native measured 41–43 MB/s and js 19–37 MB/s on the same corpus. These figures are observations, not a guarantee: throughput depends on the input shape, chunk size, snapshot frequency, and the toolchain version, and memory or artifact size is measured separately from the process. The full method and tables are in [docs/BENCHMARK.md](docs/BENCHMARK.md), and [docs/REPRODUCE.md](docs/REPRODUCE.md) explains how to rerun the benchmarks.
+On a 2026 Apple-silicon laptop, native measured 41–42 MB/s (valid), 83–87 MB/s
+(flawed) and 594 MB/s (one long string); js measured 22–39 MB/s. The same run
+also measures two things that matter for streaming: the **first visible value**
+appears at 0.7% of the document (median over tool-call payloads), and enabling
+`collect_deltas` costs 1.39–1.51 × the baseline time — that last number is a
+**known shortfall**, not a win.
+
+These figures are observations, not a guarantee: throughput depends on the input
+shape, chunk size, snapshot frequency, and the toolchain version. Memory
+(17.6–38.0 × input, also a known shortfall) and artifact size are measured
+separately from the process. The full method, tables and decision records are in
+[docs/BENCHMARK.md](docs/BENCHMARK.md), and
+[docs/REPRODUCE.md](docs/REPRODUCE.md) explains how to rerun the benchmarks.
 
 ## Known limitations
 
@@ -315,25 +347,33 @@ On a 2026 Apple-silicon laptop, native measured 41–43 MB/s and js 19–37 MB/s
 - **`Json` numbers follow the core representation.** Very large integers may lose precision in the tree, although the repaired text keeps the number's original digits.
 - **`quote_lookahead` is off by default.** When enabled, a sequence of strings that is missing commas is biased toward being read as string content.
 - **Repair records are capped by `max_repairs` (default 10000).** Further repairs are applied but not recorded, and the result sets `repairs_truncated`; the CLI prints a note to standard error.
+- **Incremental deltas are correct but not cheap.** Each change allocates one `Delta` plus a path array, so a 1 MB document produces ~195 000 records and takes 1.39–1.51 × the baseline. A compact delta buffer is the planned fix.
+- **`--skip-prose` only skips prose before a container root.** A scalar root preceded by prose (`Sure!\n42`) still raises `E002`.
+- **`DeltaOp::Retract` is never emitted.** It exists in the enum to fix the contract; the default `KeepLast` policy never needs to retract.
+- **Memory is 17.6–38.0 × the input.** The budget is 4 ×; reaching it requires a "render text without building a tree" mode.
+- **The JS backend still allocates one `Position` per code unit.** The n/2n/4n ratio therefore reaches 2.3–2.8 against a 2.3 target. Absolute throughput is well above the 5 MB/s floor, so this is recorded as a decision rather than fixed.
 - **Parser instances are not thread-safe.** Use one instance per input stream.
 
 ## Roadmap
 
+- Publish on mooncakes.io (`moon login` needs one interactive browser authorisation; everything else is ready).
+- Make the delta stream cheap: encode operations into a reusable buffer and share path prefixes, targeting ≤ 1.11 × the baseline instead of 1.39–1.51 ×.
 - Add the `FR-16` event/callback interface so streaming consumers can avoid full snapshot copies.
-- Add a text-only mode (`want_value = false`) so the streaming path can meet the 4 × input memory budget; the current peak is about 16 × input because the full `Json` tree stays alive.
-- Widen the differential corpus further (nested multi-root documents, deeper mutations) and add memory-budget tests for the streaming path.
-- Publish the package on mooncakes.io and keep reproducible-build records.
+- Add a text-only mode (`want_value = false`) so the streaming path can meet the 4 × input memory budget; the current peak is 17.6–38.0 ×.
+- Add a fourth panel to the browser demo that plays a recorded LLM event stream, so the label and the growing arguments are visible without a terminal.
+- Split the engine's current position from its recorded positions to remove the per-code-unit allocation on the JS backend.
+- Widen the differential corpus further and add memory-budget tests for the streaming path.
 - Keep `docs/RULES.md`, `docs/ERRORS.md`, `docs/DIVERGENCES.md`, `docs/BENCHMARK.md`, and `docs/TRACEABILITY.md` in sync with the code.
 
 ## Contributing
 
-- `CONTRIBUTING.md` (part of the 0.2.0 release) covers the development environment, how to run the tests, commit conventions, and how to add a repair rule — a rule change must update `docs/RULES.md`, `docs/TRACEABILITY.md`, and the golden tests together.
+- `CONTRIBUTING.md` (part of the release checklist) covers the development environment, how to run the tests, commit conventions, and how to add a repair rule — a rule change must update `docs/RULES.md`, `docs/TRACEABILITY.md`, and the golden tests together.
 - Issue templates cover defects (input, options, expected versus actual output, and backend) and new-rule proposals.
-- `SECURITY.md` (part of the 0.2.0 release) describes how to report a problem: this library processes untrusted input.
+- `SECURITY.md` (part of the release checklist) describes how to report a problem: this library processes untrusted input.
 
 ## License and acknowledgements
 
-JSONMend is released under the Apache License 2.0 (`license = "Apache-2.0"` in `code/moon.mod`). A `LICENSE`/`NOTICE` pair is part of the 0.2.0 release checklist.
+JSONMend is released under the Apache License 2.0 (`license = "Apache-2.0"` in `code/moon.mod`). A `LICENSE`/`NOTICE` pair is part of the release checklist.
 
 - [jsonrepair](https://github.com/josdejong/jsonrepair) (TypeScript) and [json-repair](https://github.com/mangiucugna/json_repair) (Python) are used as behavioural oracles in the differential report. They are used only for comparison; no code from either project is vendored.
 - The MoonBit core library (`moonbitlang/core/json`, `moonbitlang/core/string`) provides the `Json` type and string handling.
