@@ -150,6 +150,11 @@ python3 tests/eval/run_ambiguity.py --cli ./_build/native/release/build/cmd/json
 python3 tests/eval/check_amb_guard.py  --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 ```
 
+`run_ambiguity.py` 的对照列需要 `jsonrepair`（Node，默认从 `/private/tmp/node_modules` 取，
+用 `--node-dir` 改）与 `json_repair`（Python）。**两者缺失时脚本不失败**，
+只在报告里把对应列写成 `n/a (library not installed)`，因为对照列是信息性的，
+而 suite 自身只依赖 JSONMend 的判定——否则这套证据就只能在一台机器上跑得出来。
+
 横向内存基线（与 Node / Python 同文件对照）：
 
 ```bash

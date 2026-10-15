@@ -273,30 +273,51 @@ def run_jsonmend(cli, cases, extra=()):
 
 
 def run_oracles(cli, cases, node_dir):
+    """Ask the two reference libraries for their answer, if they are installed.
+
+    The comparison is against JSONMend's own verdicts; the reference columns are
+    informative. A missing `node_modules` or a missing `json_repair` must
+    therefore degrade the report, not fail the suite — otherwise the suite could
+    only be run on one machine, which would make it a worse piece of evidence.
+    """
     payload = "".join(
         json.dumps({"id": c["id"], "input": c["input"]}, ensure_ascii=False) + "\n"
         for c in cases
     )
-    proc = subprocess.run(
-        ["node", ORACLE],
-        input=payload,
-        capture_output=True,
-        text=True,
-        timeout=300,
-        cwd=node_dir,
-        env={**os.environ, "NODE_PATH": os.path.join(node_dir, "node_modules")},
-    )
     jr = {}
-    if proc.returncode == 0:
-        for line in proc.stdout.splitlines():
-            if line.strip():
-                row = json.loads(line)
-                jr[row["id"]] = row
+    node_missing = None
+    if not os.path.isdir(node_dir):
+        node_missing = "node module directory %s does not exist" % node_dir
+    else:
+        try:
+            proc = subprocess.run(
+                ["node", ORACLE],
+                input=payload,
+                capture_output=True,
+                text=True,
+                timeout=300,
+                cwd=node_dir,
+                env={**os.environ, "NODE_PATH": os.path.join(node_dir, "node_modules")},
+            )
+        except OSError as exc:
+            node_missing = "node could not be run: %s" % exc
+        else:
+            if proc.returncode == 0:
+                for line in proc.stdout.splitlines():
+                    if line.strip():
+                        row = json.loads(line)
+                        jr[row["id"]] = row
+            else:
+                node_missing = "oracle exited %d" % proc.returncode
+    if node_missing:
+        print("note: jsonrepair column unavailable (%s)" % node_missing)
     try:
         from json_repair import repair_json
     except Exception:
         repair_json = None
     jp = {}
+    if repair_json is None:
+        print("note: json_repair column unavailable (module not installed)")
     for c in cases:
         if repair_json is None:
             break
@@ -393,8 +414,14 @@ def main() -> int:
     lines.append("| frozen fingerprint | `%s` |" % fingerprint())
     lines.append("| ambiguous cases flagged by JSONMend | %d / %d |" % (flagged, len(amb_cases)))
     lines.append("| ambiguous cases refused by `--for-execution` | %d / %d |" % (refused, len(amb_cases)))
-    lines.append("| ambiguous cases answered silently by `jsonrepair` | %d / %d |" % (silent_jr, len(amb_cases)))
-    lines.append("| ambiguous cases answered silently by `json_repair` | %d / %d |" % (silent_jp, len(amb_cases)))
+    lines.append(
+        "| ambiguous cases answered silently by `jsonrepair` | %s |"
+        % ("%d / %d" % (silent_jr, len(amb_cases)) if jr else "n/a (library not installed)")
+    )
+    lines.append(
+        "| ambiguous cases answered silently by `json_repair` | %s |"
+        % ("%d / %d" % (silent_jp, len(amb_cases)) if jp else "n/a (library not installed)")
+    )
     lines.append("| expectation failures | %d |" % len(failures))
     lines.append("")
     lines.append("## Case by case")
