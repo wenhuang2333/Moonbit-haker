@@ -489,7 +489,7 @@ moon run bench --target js --release
 
 ## 路线图
 
-- ~~发布到 mooncakes.io~~：`zhanshishan/jsonmend` 0.3.0 / 0.4.0 已发布，0.5.0 随本轮发布。
+- ~~发布到 mooncakes.io~~：`zhanshishan/jsonmend` 0.3.0 / 0.4.0 / **0.5.0** 已发布（0.5.0 的 `moon publish` 退出码 0）。
 - ~~给浏览器演示页加一个播放「模型流」的标签页~~：`static/demo/live.html` 已落地（四个真实场景逐帧重放，含重试面板）。
 - ~~把就绪曲线扩展到「调用方真正需要的字段」~~：`Schema` + `semantic_readiness` 已落地（语法/骨架两层分数）。
 - **`--schema` 的约束语言**：目前只有类型，没有 `minimum` / `enum` / `maxLength` 之类的约束；下一步可以加一层「声明即校验」。

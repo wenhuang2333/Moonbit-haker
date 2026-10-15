@@ -110,23 +110,43 @@ $J explain --policy execution --schema '{!query:string,!limit:integer}' tool_cal
 JSONMend Analysis
 ────────────────────────────────
 Input:
-  {"query":"MoonBit","limit":10,"note":"…
-Detected:
-  R005 1:44 RemoveExtraComma  information_loss=false  confidence=certain
+  {"query":"MoonBit","limit":10,"note":1,}
+
 Repair:
-  {"query":"MoonBit","limit":10,"note":"…"}
+  R005 RemoveExtraComma (remove at 1:39)
+
 Risk:
-  exactness=cosmetic  ambiguous=false  schema 2/2
+  exactness = cosmetic
+  ambiguity = none
+  information_loss = false
+  schema = 2/2
+
 Decision:
   SAFE TO EXECUTE (notation normalised)
+
+Repaired:
+  {"query":"MoonBit","limit":10,"note":1}
+
+# 上面是 stdout；就绪数字在 stderr 上（--json 换成机器可读的完整计划）
+jsonmend: syntax-ready 975/1000 schema-ready 750/1000 declared 2/2 ok=true step 1
 $ echo $?
 0
 
 $ printf '{"words":["colour" "color"]}' | $J explain --policy execution ; echo $?
+Repair:
+  R006 InsertComma (insert at 1:20) [ambiguous: adjacent_strings]
+
 Decision:
   BLOCKED (two readings)
+
 Suggested retry:
-  JSONMend refused the output (…) E011 …
+  JSONMend refused the arguments: E011 R006 InsertComma at line 1 column 20 (offset 19).
+  Reason: two adjacent strings may be two elements or one concatenated string
+  Ambiguity: adjacent_strings
+  Context: {"words":["colour" "color"]}
+                              ^
+  Re-emit the arguments as valid JSON with exactly one reading.
+5
 ```
 
 | 退出码 | 含义 |
@@ -340,7 +360,7 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 
 ## 路线图
 
-- ~~发布到 mooncakes.io~~：0.3.0 / 0.4.0 已发布，0.5.0 随本轮发布；`v0.5.0` tag 推送后 GitHub Release 产出预编译产物。
+- ~~发布到 mooncakes.io~~：0.3.0 / 0.4.0 / **0.5.0** 均已发布（`moon publish` 退出码 0，[0.5.0 页面](https://mooncakes.io/docs/zhanshishan/jsonmend/0.5.0)返回 200）；`v0.5.0` tag 已推送，`release.yml` 产出预编译产物。
 - ~~演示页新增「模拟 LLM 流」标签~~：`static/demo/live.html` 已落地（含重试面板与三层 readiness）。
 - **给骨架加约束**：`minimum` / `enum` / `maxLength`，让声明从「类型检查」变成「参数校验」。
 - **把 `semantic_readiness` 做成增量**：用 `FieldTracker` 的增量路径避免全量重放。

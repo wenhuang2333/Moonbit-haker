@@ -476,7 +476,7 @@ separately from the process. The full method, tables and decision records are in
 
 ## Roadmap
 
-- ~~Publish on mooncakes.io~~: `zhanshishan/jsonmend` 0.3.0 and 0.4.0 are published; 0.5.0 ships with this round.
+- ~~Publish on mooncakes.io~~: `zhanshishan/jsonmend` 0.3.0, 0.4.0 and **0.5.0** are published (`moon publish` exited 0 for 0.5.0).
 - ~~A browser tab that plays a model stream~~: `static/demo/live.html`.
 - ~~Readiness for the members the caller actually needs~~: `Schema` + `semantic_readiness`.
 - **Constraints in the declaration**: the skeleton language names types only, not `minimum` / `enum` / `maxLength`.
