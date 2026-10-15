@@ -40,12 +40,19 @@ jobs:
           bash static/demo/build.sh
           git diff --exit-code -- static/demo/jsonmend.js
 
+      # Stage the two files in one directory so the artifact has a flat,
+      # predictable layout: upload-artifact keeps paths relative to the least
+      # common ancestor, which would otherwise be the repository root.
+      - name: Stage the web assets
+        run: |
+          mkdir -p "$RUNNER_TEMP/web-assets"
+          cp code/_build/wasm-gc/release/build/bench/probe/probe.wasm "$RUNNER_TEMP/web-assets/probe.wasm"
+          cp static/demo/jsonmend.js "$RUNNER_TEMP/web-assets/jsonmend-demo.js"
+
       - uses: actions/upload-artifact@v4
         with:
           name: web-assets
-          path: |
-            code/_build/wasm-gc/release/build/bench/probe/probe.wasm
-            static/demo/jsonmend.js
+          path: ${{ runner.temp }}/web-assets
 
   cli:
     name: CLI on ${{ matrix.os }}
@@ -77,10 +84,13 @@ jobs:
           printf '{"a":1,}' | ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
           ./_build/native/release/build/cmd/jsonmend/jsonmend.exe --version
 
+      - name: Stage the CLI
+        run: cp code/_build/native/release/build/cmd/jsonmend/jsonmend.exe "$RUNNER_TEMP/${{ matrix.asset }}"
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
-          path: code/_build/native/release/build/cmd/jsonmend/jsonmend.exe
+          path: ${{ runner.temp }}/${{ matrix.asset }}
 
   publish:
     name: Publish the release
@@ -98,19 +108,23 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp artifacts/jsonmend-linux-x86_64/jsonmend.exe dist/jsonmend-linux-x86_64
-          cp artifacts/jsonmend-macos-arm64/jsonmend.exe dist/jsonmend-macos-arm64
+          cp artifacts/jsonmend-linux-x86_64/jsonmend-linux-x86_64 dist/jsonmend-linux-x86_64
+          cp artifacts/jsonmend-macos-arm64/jsonmend-macos-arm64 dist/jsonmend-macos-arm64
           cp artifacts/web-assets/probe.wasm dist/jsonmend-probe.wasm
-          cp artifacts/web-assets/jsonmend.js dist/jsonmend-demo.js
+          cp artifacts/web-assets/jsonmend-demo.js dist/jsonmend-demo.js
           chmod +x dist/jsonmend-linux-x86_64 dist/jsonmend-macos-arm64
           (cd dist && sha256sum jsonmend-linux-x86_64 jsonmend-macos-arm64 jsonmend-probe.wasm jsonmend-demo.js > SHA256SUMS)
           cat dist/SHA256SUMS
 
+      # `gh release create` is not idempotent, and a tag can be re-pointed at a
+      # fixed commit, so replace any release that already exists for this tag.
       - name: Publish the release
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          gh release delete "$GITHUB_REF_NAME" --yes --cleanup-tag=false || true
           gh release create "$GITHUB_REF_NAME" \
             --title "JSONMend $GITHUB_REF_NAME" \
             --notes-file code/CHANGELOG.md \
