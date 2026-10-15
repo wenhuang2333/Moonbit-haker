@@ -192,16 +192,35 @@ def main() -> int:
 
     # The gate: how often does `for-execution` refuse instead of returning a
     # value? A refusal is the safe answer for every case whose value is wrong.
+    # The refusal is split by error code so that a reader can tell "the value
+    # would have changed" (E010) from "the value admits two readings" (E011),
+    # and by family so that a reader can ask the question this section exists to
+    # answer: does the gate reject cases it did not have to reject?
     gate_refused = 0
     gate_unsafe = 0
+    gate_codes = {}
+    gate_refused_by_family = {}
     for c in cases:
         row = jm_gate.get(c["id"])
         refused = row is None or row["rc"] != 0
         if refused:
             gate_refused += 1
+            code = (row or {}).get("error_code") or "no row"
+            gate_codes[code] = gate_codes.get(code, 0) + 1
+            gate_refused_by_family[c["family"]] = gate_refused_by_family.get(c["family"], 0) + 1
             continue
         if not same(row.get("value"), c["truth"]):
             gate_unsafe += 1
+
+    # Of the refusals, which ones sit in a family whose repair the corpus
+    # registers as notation only? Those are the only ones a reader could call a
+    # false refusal, so they are listed with their cause.
+    notation = set(corpus_mod.NOTATION)
+    refusals_in_notation = {
+        f: gate_refused_by_family.get(f, 0)
+        for f in sorted(notation)
+        if gate_refused_by_family.get(f, 0)
+    }
 
     # Per-family recovery, the useful shape for a reader.
     families = []
@@ -209,7 +228,7 @@ def main() -> int:
         group = [c for c in cases if c["family"] == fam]
         if not group:
             continue
-        row = {"family": fam, "n": len(group)}
+        row = {"family": fam, "n": len(group), "refused": gate_refused_by_family.get(fam, 0)}
         for tool, (rows, getter) in {
             "jsonmend": (jm, get_jm),
             "jsonrepair": (jr, get_oracle),
@@ -286,17 +305,46 @@ def main() -> int:
     lines.append(
         "| values accepted by the gate that differ from the truth | %d |" % gate_unsafe
     )
+    for code in sorted(gate_codes):
+        lines.append("| refused with `%s` | %d |" % (code, gate_codes[code]))
+    lines.append("")
+    lines.append("### Is the gate refusing more than it has to?")
+    lines.append("")
+    lines.append(
+        "The only refusals a reader could call false are the ones inside a "
+        "family that the corpus registers as notation only (the value is "
+        "recoverable, so a refusal is not forced by information loss). They are:"
+    )
+    lines.append("")
+    lines.append("| notation family | refused | cause |")
+    lines.append("| --- | --- | --- |")
+    causes = {
+        "literal_case": "`None` is a different word, not a case variant (R012, lossy)",
+        "delete_comma": "the comma deletion leaves two adjacent strings, which really do read two ways (E011)",
+    }
+    if refusals_in_notation:
+        for fam, count in refusals_in_notation.items():
+            lines.append("| `%s` | %d | %s |" % (fam, count, causes.get(fam, "(see the family above)")))
+    else:
+        lines.append("| (none) | 0 | — |")
+    lines.append("")
+    lines.append(
+        "Every other refusal sits in one of the four lossy families, where the "
+        "repair invents or drops information, so refusing is the registered "
+        "behaviour rather than an accident."
+    )
     lines.append("")
     lines.append("## Per-family recovery")
     lines.append("")
-    lines.append("| family | cases | jsonmend | jsonrepair | json_repair |")
-    lines.append("| --- | --- | --- | --- | --- |")
+    lines.append("| family | cases | gate refused | jsonmend | jsonrepair | json_repair |")
+    lines.append("| --- | --- | --- | --- | --- | --- |")
     for row in families:
         lines.append(
-            "| %s | %d | %d | %d | %d |"
+            "| %s | %d | %d | %d | %d | %d |"
             % (
                 row["family"],
                 row["n"],
+                row["refused"],
                 row["jsonmend"],
                 row["jsonrepair"],
                 row["json_repair"],
@@ -307,6 +355,24 @@ def main() -> int:
         "Families where a reference library beats JSONMend are visible above and "
         "are the honest form of this comparison: a single number hides that the "
         "corpus is dominated by notation repairs."
+    )
+    lines.append("")
+    lines.append("## Configuration used for each case")
+    lines.append("")
+    lines.append(
+        "The corpus has one family that cannot be read with the default options: "
+        "`prose` puts a sentence in front of the value, and JSONMend only skips "
+        "prose when `--skip-prose` is set (the default is to refuse, so that a "
+        "scalar root such as `Sure!\\n42` is never silently discarded). That "
+        "family is therefore run with `--skip-prose` in every harness "
+        "(`run_eval.py`, `run_eval_paths.py`, `refcompare.py`)."
+    )
+    lines.append("")
+    lines.append(
+        "This is not a concession made to JSONMend: **both reference libraries "
+        "strip leading prose by default**, so the flag puts JSONMend in the same "
+        "position rather than a better one. The number of cases affected is 60 "
+        "of 1200; every other case runs with default options on both sides."
     )
     lines.append("")
 
