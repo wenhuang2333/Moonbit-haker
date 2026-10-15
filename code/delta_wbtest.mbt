@@ -61,7 +61,6 @@ fn dj_apply(
             _ => Json::string(d.text)
           },
         )
-      Retract => None
     }
   }
   let seg = path[at]
@@ -195,6 +194,38 @@ test "delta replay holds for every option profile" {
 }
 
 ///|
+test "Close is not final: a later Set overwrites the same path" {
+  // `duplicate_keys KeepLast` may overwrite a member *after* its container was
+  // announced and closed. The contract is therefore "apply in order", not
+  // "Close is the last word on a path".
+  let p = PartialParser::new(options=Options::for_llm())
+  p.feed("{\"a\":{\"x\":1},\"a\":2}")
+  let ops : Array[Delta] = []
+  for d in p.drain_deltas() {
+    ops.push(d)
+  }
+  let f = p.finish()
+  for d in p.drain_deltas() {
+    ops.push(d)
+  }
+  assert_eq(dj_render(dj_replay(ops)), dj_render(Some(f.value)))
+  assert_eq(dj_render(dj_replay(ops)), "{\"a\":2}")
+  // The `/a` slot is closed with the first object and then set again.
+  let mut closers = 0
+  let mut setters = 0
+  for d in ops {
+    if d.pointer() == "/a" {
+      match d.op {
+        Close => closers = closers + 1
+        Set => setters = setters + 1
+        _ => ()
+      }
+    }
+  }
+  assert_eq(closers.to_string() + "/" + setters.to_string(), "1/2")
+}
+
+///|
 test "delta path is an RFC 6901 pointer" {
   let p = PartialParser::new(options=Options::for_llm())
   p.feed("{\"a/b\":[1,2,{\"c~d\":3}]}")
@@ -253,4 +284,48 @@ test "collect_deltas rejects incompatible options" {
     e => e.to_string()
   }
   assert_true(b.contains("incomplete_number"), msg=b)
+}
+
+///|
+test "FR-16: the callback sees exactly the deltas drain_deltas returns" {
+  let text = "{\"a\":1,\"b\":[1,\"x\\ny\"],\"c\":{\"d\":true}}"
+  let p = PartialParser::new(options=Options::for_llm())
+  let via_drain : Array[String] = []
+  for i = 0; i < text.length(); i = i + 1 {
+    p.feed(text[i:i + 1].to_owned())
+    for d in p.drain_deltas() {
+      via_drain.push(d.op.name() + " " + d.pointer())
+    }
+  }
+  ignore(p.finish())
+  let q = PartialParser::new(options=Options::for_llm())
+  let via_callback : Array[String] = []
+  for i = 0; i < text.length(); i = i + 1 {
+    q.feed_with(text[i:i + 1].to_owned(), fn(d) {
+      via_callback.push(d.op.name() + " " + d.pointer())
+    })
+  }
+  ignore(q.finish())
+  assert_true(via_drain.length() > 0, msg="no deltas observed")
+  assert_eq(via_callback.join(","), via_drain.join(","))
+}
+
+///|
+test "FR-16: the byte input callback matches the string input callback" {
+  // The same document as UTF-8 bytes, split inside the multibyte sequence.
+  let bytes : Bytes = b"{\"a\":[1,2],\"b\":\"caf\xc3\xa9\"}"
+  let a = PartialParser::new(options=Options::for_llm())
+  let via_bytes : Array[String] = []
+  let mut i = 0
+  while i < bytes.length() {
+    let end = if i + 3 < bytes.length() { i + 3 } else { bytes.length() }
+    a.feed_bytes_with(bytes[i:end].to_owned(), fn(d) {
+      via_bytes.push(d.op.name() + " " + d.pointer())
+    })
+    i = end
+  }
+  ignore(a.finish())
+  assert_true(via_bytes.length() > 0, msg="no deltas observed")
+  assert_true(via_bytes.contains("set /a/1"), msg=via_bytes.join(","))
+  assert_true(via_bytes.contains("set /b"), msg=via_bytes.join(","))
 }

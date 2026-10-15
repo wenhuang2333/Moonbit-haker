@@ -107,6 +107,16 @@ fn make_flawed(target : Int32) -> String {
 }
 
 ///|
+/// Two decimal places, for per operation costs that are far below a millisecond.
+fn round2(x : Double) -> String {
+  let scaled = (x * 100.0 + 0.5).to_int()
+  (scaled / 100).to_string() +
+  "." +
+  (scaled % 100 / 10).to_string() +
+  (scaled % 10).to_string()
+}
+
+///|
 /// Deeply nested arrays.
 fn make_deep(depth : Int32) -> String {
   let sb = StringBuilder()
@@ -421,6 +431,151 @@ fn bench_ttfv() -> Unit {
 }
 
 ///|
+/// A 4 KB tool-call document fed in 3 code unit chunks: the shape of a provider
+/// stream, and the scenario the round-5 document asks to be measured (I-4).
+///
+/// `@env.now()` has millisecond resolution on this runtime, so a single feed
+/// cannot be timed on its own. Two measurements are therefore reported: the
+/// amortised cost per feed (the whole document, repeated, divided by the number
+/// of feeds) and the observation that no individual feed ever reached the
+/// clock's resolution, which is a p99 <= 1 ms statement rather than a p99
+/// measurement. The distribution is reported at the granularity the clock can
+/// actually see.
+fn bench_agent_scenario() -> Unit {
+  let input = make_call(4096)
+  let len = input.length()
+  let rounds = 200
+  for chunk in [1, 3, 16, 1024, 65536] {
+    let feeds = (len + chunk - 1) / chunk
+    let t0 = @env.now()
+    let mut over_resolution = 0
+    for _r = 0; _r < rounds; _r = _r + 1 {
+      try {
+        let parser = @mend.PartialParser::new()
+        let mut i = 0
+        while i < len {
+          let to = if i + chunk < len { i + chunk } else { len }
+          let f0 = @env.now()
+          parser.feed(input[i:to].to_owned())
+          if chunk <= 3 && @env.now() - f0 > 0 {
+            over_resolution = over_resolution + 1
+          }
+          i = to
+        }
+        ignore(parser.finish())
+      } catch {
+        _ => ()
+      }
+    }
+    let ms = (@env.now() - t0).to_double()
+    let total_feeds = (feeds * rounds).to_double()
+    println(
+      "agent\t4KB in " +
+      chunk.to_string() +
+      "\t" +
+      round1(ms) +
+      " ms for " +
+      rounds.to_string() +
+      " streams\t" +
+      round2(ms * 1000.0 / total_feeds) +
+      " us/feed\t" +
+      round1(mbps(len * rounds, ms)) +
+      " MB/s\tfeeds above clock resolution " +
+      over_resolution.to_string() +
+      "/" +
+      (feeds * rounds).to_string(),
+    )
+  }
+}
+
+///|
+/// A record with many top-level members: the shape FR-25 measures, where each
+/// member becomes final at a different point. `make_call` is not this shape —
+/// its members are `name` and a single nested `arguments` object, so the curve
+/// is flat until the very end.
+fn make_record(target : Int32) -> String {
+  let sb = StringBuilder()
+  sb.write_string("{")
+  let mut n = 0
+  let mut i = 0
+  while n < target {
+    if i > 0 {
+      sb.write_string(",")
+    }
+    let field = "\"field" + i.to_string() + "\":\"value-" + i.to_string() + "\""
+    sb.write_string(field)
+    n = n + field.length()
+    i = i + 1
+  }
+  sb.write_string("}")
+  sb.to_string()
+}
+
+///|
+/// The cost of FR-24 readiness tracking: one sample per 1/1000 of the input,
+/// each sample comparing two values. Reported per document and per 1000 fields
+/// so the price is visible next to the metric it buys.
+fn bench_readiness() -> Unit {
+  let docs : Array[String] = []
+  let mut bytes = 0
+  for k = 0; k < 20; k = k + 1 {
+    let doc = make_record(512 + k * 200)
+    docs.push(doc)
+    bytes = bytes + doc.length()
+  }
+  let ms = median5(() => ignore(@mend.readiness_median(docs)) catch { _ => () })
+  println(
+    "readiness\t" +
+    docs.length().to_string() +
+    " flat records, " +
+    bytes.to_string() +
+    " bytes\t" +
+    round1(ms) +
+    " ms\t" +
+    round2(ms * 1000.0 / docs.length().to_double()) +
+    " us/doc\t" +
+    round2(ms * 1000.0 * 1024.0 / bytes.to_double()) +
+    " us/KiB",
+  )
+  let deciles = @mend.readiness_deciles(docs) catch { _ => [] }
+  let saving = @mend.early_stop_saving(docs) catch { _ => 0 }
+  println(
+    "readiness\tdeciles " +
+    deciles.map(fn(x) { x.to_string() }).join(" ") +
+    "\tearly-stop saving " +
+    saving.to_string() +
+    "/1000",
+  )
+}
+
+///|
+/// One `drain_deltas` round trip is the whole delta cost (I-2): report it per
+/// delta so the number can be compared with the 1 MB delta benchmark above.
+fn bench_delta_size() -> Unit {
+  let input = make_call(4096)
+  let parser = @mend.PartialParser::new(options={
+    ..@mend.Options::default(),
+    collect_deltas: true,
+  }) catch {
+    _ => return
+  }
+  let mut n = 0
+  try {
+    for i = 0; i < input.length(); i = i + 3 {
+      let to = if i + 3 < input.length() { i + 3 } else { input.length() }
+      parser.feed(input[i:to].to_owned())
+      n = n + parser.drain_deltas().length()
+    }
+    ignore(parser.finish())
+  } catch {
+    _ => ()
+  }
+  println(
+    "deltas\t4KB call in 3 byte chunks\t" + n.to_string() + " deltas total",
+  )
+}
+
+///|
 /// Every benchmark.
 fn main {
   for target in [1024, 102400, 1048576, 10485760] {
@@ -457,4 +612,7 @@ fn main {
   bench_snap_repeat()
   bench_deltas()
   bench_ttfv()
+  bench_agent_scenario()
+  bench_readiness()
+  bench_delta_size()
 }

@@ -200,6 +200,9 @@ pub(all) struct Options {
   /// Record incremental deltas so that `PartialParser::drain_deltas` can return
   /// them (FR-18). Off by default: tracking costs work and memory.
   collect_deltas : Bool
+  /// Refuse a repair that admits a second reading (FR-27): the first ambiguous
+  /// record raises `E011` instead of being recorded. Off by default.
+  reject_ambiguous : Bool
 }
 
 ///|
@@ -226,6 +229,7 @@ pub fn Options::default() -> Options {
     max_repairs: 10000,
     max_loss: Lossy,
     collect_deltas: false,
+    reject_ambiguous: false,
   }
 }
 
@@ -259,12 +263,13 @@ pub fn Options::for_llm() -> Options {
 }
 
 ///|
-/// Profile for a caller that will execute the parsed value (FR-17): notation
-/// repairs are accepted, but anything that invented, dropped or truncated a
-/// value raises `E010`. Distinct from `strict()`, which rejects even a
-/// normalised quote.
+/// Profile for a caller that will execute the parsed value (FR-17, FR-27):
+/// notation repairs are accepted, but a repair that admits a second reading
+/// raises `E011` and anything that invented, dropped or truncated a value
+/// raises `E010`. Distinct from `strict()`, which rejects even a normalised
+/// quote, and from `lenient()`, which accepts both.
 pub fn Options::for_execution() -> Options {
-  { ..Options::default(), max_loss: Cosmetic, }
+  { ..Options::default(), max_loss: Cosmetic, reject_ambiguous: true, }
 }
 
 ///|

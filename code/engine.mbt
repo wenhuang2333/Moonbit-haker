@@ -131,6 +131,9 @@ priv struct Engine {
   /// Worst exactness seen so far (FR-17), updated even when records are not
   /// collected.
   mut exactness : Exactness
+  /// Whether an ambiguous repair was seen (FR-27), updated even when records
+  /// are not collected.
+  mut ambiguous : Bool
   /// Deltas recorded since the last `drain_deltas` (FR-18).
   mut deltas : Array[Delta]
   /// Code units of the string being scanned already reported as `AppendText`.
@@ -290,6 +293,7 @@ fn Engine::make(opts : Options) -> Engine {
     utf8_start: 0,
     fed_bytes: 0,
     exactness: Exact,
+    ambiguous: false,
     deltas: [],
     delta_str_reported: 0,
   }
@@ -315,6 +319,7 @@ fn Engine::report(
   p : Position,
   slot~ : Slot = KeySlot,
   severity~ : Severity? = None,
+  ambiguity~ : Ambiguity = Unambiguous,
 ) -> Unit raise MendError {
   // A few codes are only notation-level in some situations: quoting a key,
   // re-casing a literal, merging two identical duplicate keys. Those sites
@@ -325,6 +330,11 @@ fn Engine::report(
   }
   if self.opts.mode is Strict || !self.opts.rules.is_enabled(code) {
     raise StrictViolation(code, p, code.message())
+  }
+  // The ambiguity gate comes before the exactness gate: when both apply, the
+  // ambiguity is the more specific diagnosis and the one a retry can act on.
+  if ambiguity.is_ambiguous() && self.opts.reject_ambiguous {
+    raise AmbiguousRepair(code, p, ambiguity)
   }
   let level = if severity is Warning { Lossy } else { Cosmetic }
   if !level.within(self.opts.max_loss) {
@@ -340,9 +350,18 @@ fn Engine::report(
   if level.rank() > self.exactness.rank() {
     self.exactness = level
   }
+  if ambiguity.is_ambiguous() {
+    self.ambiguous = true
+  }
   if self.opts.collect_repairs {
     if self.reps.length() < self.opts.max_repairs {
-      self.reps.push({ code, position: p, severity, message: code.message(), })
+      self.reps.push({
+        code,
+        position: p,
+        severity,
+        message: code.message(),
+        ambiguity,
+      })
     } else {
       self.repairs_truncated = true
     }

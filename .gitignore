@@ -10,6 +10,7 @@ moon.lock
 # 评审输入与本地报告（提交版是 docs/DIVERGENCES.md）
 优化.md
 JSONMend 优化完善与创新方向建议.md
+JSONMend 第五轮：优化、完善与扩展方向.md
 
 # 差分报告的本地副本（提交版是 docs/DIVERGENCES.md）
 code/tests/diff/report.md

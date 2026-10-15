@@ -5,7 +5,7 @@ JSONMend 有两条完全分开的信号通道（ADR-006，规格 D09 9.1）：
 - **致命错误**：类型为 `MendError`（`code/error.mbt:211`），通过 `raise` 抛出。一旦抛出，本次调用失败，**不返回任何部分结果**，已经生成的文本全部丢弃；调用方只能捕获错误或让进程退出。
 - **修复记录**：类型为 `Repair`（`code/error.mbt:201`），字段为 `code`、`position`、`severity`、`message`。它**永远不是致命错误**，随 `RepairResult` / `ParseResult` / `FinalResult` 一起返回，表示"改了什么、改在哪里、有多严重"。
 
-`MendError` 共 10 个变体，每个变体都有稳定的 `code()` 字符串（`E001` … `E060`）与一行 `to_string()` 诊断。`RepairCode` 共 22 个变体，`code()` 为 `R001` … `R022`，`message()` 为固定英文模板（不含用户输入，避免日志注入，D09 9.7）。本文只记录 10 个致命错误码；修复码的含义见 D09 9.4。
+`MendError` 共 11 个变体，每个变体都有稳定的 `code()` 字符串（`E001` … `E060`，0.4.0 新增 `E011`）与一行 `to_string()` 诊断。`RepairCode` 共 22 个变体，`code()` 为 `R001` … `R022`，`message()` 为固定英文模板（不含用户输入，避免日志注入，D09 9.7）。本文只记录 11 个致命错误码；修复码的含义见 D09 9.4。
 
 `to_string()` 的格式为 `{code()} {变体名}: {说明}`，`E010` 额外携带位置与触发的修复码。
 
@@ -88,6 +88,28 @@ JSONMend 有两条完全分开的信号通道（ADR-006，规格 D09 9.1）：
   ```text
   E010 StrictViolation at 3:14 (offset 27): R005 RemoveExtraComma: extra comma removed
   ```
+
+### E011 AmbiguousRepair
+
+- `code()`：`E011`
+- 载荷：`RepairCode code`（触发的修复码）、`Position pos`、`Ambiguity ambiguity`（第二种读法的分类）、`String msg`。
+- `to_string()` 模板：`E011 AmbiguousRepair at {line}:{column} (offset {offset}): {R 码} {R 名称} ({歧义类}): {msg}`
+- 触发条件：`Options::reject_ambiguous` 为真且某条修复的 `ambiguity` 不是 `Unambiguous`
+  （`code/engine.mbt` 的 `report`）。判定的顺序是**严格模式/规则开关 → 歧义 → `max_loss`**：
+  歧义排在 `max_loss` 之前，因为「值没变」与「只有一种读法」是两件事，前者为真不代表后者为真。
+- 歧义分类（`Ambiguity`）：`BareWord`（`[fast]` 这类裸词，既可当字符串也可当未加引号的标识）、
+  `AdjacentStrings`（`["a" "b"]` 是一个还是两个元素）、`ConcatOperator`（`"a" + "b"` 是拼接还是两个元素）、
+  `TrailingContent`（根值之后的第二段内容是丢弃还是并入）。
+- CLI 退出码：**5**（与严格模式共用，`--reject-ambiguous`、`--for-execution` 触发）。
+- 示例：输入 `["a" "b"]`，`--reject-ambiguous` 输出
+
+  ```text
+  E011 AmbiguousRepair at 1:6 (offset 5): R006 InsertComma (adjacent_strings): inserted a comma between adjacent strings
+  ```
+
+  配合 `--retry-hint` 会在标准错误上追加一段可直接回灌模型的提示（见 `docs/ONEPAGE.md`）。
+- 与 `E010` 的区别：`E010` 说「这次修复超出你允许的信息损失」，`E011` 说
+  「这次修复不止一种读法」。`--for-execution` 同时打开两道闸。
 
 ### E020 DepthLimit
 

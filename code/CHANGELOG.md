@@ -5,6 +5,72 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.0] - 2026-10-15
+
+第五轮优化版本（`JSONMend 第五轮：优化、完善与扩展方向.md`），主题是**让证据经得起质疑**：
+补上歧义这一层被排除的难例、把评测跑到流式与适配器两条真实路径上、与参照库做并列对照，
+并把性能对齐到产品真实场景（4 KB、3 码元分块）。
+
+### 新增
+
+- **歧义标记与执行闸（FR-27）**。`Ambiguity` 五态（`unambiguous` / `bare_word` /
+  `adjacent_strings` / `concat_operator` / `trailing_content`）进入每条修复记录；
+  新的 `Options::reject_ambiguous` 在精确度闸**之前**抛 `E011 AmbiguousRepair`（退出码 5），
+  因为「值没变」和「只有一种读法」是两件事。新增错误码编号 `E011`（错误码 10 → 11）。
+- **拒绝即反馈（FR-28）**。`RetryHint`（`MendError::retry_hint`）：错误码、修复码、位置、
+  歧义类、原因、有界上下文窗口与插入符，`to_prompt()` 可直接回灌模型；CLI `--retry-hint`。
+- **字段就绪曲线（FR-29）**。`field_readiness` / `readiness_median` / `readiness_deciles` /
+  `early_stop_saving` 与增量驱动的 `FieldTracker`；CLI `readiness` 子命令。
+  取代「95% 覆盖」：后者在对象上结构性不敏感。
+- **适配器事件完备性与结束原因（FR-30）**。`ping` 与未知事件类型计数后忽略；
+  `error` 事件置 `ProviderError` 并暴露消息；`message_delta.stop_reason` 与 `finish_reason`
+  映射到 `CallEnd`（`Open` / `Complete` / `MaxTokens` / `Interrupted` / `ProviderError`），
+  并保留提供方的原始 `stop_reason`；新增 `TextStream` 读取 `delta.text` / `delta.content`，
+  CLI `llm --text`、`llm --batch`。
+- **事件接口（FR-16，原「削减」项）**。`PartialParser::feed_with` / `feed_bytes_with`：
+  在 `drain_deltas` 上的薄封装（回调顺序与 drain 逐条一致），不做第二套引擎。
+- **参照对照与多路径评测（FR-31）**。`tests/eval/refcompare.py`（同一 1200 条语料上跑
+  `jsonrepair` 3.15.0 与 `json_repair` 0.64.0，报告「静默错值」）、
+  `tests/eval/run_eval_paths.py`（8 条路径）、`tests/eval/run_ambiguity.py`（对抗语料 `amb-1`）、
+  `tests/eval/check_amb_guard.py`（断言机制本身可失败的守卫）、
+  `tests/memory_baseline.py`（与 Node / Python 的横向内存基线）。
+
+### 变更
+
+- `DeltaOp::Retract` 移除：它从未被发出，公开枚举只保留 `Set` / `AppendText` / `Close`。
+- `Close` 的契约写清：`duplicate_keys KeepLast` 下同一路径在 `Close` 之后仍可被 `Set` 覆盖，
+  并有测试固定该行为。
+- `--chunk N` 的上限从 64 放宽到 1 048 576 码元（此前大于 64 的分块会被拒绝）。
+- `llm --batch` 的事件既接受内嵌 JSON 对象，也接受 JSON 字符串。
+- `R022 NormalizeLiteral` 的判据从「长度相同」改为「仅 ASCII 大小写不同」：
+  `None` 补成 `null` 是发明取值（`R012`），`True` 补成 `true` 才是记法（`R022`）。
+  该问题由对抗语料 `amb-1` 首次运行时发现。取值不变，因此 `DIVERGENCES.md` 逐字节不变。
+- 模块名 `wenhuang2333/jsonmend` → `zhanshishan/jsonmend`（与 mooncakes 账号一致，发布前提）。
+
+### 证据
+
+- 真值语料 1200 条：`--batch` 基线、`--chunk 1/3/7/随机`、双 provider 工具流、
+  双 provider 文本流，**8 条路径全部 1200/1200，零分歧**（`docs/EVAL_PATHS.md`）。
+- 对抗歧义语料 `amb-1` 24 例：10 例歧义全部标记且全部拒绝，14 例对照全部放行，失败 0；
+  同一批用例上 `jsonrepair` 静默给出 8 个值、`json_repair` 10 个（`docs/EVAL_AMBIGUITY.md`）。
+- 参照库对照：JSONMend 静默错值 0，`jsonrepair` 122，`json_repair` 189；
+  `--for-execution` 拒绝 243/1200 且放行的错值 0（`docs/EVAL_REFERENCE.md`）。
+- 场景基准：4 KB 工具调用文档按 3 码元分块，0.08 µs/feed（摊还），290 000 次 feed 中
+  0 次达到毫秒时钟分辨率；就绪曲线十分位 `0 10 21 30 41 51 61 71 80 90 100`（`docs/BENCHMARK.md`）。
+- 内存横向基线：12.95 MB 输入下 JSONMend 13.7 ×、Node 10.6 ×、Python 14.3 ×；
+  「≤ 4 ×」对任何建树实现都不现实（`docs/MEMORY.md`）。
+- `moon test` 95/95（wasm-gc / native / js 一致）；`tests/cli_smoke.sh` 48/48。
+
+### 如实记录的限制
+
+- 适配器事件形状是**按官方文档与官方 SDK 类型定义转录**，不是真实流录制：
+  本环境没有凭据与到 provider 的网络。`tests/record_stream.py` 可在有条件时录制，
+  差别写在 `docs/LLM_EVENTS.md`。
+- p99 单次 feed 延迟只能给上界：运行时 `@env.now()` 为毫秒分辨率，且没有分配计数。
+- 就绪曲线只覆盖**顶层成员**，成本约 1.8 ms/KiB（采样 1000 次快照）；
+  全字段早停节省在扁平记录上构造性地≈0。
+- 文本模式默认不跳前言；`--skip-prose` 只从 `{` / `[` 开始取值，标量根需要关闭它。
+
 ## [0.3.0] - 2026-10-15
 
 第四轮优化版本（`JSONMend 优化完善与创新方向建议.md` 的 I-1…I-6 / O-1…O-15），主题是**让「修好了」这件事可以被执行方信任**：

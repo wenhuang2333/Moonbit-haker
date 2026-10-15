@@ -9,6 +9,14 @@ fn is_value_start_char(u : UInt16) -> Bool {
 }
 
 ///|
+/// Whether the token that starts with `u` could also continue the string
+/// literal that ended just before it. When it could, a comma inserted between
+/// the two admits two readings (R006, FR-27).
+fn can_extend_string(u : UInt16) -> Bool {
+  is_quote_open(u) || (is_ident_char(u) && !is_number_start(u))
+}
+
+///|
 /// Dispatch on the document phase.
 fn Engine::step_idle(
   self : Engine,
@@ -71,7 +79,7 @@ fn Engine::epilogue_drop(self : Engine, p : Position) -> Unit raise MendError {
   match self.opts.multi_root {
     KeepFirst =>
       if !self.epilogue_reported {
-        self.report(DropUnexpected, p)
+        self.report(DropUnexpected, p, ambiguity=TrailingContent)
         self.epilogue_reported = true
       }
     AsError =>
@@ -296,7 +304,17 @@ fn Engine::step_in_array(
       }
       if is_value_start_char(u) {
         if !self.stack[idx].synthetic && !self.concat_pending {
-          self.report(InsertComma, p)
+          // `["a" "b"]` is the case §5.2 of the product document admits: the
+          // comma is a notation fix, but the structure is a guess.
+          let items = self.stack[idx].items
+          let prev_string = items.length() > 0 &&
+            items[items.length() - 1] is Json::String(_)
+          let amb : Ambiguity = if prev_string && can_extend_string(u) {
+            AdjacentStrings
+          } else {
+            Unambiguous
+          }
+          self.report(InsertComma, p, ambiguity=amb)
         }
         self.start_value_char(u, p)
         return
@@ -536,7 +554,7 @@ fn Engine::value_done(self : Engine, v : Json) -> Unit raise MendError {
     match v {
       Json::String(s) =>
         if self.concat_last(s) {
-          self.report(ConcatStrings, self.concat_pos)
+          self.report(ConcatStrings, self.concat_pos, ambiguity=ConcatOperator)
           if self.opts.collect_deltas {
             self.push_delta(AppendText, self.concat_target_path(), None, s)
           }
@@ -1025,7 +1043,10 @@ fn Engine::classify_bare(
       LNull => Json::null()
       LNone => Json::null()
     }
-    self.emit_literal(v, text == canon, text.length() == canon.length(), start)
+    // `cased` must mean "the source differs from the canonical spelling only
+    // by ASCII case", not "it has the same length": `None` and `none` are as
+    // long as `null` but are a different word, so they invent a value (R012).
+    self.emit_literal(v, text == canon, ascii_lower(text) == canon, start)
     return
   }
   if is_non_finite(lower) {
@@ -1185,7 +1206,7 @@ fn Engine::emit_bare_word(
       }
       // A bare word in value position is a guess, not a notation fix: it is
       // recorded as `Warning` so that `Exactness` becomes `Lossy` (FR-17).
-      self.report(QuoteBareWord, start, slot=ValueSlot)
+      self.report(QuoteBareWord, start, slot=ValueSlot, ambiguity=BareWord)
       self.value_done(Json::string(text))
     }
   }
@@ -1388,6 +1409,7 @@ fn Engine::finish_engine(self : Engine) -> FinalResult raise MendError {
         completeness: Complete,
         repairs_truncated: self.repairs_truncated,
         exactness: self.exactness,
+        ambiguous: self.ambiguous,
       }
     }
     None => {
@@ -1564,6 +1586,7 @@ fn Engine::snapshot(self : Engine) -> Snapshot {
     completeness: self.completeness(),
     open_path: self.open_path(),
     exactness: self.exactness,
+    ambiguous: self.ambiguous,
   }
   self.snap_cache = Some(s)
   self.snap_cache_stamp = self.snap_stamp

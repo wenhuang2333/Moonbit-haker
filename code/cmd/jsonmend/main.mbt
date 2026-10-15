@@ -51,6 +51,7 @@ fn error_offset(e : @mend.MendError) -> Int32? {
     @mend.NoJsonFound(o) => Some(o)
     @mend.InvalidUtf8(o) => Some(o)
     @mend.StrictViolation(_, p, _) => Some(p.offset)
+    @mend.AmbiguousRepair(_, p, _) => Some(p.offset)
     _ => None
   }
 }
@@ -64,7 +65,7 @@ fn error_exit_code(e : @mend.MendError) -> Int32 {
     | @mend.InvalidUtf8(_)
     | @mend.InvalidEvent(_) => 3
     @mend.DepthLimit(_, _) | @mend.SizeLimit(_, _) | @mend.TokenLimit(_, _) => 4
-    @mend.StrictViolation(_, _, _) => 5
+    @mend.StrictViolation(_, _, _) | @mend.AmbiguousRepair(_, _, _) => 5
     @mend.InvalidState(_) => 70
     @mend.InvalidOption(_) => 2
   }
@@ -87,6 +88,16 @@ fn report(repairs : Array[@mend.Repair]) -> Unit {
 }
 
 ///|
+/// Suffix `--explain` adds when a record admits a second reading (FR-27).
+fn ambiguity_note(a : @mend.Ambiguity) -> String {
+  if a is @mend.Unambiguous {
+    ""
+  } else {
+    " [ambiguous: " + a.name() + "]"
+  }
+}
+
+///|
 /// `--explain`: one repair per block, with severity and a caret under the
 /// input position, then the exactness summary (FR-17, FR-20).
 fn explain(repairs : Array[@mend.Repair], text : String) -> Unit {
@@ -103,7 +114,8 @@ fn explain(repairs : Array[@mend.Repair], text : String) -> Unit {
       ":" +
       r.position.column.to_string() +
       " " +
-      r.message,
+      r.message +
+      ambiguity_note(r.ambiguity),
     )
     eprintln(snippet(text, r.position.offset))
   }
@@ -125,6 +137,7 @@ fn options_of(o : CliOpts) -> @mend.Options {
     quote_lookahead: o.quote_lookahead,
     max_repairs: o.max_repairs,
     max_loss: o.max_loss,
+    reject_ambiguous: o.reject_ambiguous,
   }
 }
 
@@ -146,17 +159,21 @@ fn run() -> Unit {
     }
     Version => {
       // Keep in sync with `version` in moon.mod; cli_smoke.sh checks it.
-      println("jsonmend 0.3.0")
+      println("jsonmend 0.4.0")
       quit(0)
     }
     Llm => {
       run_llm(o)
       quit(0)
     }
+    Readiness => {
+      run_readiness(o)
+      quit(0)
+    }
     Run => ()
   }
   if o.batch {
-    run_batch(options_of(o))
+    run_batch(options_of(o), o.chunk)
     quit(0)
   }
   let stream = open_input(o.path)
@@ -213,6 +230,13 @@ fn run() -> Unit {
   } catch {
     e => {
       eprintln("jsonmend: " + e.to_string())
+      if o.retry_hint {
+        let text = @utf8.decode_lossy(Bytes::from_array(prefix[:])[:])
+        match e.retry_hint(input=text) {
+          Some(h) => eprintln(h.to_prompt())
+          None => ()
+        }
+      }
       match error_offset(e) {
         // Every offset carried by an error is absolute, measured from the start
         // of the input, and therefore independent of the chunking used here.
@@ -227,6 +251,66 @@ fn run() -> Unit {
       quit(error_exit_code(e))
     }
   }
+}
+
+///|
+/// Order two readiness points by position, then by name.
+fn cmp_ready(a : @mend.FieldReady, b : @mend.FieldReady) -> Int32 {
+  if a.permille < b.permille {
+    -1
+  } else if a.permille > b.permille {
+    1
+  } else {
+    a.key.compare(b.key)
+  }
+}
+
+///|
+/// `jsonmend readiness`: the field readiness curve of one document (FR-29).
+fn run_readiness(o : CliOpts) -> Unit {
+  let stream = open_input(o.path)
+  if stream == 0L {
+    let name = match o.path {
+      Some(p) => p
+      None => "<stdin>"
+    }
+    eprintln("jsonmend: 无法读取 " + name)
+    return quit(3)
+  }
+  let text = read_all(stream)
+  close_input(stream)
+  let fields = @mend.field_readiness(text, step=o.step) catch {
+    e => {
+      eprintln("jsonmend: " + e.to_string())
+      return quit(error_exit_code(e))
+    }
+  }
+  if fields.length() == 0 {
+    println("jsonmend: readiness 0 fields (root is not an object)")
+    return quit(0)
+  }
+  let curve = @mend.readiness_deciles([text], step=o.step) catch { _ => [] }
+  let saving = @mend.early_stop_saving([text], step=o.step) catch { _ => 0 }
+  let median = @mend.readiness_median([text], step=o.step) catch { _ => 0 }
+  let sorted = fields.copy()
+  sorted.sort_by(cmp_ready)
+  let sb = StringBuilder()
+  sb.write_string("jsonmend: readiness median ")
+  sb.write_string(median.to_string())
+  sb.write_string("/1000 fields ")
+  sb.write_string(fields.length().to_string())
+  sb.write_string(" early-stop-saving ")
+  sb.write_string(saving.to_string())
+  sb.write_string("/1000 curve")
+  for c in curve {
+    sb.write_string(" ")
+    sb.write_string(c.to_string())
+  }
+  println(sb.to_string())
+  for f in sorted {
+    println("field " + f.key + " " + f.permille.to_string())
+  }
+  quit(0)
 }
 
 ///|

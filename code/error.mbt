@@ -187,6 +187,76 @@ pub fn RepairCode::severity_in(self : RepairCode, slot : Slot) -> Severity {
 }
 
 ///|
+/// Whether a repair admits a second, equally self-consistent reading (FR-27).
+///
+/// `Unambiguous` means the JSON grammar leaves no other reading of the input.
+/// Every other variant names the concrete alternative reading, which a consumer
+/// that is about to *execute* the value must refuse: `Options::reject_ambiguous`
+/// turns a non-`Unambiguous` repair into `E011`.
+///
+/// The marker is orthogonal to `Severity`: `["a" "b"]` is `Info` (nothing was
+/// invented, both characters were already there) yet structurally ambiguous.
+pub(all) enum Ambiguity {
+  Unambiguous
+  /// R004 in value position: the bare word may be a string, a reference to a
+  /// value of the host language, or a misspelled literal.
+  BareWord
+  /// R006 between two string literals: `["a" "b"]` reads equally as two
+  /// elements and as the single concatenated string `"ab"`.
+  AdjacentStrings
+  /// R019: `"a" + "b"` reads equally as one concatenated string and as two
+  /// values separated by an operator that JSON does not have.
+  ConcatOperator
+  /// R016 after a complete root value: what follows may be a second document,
+  /// a further element of a list, or prose.
+  TrailingContent
+}
+
+///|
+/// Explicit `Eq` implementation for `Ambiguity`.
+pub impl Eq for Ambiguity with fn equal(self : Ambiguity, other : Ambiguity) -> Bool {
+  self.name() == other.name()
+}
+
+///|
+/// Explicit `Eq` extension for `Ambiguity`.
+pub extend Ambiguity with Eq::{not_equal, equal}
+
+///|
+/// Stable lowercase name of an ambiguity, e.g. `adjacent_strings`.
+pub fn Ambiguity::name(self : Ambiguity) -> String {
+  match self {
+    Unambiguous => "unambiguous"
+    BareWord => "bare_word"
+    AdjacentStrings => "adjacent_strings"
+    ConcatOperator => "concat_operator"
+    TrailingContent => "trailing_content"
+  }
+}
+
+///|
+/// Whether the two readings of an ambiguity can be told apart from the input
+/// alone. Always false today: that is what makes it an ambiguity.
+pub fn Ambiguity::is_ambiguous(self : Ambiguity) -> Bool {
+  !(self is Unambiguous)
+}
+
+///|
+/// Fixed English message of an ambiguity, for `E011` and `RetryHint`.
+pub fn Ambiguity::message(self : Ambiguity) -> String {
+  match self {
+    Unambiguous => ""
+    BareWord =>
+      "bare word in value position may be a string or a host-language value"
+    AdjacentStrings =>
+      "two adjacent strings may be two elements or one concatenated string"
+    ConcatOperator => "a plus sign between strings may concatenate or separate"
+    TrailingContent =>
+      "text after the first root value may be a second document or prose"
+  }
+}
+
+///|
 /// Fixed English message template of a repair code. Messages never embed user
 /// input, so they cannot be used to inject content into logs (D09 9.7).
 pub fn RepairCode::message(self : RepairCode) -> String {
@@ -312,12 +382,26 @@ pub impl Eq for Position with fn equal(self : Position, other : Position) -> Boo
 pub extend Position with Eq::{not_equal, equal}
 
 ///|
-/// One repair record: what was changed, where, and how serious it is.
+/// One repair record: what was changed, where, how serious it is, and whether
+/// the change admits a second reading.
 pub(all) struct Repair {
   code : RepairCode
   position : Position
   severity : Severity
   message : String
+  /// `Unambiguous` unless the site could be read more than one way (FR-27).
+  ambiguity : Ambiguity
+}
+
+///|
+/// Whether any record in `repairs` is ambiguous (FR-27).
+pub fn has_ambiguity(repairs : Array[Repair]) -> Bool {
+  for r in repairs {
+    if r.ambiguity.is_ambiguous() {
+      return true
+    }
+  }
+  false
 }
 
 ///|
@@ -327,6 +411,10 @@ pub(all) suberror MendError {
   EmptyInput
   NoJsonFound(Int32)
   StrictViolation(RepairCode, Position, String)
+  /// An unambiguous reading was required but the repair admits a second one
+  /// (E011, FR-27). Raised before the `max_loss` gate, because the ambiguity is
+  /// the more specific diagnosis.
+  AmbiguousRepair(RepairCode, Position, Ambiguity)
   DepthLimit(Int32, Int32)
   SizeLimit(Int32, Int32)
   TokenLimit(Int32, Int32)
@@ -345,6 +433,7 @@ pub fn MendError::code(self : MendError) -> String {
     EmptyInput => "E001"
     NoJsonFound(_offset) => "E002"
     StrictViolation(_code, _pos, _msg) => "E010"
+    AmbiguousRepair(_code, _pos, _msg) => "E011"
     DepthLimit(_limit, _offset) => "E020"
     SizeLimit(_limit, _offset) => "E021"
     TokenLimit(_limit, _offset) => "E022"
@@ -379,6 +468,20 @@ pub fn MendError::to_string(self : MendError) -> String {
       sb.write_string(code.name())
       sb.write_string(": ")
       sb.write_string(msg)
+    }
+    AmbiguousRepair(code, pos, ambiguity) => {
+      sb.write_string("E011 AmbiguousRepair at ")
+      sb.write_string(pos.line.to_string())
+      sb.write_string(":")
+      sb.write_string(pos.column.to_string())
+      sb.write_string(" (offset ")
+      sb.write_string(pos.offset.to_string())
+      sb.write_string("): ")
+      sb.write_string(code.code())
+      sb.write_string(" ")
+      sb.write_string(code.name())
+      sb.write_string(": ")
+      sb.write_string(ambiguity.message())
     }
     DepthLimit(limit, offset) => {
       sb.write_string("E020 DepthLimit: nesting limit ")

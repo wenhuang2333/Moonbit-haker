@@ -4,13 +4,13 @@
 
 | 项 | 值 |
 |----|----|
-| 登记 | [EVAL_REGISTRATION.md](EVAL_REGISTRATION.md) sha256 `fa534e4b329a539f` |
+| 登记 | [EVAL_REGISTRATION.md](EVAL_REGISTRATION.md) sha256 `848538910dd60b6c` |
 | 生成器 | `code/tests/eval/corpus.py` eval-2，种子 20261015 |
 | 语料 | `code/tests/eval/corpus.jsonl`，1200 条，sha256 `c528375a0d996a78` |
 | 生成跳过 | 1203 次尝试因算子不适用而丢弃（登记 §5） |
-| 被测二进制 | `./_build/native/release/build/cmd/jsonmend/jsonmend.exe`（sha256:9ffa223b39c4b5b4, 638816 bytes） |
+| 被测二进制 | `/tmp/jsonmend`（sha256:e1155ec2fdb21d90, 737136 bytes） |
 | 工具链 | `moon 0.1.20261012 (748b63c 2026-10-12)` |
-| 运行时刻 | 2026-10-15T04:23:20Z |
+| 运行时刻 | 2026-10-15T11:36:04Z |
 | 退出码 | 0（0 = 全部验收判据通过） |
 
 ## 1. 总体
@@ -29,8 +29,8 @@
 | 标签 | 用例数 | 其中恢复 | 该标签下的恢复率 |
 |------|--------|----------|------------------|
 | `exact` | 180 | 180 | 100.00% |
-| `cosmetic` | 780 | 780 | 100.00% |
-| `lossy` | 240 | 240 | 100.00% |
+| `cosmetic` | 769 | 769 | 100.00% |
+| `lossy` | 251 | 251 | 100.00% |
 
 标签是「可执行性」的承诺：`exact`/`cosmetic` 表示结果可以直接执行，
 `lossy` 表示修复过程发明或丢弃了信息。上表说明该承诺是否成立。
@@ -53,7 +53,7 @@
 | `dup_key` | 60 | 60 | 100.00% | 0 | 0 | 0 | 60 | 0 |
 | `mismatched_closer` | 60 | 60 | 100.00% | 0 | 0 | 0 | 60 | 0 |
 | `extra_closer` | 60 | 60 | 100.00% | 0 | 0 | 0 | 60 | 0 |
-| `literal_case` | 60 | 60 | 100.00% | 0 | 0 | 0 | 60 | 0 |
+| `literal_case` | 60 | 60 | 100.00% | 0 | 0 | 0 | 49 | 11 |
 | `control_char` | 60 | 60 | 100.00% | 0 | 0 | 0 | 60 | 0 |
 | `missing_value` | 60 | 60 | 100.00% | 0 | 0 | 0 | 0 | 60 |
 | `ellipsis` | 60 | 60 | 100.00% | 0 | 0 | 0 | 0 | 60 |
@@ -66,7 +66,8 @@
 |------|------|------|
 | 漏标率为 0（结果 ≠ 真值不得标为 exact/cosmetic） | PASS | 0 条差异中有 0 条被标为 exact/cosmetic |
 | clean 族全部 exact 且恢复率 1 | PASS | 60 条中 60 条 exact，60 条恢复 |
-| 记法族恢复率 1 且标签不为 lossy | PASS | 900 条中 900 条恢复，900 条标签为 exact/cosmetic |
+| 记法族恢复率 1 且标签不为 lossy（`null`→`None` 见判据 3b） | PASS | 889 条中 889 条恢复，889 条标签为 exact/cosmetic |
+| 3b：`literal_case` 的 `null`→`None` 恢复原值且标签为 lossy | PASS | 11 条中 11 条恢复，11 条标签为 lossy |
 | 丢信息族恢复率 1 且标签为 lossy | PASS | 240 条中 240 条恢复，240 条标签为 lossy |
 
 ## 6. 修订历史

@@ -1,4 +1,4 @@
 import {
   "moonbitlang/core/json",
-  "wenhuang2333/jsonmend" @mend,
+  "zhanshishan/jsonmend" @mend,
 }

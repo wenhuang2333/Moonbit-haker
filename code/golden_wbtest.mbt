@@ -44,6 +44,8 @@ fn err_text(e : MendError) -> String {
     NoJsonFound(o) => "E002@" + o.to_string()
     StrictViolation(c, p, _m) =>
       "E010(" + c.code() + "@" + p.offset.to_string() + ")"
+    AmbiguousRepair(c, p, _m) =>
+      "E011(" + c.code() + "@" + p.offset.to_string() + ")"
     DepthLimit(l, o) => "E020(" + l.to_string() + ",@" + o.to_string() + ")"
     SizeLimit(l, o) => "E021(" + l.to_string() + ",@" + o.to_string() + ")"
     TokenLimit(l, o) => "E022(" + l.to_string() + ",@" + o.to_string() + ")"
@@ -205,7 +207,9 @@ fn cases_a() -> Array[Case] {
     ok("G-055", "[1,,2]", "[1,2]", "R005@3"),
     ok("G-056", "[,1]", "[1]", "R005@1"),
     ok(
-      "G-060", "[True,False,None]", "[true,false,null]", "R022@1,R022@6,R022@12",
+      // `None` is not `null` spelled differently: it is a different word, so
+      // completing it to `null` invents a value (R012, Warning).
+      "G-060", "[True,False,None]", "[true,false,null]", "R022@1,R022@6,R012@12",
     ),
     ok("G-061", "[undefined]", "[null]", "R012@1"),
     ok(

@@ -58,6 +58,8 @@ pub(all) struct RepairResult {
   completeness : Completeness
   repairs_truncated : Bool
   exactness : Exactness
+  /// Whether any recorded repair admits a second reading (FR-27).
+  ambiguous : Bool
 }
 
 ///|
@@ -68,6 +70,8 @@ pub(all) struct ParseResult {
   completeness : Completeness
   repairs_truncated : Bool
   exactness : Exactness
+  /// Whether any recorded repair admits a second reading (FR-27).
+  ambiguous : Bool
 }
 
 ///|
@@ -79,6 +83,8 @@ pub(all) struct Snapshot {
   /// Exactness of everything consumed so far. A snapshot is a display channel,
   /// so this is informational; the execution channel is `finish`.
   exactness : Exactness
+  /// Whether anything consumed so far was repaired ambiguously (FR-27).
+  ambiguous : Bool
 }
 
 ///|
@@ -90,6 +96,8 @@ pub(all) struct FinalResult {
   completeness : Completeness
   repairs_truncated : Bool
   exactness : Exactness
+  /// Whether any recorded repair admits a second reading (FR-27).
+  ambiguous : Bool
 }
 
 ///|
@@ -100,10 +108,10 @@ pub(all) enum DeltaOp {
   Set
   /// `text` was appended to the string at `path`.
   AppendText
-  /// The container at `path` is complete; `value` is its final content.
+  /// The container at `path` is complete; `value` is its final content. A
+  /// later `Set` on the same path is still legal: `duplicate_keys KeepLast`
+  /// overwrites a member after its container was closed.
   Close
-  /// Reserved for a future retracting stream; never produced today.
-  Retract
 }
 
 ///|
@@ -124,7 +132,6 @@ pub fn DeltaOp::name(self : DeltaOp) -> String {
     Set => "set"
     AppendText => "append_text"
     Close => "close"
-    Retract => "retract"
   }
 }
 
@@ -220,6 +227,7 @@ pub fn PartialParser::snapshot_copy(self : PartialParser) -> Snapshot {
     completeness: s.completeness,
     open_path: s.open_path.copy(),
     exactness: s.exactness,
+    ambiguous: s.ambiguous,
   }
 }
 
@@ -246,6 +254,46 @@ pub fn copy_json(v : Json) -> Json {
 /// otherwise this raises `E050`. Applying the returned operations in order to
 /// the value obtained from the previous drain yields the current
 /// `snapshot().value`.
+
+///|
+/// FR-16, the event interface, as a thin wrapper over `drain_deltas`.
+///
+/// `on_delta` is called once per change, in the order `drain_deltas` would
+/// return them, immediately after the change happened. This is deliberately not
+/// a separate engine: it is the same log, consumed as it is produced, because
+/// the callback is what a caller integrating with an event loop needs and a
+/// second implementation would be a second place for the two to diverge.
+///
+/// The callback runs while the parser is inside `feed`, so it must not feed the
+/// parser again; callbacks that need to do so should collect the deltas and act
+/// after `feed` returns.
+pub fn PartialParser::feed_with(
+  self : PartialParser,
+  chunk : String,
+  on_delta : (Delta) -> Unit,
+) -> Unit raise MendError {
+  self.feed(chunk)
+  for d in self.drain_deltas() {
+    on_delta(d)
+  }
+}
+
+///|
+/// The same, for byte input (FR-12, FR-16).
+pub fn PartialParser::feed_bytes_with(
+  self : PartialParser,
+  bytes : Bytes,
+  on_delta : (Delta) -> Unit,
+) -> Unit raise MendError {
+  self.feed_bytes(bytes)
+  for d in self.drain_deltas() {
+    on_delta(d)
+  }
+}
+
+///|
+/// `drain_deltas` on the parser that the stream produced, keeping the existing
+/// documentation in one place.
 pub fn PartialParser::drain_deltas(
   self : PartialParser,
 ) -> Array[Delta] raise MendError {
@@ -290,6 +338,7 @@ pub fn repair(
     completeness: fin.completeness,
     repairs_truncated: fin.repairs_truncated,
     exactness: fin.exactness,
+    ambiguous: fin.ambiguous,
   }
 }
 
@@ -310,6 +359,7 @@ pub fn parse(input : String, options? : Options) -> ParseResult raise MendError 
     completeness: fin.completeness,
     repairs_truncated: fin.repairs_truncated,
     exactness: fin.exactness,
+    ambiguous: fin.ambiguous,
   }
 }
 

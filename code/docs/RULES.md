@@ -1,6 +1,6 @@
 # 修复规则
 
-本文件描述 JSONMend 0.3.0 的 22 条修复规则（`R001`–`R022`）。
+本文件描述 JSONMend 0.4.0 的 22 条修复规则（`R001`–`R022`）。
 
 规则在**单次从左到右扫描**中即时生效：引擎按 UTF-16 码元推进，遇到可修复的情形立刻登记记录并继续，不回溯、不二次遍历。同一位置可能命中多条规则，此时按本文《规则总览》表的顺序（即规则编号从小到大）依次生效，每条规则各产生一条独立的修复记录。记录数组上限默认 **10000** 条（`Options.max_repairs`），超出后不再记录并把结果的 `repairs_truncated` 置为 `true`（`Strict` 判定与规则开关的检查不受该上限影响）。
 
@@ -37,7 +37,7 @@
 | R019 | ConcatStrings | Info | 相邻字符串用 `+` 拼接（BR-21） |
 | R020 | DropEllipsis | Warning | 独立的 `...` 裸词占位符 |
 | R021 | SkipProse | Info | `skip_prose=true` 且第一个 `{` 或 `[` 之前存在非空白文字 |
-| R022 | NormalizeLiteral | Info | 字面量只是大小写变体（`True`、`FALSE`、`nUll`），长度与规范写法相同 |
+| R022 | NormalizeLiteral | Info | 字面量**只是 ASCII 大小写变体**（`True`、`FALSE`、`nUll`）：判据是 `ascii_lower(text) == canon`。`None`、`NULL`→`null` 这类**换词**不走这条规则，走 R012 `ConvertLiteral`（Warning，因为补全的是另一个词） |
 
 “级别”一列取自 `RepairCode::severity()`（0.3.0 起 R015/R017/R021 已按此表降为 Info）。
 三个调用点会传入**显式级别**覆盖默认值，除此之外 `severity()` 是唯一来源：
@@ -220,7 +220,7 @@ R003 的前瞻分支（Warning）、R004 的值位置（Warning）、R018 的相
 - 名称：`ConvertLiteral`
 - 级别：Warning
 - 消息：`literal converted or completed`
-- 触发条件：裸词 token 经小写化后是 `true`、`false`、`null` 之一，或是它们的任意前缀，或是 `none`、`undefined`（含前缀）；或 token 为 `NaN`、`Infinity`、`-Infinity`。**长度与规范写法的长度相同的大小写变体走 R022，不记 R012。**
+- 触发条件：裸词 token 经小写化后是 `true`、`false`、`null` 之一，或是它们的任意前缀，或是 `none`、`undefined`（含前缀，包括 `None` 这种换词）；或 token 为 `NaN`、`Infinity`、`-Infinity`。**只有「与规范写法只差 ASCII 大小写」的 token（`True`、`FALSE`、`nUll`）走 R022，不记 R012。**
 - 行为：转换为标准字面量或 `null`；已是精确标准写法时不记录。字面量前缀一律补全为唯一匹配的字面量，与后继字符无关。非有限值按 `non_finite` 处理：`AsNull` 转 `null`，`AsString` 转为含原文的字符串，`AsError` 抛 `E010(R012@…)`。记录位置为 token 起点。
 - 金样例：G-060、G-061、G-062、G-063、G-064、G-065、G-092、G-100、G-101。
 
@@ -403,9 +403,10 @@ R003 的前瞻分支（Warning）、R004 的值位置（Warning）、R018 的相
 - 名称：`NormalizeLiteral`
 - 级别：Info
 - 消息：`literal re-cased`
-- 触发条件：裸词 token 经小写化后是 `true`、`false`、`null` 之一，且**原文长度与规范写法相同**（即只差大小写）。
-- 行为：输出规范写法，记录位置为 token 起点。与 R012 的区别：R012 是「补全」（`tru` → `true`、`nul` → `null`、`undefined` → `null`），补全必然发明字符，因此是 Warning；R022 只是重新大小写，字符数与内容都没有变化，因此是 Info。
-- 金样例：G-065（`[TRUE,Null]`）、G-060（`[True,False,None]`）。
+- 触发条件：裸词 token 经小写化后是 `true`、`false`、`null` 之一，且**原文与规范写法只差 ASCII 大小写**（`ascii_lower(text) == 规范写法`）。
+- 行为：输出规范写法，记录位置为 token 起点。与 R012 的区别：R012 是「补全或换词」（`tru` → `true`、`nul` → `null`、`undefined` → `null`、`None` → `null`），必然引入原文没有的词形，因此是 Warning；R022 只是重新大小写，词形不变，因此是 Info。
+- **判据曾是「长度相同」，0.4.0 改为「只差 ASCII 大小写」**：`None`（4 码元）与 `null`（4 码元）长度相同，旧判据把它当成大小写变体，标为 `cosmetic`——这是错的，因为 `None` 是另一个词。该问题由对抗语料 `amb-1` 首次运行时发现（见 `docs/EVAL_REGISTRATION.md` §11）。受影响的是 G-060 的 `None` 一项：现在报 `R012@12`，`Exactness` 为 `lossy`。
+- 金样例：G-065（`[TRUE,Null]`）、G-060（`[True,False]` 部分；`None` 一项现在走 R012）。
 
 ```text
 输入：[True,FALSE,nUll]

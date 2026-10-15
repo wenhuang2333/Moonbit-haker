@@ -1,8 +1,8 @@
 // JSONMend — streaming JSON repair and partial parsing library.
 // Module manifest for the MoonBit toolchain.
-name = "wenhuang2333/jsonmend"
+name = "zhanshishan/jsonmend"
 
-version = "0.3.0"
+version = "0.4.0"
 
 readme = "README.md"
 

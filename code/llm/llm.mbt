@@ -1,5 +1,5 @@
 // jsonmend/llm — adapt the tool-call fragment streams of large language model
-// providers into `jsonmend` partial parses (FR-22).
+// providers into `jsonmend` partial parses (FR-23).
 //
 // The package is pure: it never opens a socket and never owns an HTTP client.
 // Its input is the text of one already-extracted event payload; how that text
@@ -29,6 +29,51 @@ pub impl Eq for Provider with fn equal(self : Provider, other : Provider) -> Boo
 pub extend Provider with Eq::{not_equal, equal}
 
 ///|
+/// How a stream ended, which is not the same question as "is the value
+/// complete" (FR-23 / FR-30).
+///
+/// `Open` means no end was signalled yet. The distinction between `Complete`,
+/// `MaxTokens` and `Interrupted` is the one a caller needs: the first two are
+/// the provider's own verdicts (`content_block_stop` / `finish_reason`, and
+/// `stop_reason: max_tokens` / `finish_reason: length`), the third means the
+/// stream stopped without one — a dropped connection, or a caller that gave up.
+pub(all) enum CallEnd {
+  Open
+  Complete
+  MaxTokens
+  Interrupted
+  ProviderError
+}
+
+///|
+/// Explicit `Eq` implementation for `CallEnd`.
+pub impl Eq for CallEnd with fn equal(self : CallEnd, other : CallEnd) -> Bool {
+  self.name() == other.name()
+}
+
+///|
+/// Explicit `Eq` extension for `CallEnd`.
+pub extend CallEnd with Eq::{not_equal, equal}
+
+///|
+/// Stable lowercase name of a `CallEnd`.
+pub fn CallEnd::name(self : CallEnd) -> String {
+  match self {
+    Open => "open"
+    Complete => "complete"
+    MaxTokens => "max_tokens"
+    Interrupted => "interrupted"
+    ProviderError => "provider_error"
+  }
+}
+
+///|
+/// Whether the call ended because the provider ran out of tokens.
+pub fn CallEnd::is_truncated(self : CallEnd) -> Bool {
+  self is MaxTokens
+}
+
+///|
 /// One tool call as seen so far.
 ///
 /// `snapshot` is the partial parse of the argument text received so far, so a
@@ -49,6 +94,11 @@ pub(all) struct ToolCallView {
   exactness : @mend.Exactness
   /// Whether the provider signalled the end of this call's arguments.
   done : Bool
+  /// How the call ended (FR-30).
+  end : CallEnd
+  /// The provider's own word for why it ended, verbatim and unparsed:
+  /// `"end_turn"`, `"max_tokens"`, `"tool_use"`, `"length"`, `"stop"`, …
+  stop_reason : String
 }
 
 ///|
@@ -59,6 +109,8 @@ struct ToolCall {
   mut name : String
   mut parser : @mend.PartialParser?
   mut done : Bool
+  mut end : CallEnd
+  mut stop_reason : String
   /// Text of every fragment received, kept for the equivalence check and for
   /// callers that want the raw text.
   text : StringBuilder
@@ -70,6 +122,12 @@ pub struct ToolStream {
   provider : Provider
   options : @mend.Options
   calls : Array[ToolCall]
+  /// Explanation of the last `error` event, "" when none arrived.
+  mut error_message : String
+  /// Event payloads that were not understood: `ping`, `message_start`, future
+  /// event types, text deltas in tool mode. The provider may add event types at
+  /// any time, so they are counted and ignored rather than rejected.
+  mut ignored : Int32
 }
 
 ///|
@@ -84,7 +142,7 @@ pub fn ToolStream::new(
     None => @mend.Options::for_llm()
   }
   opts.validate()
-  { provider, options: opts, calls: [], }
+  { provider, options: opts, calls: [], error_message: "", ignored: 0, }
 }
 
 ///|
@@ -101,6 +159,8 @@ fn ToolStream::call_at(self : ToolStream, index : Int32) -> ToolCall {
     name: "",
     parser: None,
     done: false,
+    end: Open,
+    stop_reason: "",
     text: StringBuilder(),
   }
   self.calls.push(c)
@@ -135,6 +195,7 @@ fn ToolStream::view(self : ToolStream, c : ToolCall) -> ToolCallView {
         completeness: @mend.Empty,
         open_path: [],
         exactness: @mend.Exact,
+        ambiguous: false,
       }
   }
   {
@@ -144,6 +205,8 @@ fn ToolStream::view(self : ToolStream, c : ToolCall) -> ToolCallView {
     snapshot: snap,
     exactness: snap.exactness,
     done: c.done,
+    end: c.end,
+    stop_reason: c.stop_reason,
   }
 }
 
@@ -164,6 +227,7 @@ fn ToolStream::push_arguments(
 fn ToolStream::close_call(
   _self : ToolStream,
   c : ToolCall,
+  end : CallEnd,
 ) -> Unit raise @mend.MendError {
   match c.parser {
     Some(p) => if !c.done { ignore(p.finish()) }
@@ -172,6 +236,47 @@ fn ToolStream::close_call(
     None => ()
   }
   c.done = true
+  // A verdict that is already known wins: `content_block_stop` says "this block
+  // ended normally", it does not overrule a `max_tokens` or a provider error.
+  if c.end is Open {
+    c.end = end
+  }
+}
+
+///|
+/// Record the provider's own word for why the stream ended, on every call that
+/// is not already in an error state.
+fn ToolStream::note_stop(self : ToolStream, reason : String) -> Unit {
+  let end = match reason {
+    "max_tokens" | "length" | "model_context_window_exceeded" => MaxTokens
+    _ => Complete
+  }
+  for c in self.calls {
+    if c.end is ProviderError {
+      continue
+    }
+    // The provider's word is recorded even when the block already closed
+    // normally: `tool_use` and `end_turn` are both normal ends, and a caller
+    // may still want to know which one it was.
+    if reason != "" {
+      c.stop_reason = reason
+    }
+    if c.end is Open || end is MaxTokens {
+      c.end = end
+    }
+  }
+}
+
+///|
+/// Mark every call as ended by a provider error (FR-30).
+fn ToolStream::note_error(self : ToolStream, message : String) -> Unit {
+  self.error_message = message
+  for c in self.calls {
+    // The end is decided, but the arguments are left open so that `finish`
+    // still finalises whatever fragment arrived: a caller wants the partial
+    // value of a call that failed, not an empty one.
+    c.end = ProviderError
+  }
 }
 
 ///|
@@ -190,11 +295,26 @@ pub fn ToolStream::push_event(
     Anthropic => self.push_anthropic(v)
     OpenAICompat => self.push_openai(v)
   }
+  if touched.length() == 0 {
+    self.ignored = self.ignored + 1
+  }
   let out : Array[ToolCallView] = []
   for c in touched {
     out.push(self.view(c))
   }
   out
+}
+
+///|
+/// Whether the provider reported an error in the stream, and what it said.
+pub fn ToolStream::error(self : ToolStream) -> String {
+  self.error_message
+}
+
+///|
+/// How many payloads were not understood and ignored.
+pub fn ToolStream::ignored_events(self : ToolStream) -> Int32 {
+  self.ignored
 }
 
 ///|
@@ -208,7 +328,10 @@ pub fn ToolStream::finish(
 ) -> Array[ToolCallView] raise @mend.MendError {
   let out : Array[ToolCallView] = []
   for c in self.calls {
-    self.close_call(c)
+    // A call the provider never closed was cut off: the stream stopped without
+    // a verdict, which is not the same as a normal end (FR-30).
+    let end = if c.end is Open { Interrupted } else { c.end }
+    self.close_call(c, end)
     out.push(self.view(c))
   }
   out

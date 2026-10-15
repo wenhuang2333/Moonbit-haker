@@ -1,4 +1,4 @@
-// FR-22 tests: the provider adapters must route fragments to the right call and
+// FR-23 tests: the provider adapters must route fragments to the right call and
 // the streamed result must be byte identical to repairing the accumulated
 // argument text in one shot.
 

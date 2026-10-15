@@ -58,8 +58,8 @@ JSONMEND_LONGRUN=1000000 moon test --target native
 cd code
 moon coverage clean                     # 清掉上一轮的 .trace 文件，避免计数错位
 moon test --enable-coverage
-moon coverage report -f summary -p wenhuang2333/jsonmend      # 根包 1378/1487 = 92.7%
-moon coverage report -f summary -p wenhuang2333/jsonmend/llm  # llm 包 223/243 = 91.8%
+moon coverage report -f summary -p zhanshishan/jsonmend      # 根包 1378/1487 = 92.7%
+moon coverage report -f summary -p zhanshishan/jsonmend/llm  # llm 包 223/243 = 91.8%
 moon coverage report -f summary                               # 含 bench：1586/2002 = 79.2%
 ```
 
@@ -115,7 +115,9 @@ bash code/tests/bench.sh native
 ```
 
 结果与 `docs/BENCHMARK.md` 对照；绝对值随机器变化，判定阈值见该文档。
-`bench/main.mbt` 另输出 `deltas`（增量流开销，NFR-PERF-05）与 `ttfv`（首个可见值，NFR-PERF-06）。
+`bench/main.mbt` 另输出 `deltas`（增量流开销，NFR-PERF-05）、`ttfv`（首个可见值，NFR-PERF-06）、
+`agent`（4 KB 工具调用文档按 1/3/16/1024/65536 码元分块，NFR-PERF-07）与
+`readiness`（字段就绪曲线成本与十分位，FR-29）。
 
 ## 5b. 真值评测（TC-EVAL）
 
@@ -132,10 +134,39 @@ python3 tests/eval/run_eval.py \
 产出 `docs/EVAL.md`。四条预登记判据全 PASS 时退出码为 0，`--allow-fail` 可只看报告。
 语料本身可校验：`python3 tests/eval/corpus.py` 打印数据集指纹。
 
+同一语料上的参照库对照（`jsonrepair` 3.15.0 / `json_repair` 0.64.0）与多路径评测：
+
+```bash
+cd code
+python3 tests/eval/refcompare.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/eval/run_eval_paths.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+```
+
+对抗歧义语料与「判据机制本身可失败」的守卫：
+
+```bash
+cd code
+python3 tests/eval/run_ambiguity.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/eval/check_amb_guard.py  --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+```
+
+横向内存基线（与 Node / Python 同文件对照）：
+
+```bash
+cd code
+python3 tests/memory_baseline.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+```
+
 `llm` 夹具由生成脚本与 MoonBit 内嵌副本同源产出，检查是否同步：
 
 ```bash
 python3 tests/gen_llm_fixtures.py --check
+```
+
+真实 provider 流的录制（需要凭据，默认不跑）：
+
+```bash
+ANTHROPIC_API_KEY=... OPENAI_API_KEY=... python3 tests/record_stream.py --out llm/fixtures
 ```
 
 ## 6. 浏览器演示页（TC-W-01）
@@ -186,6 +217,30 @@ node ../code/tests/demo_smoke.mjs              # 演示 bundle 仍可用
 ```
 
 逐项状态（含未达标项）见 `docs/TRACEABILITY.md`。
+
+### 7.1 发布到 mooncakes.io
+
+```bash
+moon whoami                 # 必须是模块名里的用户名（当前 zhanshishan）
+moon publish --dry-run      # 打包并检查，不上传
+moon publish                # 上传 0.4.0
+```
+
+`moon.mod` 的 `name` 必须等于 `moon whoami` 的用户名，否则 `moon publish` 报
+「User mismatch」。0.3.0 的发布记录：模块 `zhanshishan/jsonmend`，
+校验和 `0241a16e343c6f91814efaa189ad16bb95ec49c97a6b8ae6a6406547faf6185c`。
+
+### 7.2 只能在 GitHub 页面上完成的动作（agent 沙箱够不到）
+
+这三项在第五轮评审里被标为「需要你本人」：
+
+1. **建 1 个 Issue 与 1 个 PR**：官方要求保留 Issues、PR 与更新记录。建完之后可以改用
+   分支 + PR 的流程（`git checkout -b round5 && git push -u origin round5`，
+   然后在页面上开 PR）。
+2. **手动触发一次 `nightly.yml`**：Actions 页 → 左侧选 `Nightly` → `Run workflow`。
+   命令已在本机验证过（`JSONMEND_LONGRUN=1000000`，41.2 s 通过）。
+3. **确认 Release 页**：`v0.4.0` 标签推送后 `release.yml` 会自动构建 4 个资产
+   （Linux CLI、wasm 探针、浏览器包、`SHA256SUMS`），到 Release 页确认可下载即可。
 
 ## 8. 已知的环境差异
 

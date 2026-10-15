@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the LLM stream fixtures and their MoonBit embedding.
 
-The fixtures are the evidence for FR-22: one JSON event payload per line, in the
+The fixtures are the evidence for FR-23: one JSON event payload per line, in the
 order a provider would send them. Both artifacts are produced from this file, so
 the `.jsonl` files (replayed by the demo page) and the embedded copies used by
 `moon test` cannot drift apart.

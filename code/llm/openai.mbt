@@ -5,9 +5,13 @@
 //   choices[].delta.tool_calls[].id
 //   choices[].delta.tool_calls[].function.name
 //   choices[].delta.tool_calls[].function.arguments
+//   choices[].finish_reason
 // The name usually arrives in the first fragment of a call and the arguments
-// are then split arbitrarily. A `finish_reason` of `tool_calls` closes every
-// open call.
+// are then split arbitrarily. `finish_reason` is the provider's verdict:
+// `stop`, `tool_calls` or `function_call` mean a normal end, `length` means the
+// response was cut off by the token limit, `content_filter` means a policy stop.
+// A top level `error` object ends the stream. `choices[].delta.content` carries
+// ordinary text, which `ToolStream` ignores and `TextStream` reads.
 
 ///|
 /// Handle one OpenAI compatible chunk, returning the calls it changed.
@@ -16,6 +20,19 @@ fn ToolStream::push_openai(
   v : Json,
 ) -> Array[ToolCall] raise @mend.MendError {
   let out : Array[ToolCall] = []
+  // An error frame is `{"error": {"message", "type", "param", "code"}}`; the
+  // official clients raise on it and stop reading, which is what happens here.
+  match field(v, "error") {
+    Some(e) => {
+      let message = match field_string(e, "message") {
+        Some(m) => m
+        None => "provider error"
+      }
+      self.note_error(message)
+      return out
+    }
+    None => ()
+  }
   let choices = match field(v, "choices") {
     Some(c) => as_array(c)
     None => None
@@ -69,11 +86,23 @@ fn ToolStream::push_openai(
     match field_string(choice, "finish_reason") {
       Some(reason) =>
         if reason != "" {
+          let end = match reason {
+            "length" => MaxTokens
+            _ => Complete
+          }
           for c in self.calls {
             if !c.done {
-              self.close_call(c)
+              self.close_call(c, end)
+              if reason != "" {
+                c.stop_reason = reason
+              }
               out.push(c)
             }
+          }
+          // `length` is a statement about the whole response, so it is recorded
+          // on calls that were already closed as well.
+          if end is MaxTokens {
+            self.note_stop(reason)
           }
         }
       None => ()

@@ -7,6 +7,7 @@ enum CliAction {
   Help
   Version
   Llm
+  Readiness
 }
 
 ///|
@@ -21,10 +22,15 @@ struct CliOpts {
   mut quote_lookahead : Bool
   mut max_repairs : Int32
   mut max_loss : @mend.Exactness
+  mut reject_ambiguous : Bool
+  mut retry_hint : Bool
+  mut step : Int32
+  mut chunk : Int32
   mut explain : Bool
   mut batch : Bool
   mut provider : String
   mut sse : Bool
+  mut text : Bool
   mut follow : Bool
   mut path : String?
   mut action : CliAction
@@ -40,10 +46,18 @@ fn help_text() -> String {
     "  --indent N          输出缩进空格数，默认紧凑输出", "  --multi-root MODE   first、array 或 error，默认 first",
     "  --skip-prose        跳过 JSON 之前的说明文字", "  --quote-lookahead   启用引号歧义前瞻",
     "  --max-repairs N     最多记录多少条修复记录，默认 10000", "  --max-loss LEVEL    精确度上限：exact、cosmetic 或 lossy，默认 lossy",
+    "  --for-execution     执行档：等价于 --max-loss cosmetic --reject-ambiguous",
+    "  --reject-ambiguous  拒绝有第二种读法的修复，报 E011（退出码 5）",
+    "  --retry-hint        拒绝时在标准错误上打印可直接回灌模型的提示",
+    "  --chunk N           分块喂入：每次喂 N 个码元（≤1048576），用来验证流式路径（默认一次喂完）",
     "  --explain           在标准错误上逐条解释修复，并打印精确度小结",
     "  --batch             逐行读取 {\"id\",\"input\"} JSON，逐行输出结果 JSON",
+    "                      与 --chunk N 同用可把每条输入按 N 字节分块喂入",
+    "", "jsonmend readiness [选项] [文件]", "  打印字段就绪曲线：每个顶级字段在输入消耗到多少时已定稿。",
+    "  --step N            每 N 个码元观察一次，默认按长度自适应",
     "", "jsonmend llm [选项] [文件]", "  把模型的事件流喂给 provider 适配器，每个工具调用输出一行结果 JSON。",
     "  --provider NAME     anthropic（默认）或 openai", "  --sse               输入是 SSE 文本（默认按每行一个事件 JSON 读取）",
+    "  --text              读取文本增量（delta.content / text_delta）而不是工具调用参数（配 --skip-prose 可跳过前言）",
     "  --follow            每次增量都输出一行，而不是只在结束时输出",
     "  -h, --help          显示帮助", "  --version           显示版本", "",
     "文件为 `-` 或缺省时读取标准输入。", "", "退出码：0 成功（可能有修复）；1 --check 发现需要修复；2 用法错误；",
@@ -70,8 +84,16 @@ fn slice_tail(s : String, from : Int32) -> String {
 }
 
 ///|
-/// Decimal non-negative integer with an upper bound of 64.
+/// Decimal non-negative integer with an upper bound of 64: for the flags whose
+/// value is a small enumeration or indentation width.
 fn parse_uint(s : String) -> Int32? {
+  parse_uint_up_to(s, 64)
+}
+
+///|
+/// Decimal non-negative integer with an explicit upper bound. `--chunk` and
+/// `--step` count code units, so their bound is far above 64.
+fn parse_uint_up_to(s : String, limit : Int32) -> Int32? {
   if s.length() == 0 {
     return None
   }
@@ -82,7 +104,7 @@ fn parse_uint(s : String) -> Int32? {
       return None
     }
     n = n * 10 + (c - 0x30)
-    if n > 64 {
+    if n > limit {
       return None
     }
   }
@@ -125,10 +147,15 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
     quote_lookahead: false,
     max_repairs: 10000,
     max_loss: @mend.Lossy,
+    reject_ambiguous: false,
+    retry_hint: false,
+    step: 0,
+    chunk: 0,
     explain: false,
     batch: false,
     provider: "anthropic",
     sse: false,
+    text: false,
     follow: false,
     path: None,
     action: Run,
@@ -140,6 +167,8 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
     let mut consumed = 0
     if i == 1 && a == "llm" {
       o.action = Llm
+    } else if i == 1 && a == "readiness" {
+      o.action = Readiness
     } else if a == "-h" || a == "--help" {
       o.action = Help
     } else if a == "--version" {
@@ -154,12 +183,65 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
       o.skip_prose = true
     } else if a == "--quote-lookahead" {
       o.quote_lookahead = true
+    } else if a == "--for-execution" {
+      o.max_loss = @mend.Cosmetic
+      o.reject_ambiguous = true
+    } else if a == "--reject-ambiguous" {
+      o.reject_ambiguous = true
+    } else if a == "--retry-hint" {
+      o.retry_hint = true
+    } else if a == "--chunk" || a.has_prefix("--chunk=") {
+      let value = if a == "--chunk" {
+        consumed = 1
+        if i + 1 < args.length() {
+          args[i + 1]
+        } else {
+          ""
+        }
+      } else {
+        slice_tail(a, 8)
+      }
+      if value == "" && a == "--chunk" {
+        err = "--chunk 缺少参数"
+      } else {
+        match parse_uint_up_to(value, 1048576) {
+          Some(n) => o.chunk = n
+          None =>
+            err = "--chunk 需要 0 到 1048576 之间的整数，收到 `" +
+              value +
+              "`"
+        }
+      }
+    } else if a == "--step" || a.has_prefix("--step=") {
+      let value = if a == "--step" {
+        consumed = 1
+        if i + 1 < args.length() {
+          args[i + 1]
+        } else {
+          ""
+        }
+      } else {
+        slice_tail(a, 7)
+      }
+      if value == "" && a == "--step" {
+        err = "--step 缺少参数"
+      } else {
+        match parse_uint_up_to(value, 1048576) {
+          Some(n) => o.step = n
+          None =>
+            err = "--step 需要 0 到 1048576 之间的整数，收到 `" +
+              value +
+              "`"
+        }
+      }
     } else if a == "--explain" {
       o.explain = true
     } else if a == "--batch" {
       o.batch = true
     } else if a == "--sse" {
       o.sse = true
+    } else if a == "--text" {
+      o.text = true
     } else if a == "--follow" {
       o.follow = true
     } else if a == "--provider" || a.has_prefix("--provider=") {

@@ -8,6 +8,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+FIX="$ROOT/llm/fixtures"
 BIN="${1:-$ROOT/_build/native/release/build/cmd/jsonmend/jsonmend.exe}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -52,7 +53,7 @@ STDIN='' check "empty input" 3 '' "E001" --
 STDIN='hello world' check "no JSON value" 3 '' "E002" --
 STDIN='{"a":1}' check "unknown option" 2 '' "未知选项" -- --bogus
 STDIN='{"a":1}' check "--help exit code" 0 '' "" -- --help
-STDIN='{"a":1}' check "--version" 0 'jsonmend 0.3.0' "" -- --version
+STDIN='{"a":1}' check "--version" 0 'jsonmend 0.4.0' "" -- --version
 STDIN='{"a":1} {"b":2}' check "multi-root default" 0 '{"a":1}' "R016" -- --report
 STDIN='{"a":1} {"b":2}' check "--multi-root array" 0 '[{"a":1},{"b":2}]' "" -- --multi-root array
 STDIN='Here you go: {"a":1}' check "prose rejected by default" 3 '' "E002" --
@@ -165,8 +166,8 @@ fi
 
 # --batch reads JSONL and reports value, label and codes per line
 out="$(printf '%s\n' '{"id":"a","input":"[1,2"}' '{"id":"b","input":"{}"}' | "$BIN" --batch)"
-if [ "$(printf '%s' "$out" | head -1)" = '{"id":"a","rc":0,"exactness":"lossy","codes":["R009"],"value":[1,2],"text":"[1,2]"}' ] \
-   && [ "$(printf '%s' "$out" | tail -1)" = '{"id":"b","rc":0,"exactness":"exact","codes":[],"value":{},"text":"{}"}' ]; then
+if [ "$(printf '%s' "$out" | head -1)" = '{"id":"a","rc":0,"exactness":"lossy","ambiguous":false,"codes":["R009"],"value":[1,2],"text":"[1,2]"}' ] \
+   && [ "$(printf '%s' "$out" | tail -1)" = '{"id":"b","rc":0,"exactness":"exact","ambiguous":false,"codes":[],"value":{},"text":"{}"}' ]; then
   pass=$((pass + 1)); printf 'ok   %-34s\n' "--batch"
 else
   fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "--batch" "$out"
@@ -181,7 +182,7 @@ else
 fi
 
 # jsonmend llm: provider adapters over a recorded event stream
-out="$("$BIN" llm --provider anthropic llm/fixtures/anthropic_parallel.jsonl)"
+out="$("$BIN" llm --provider anthropic "$FIX/anthropic_parallel.jsonl")"
 if [ "$(printf '%s\n' "$out" | grep -c '"index"')" = 3 ] \
    && printf '%s' "$out" | head -1 | grep -q '"name":"search"' \
    && printf '%s' "$out" | tail -1 | grep -q '"path":"/tmp/x"'; then
@@ -191,7 +192,7 @@ else
 fi
 
 # a truncated call is closed and labelled lossy
-out="$("$BIN" llm --provider anthropic llm/fixtures/anthropic_truncated.jsonl)"
+out="$("$BIN" llm --provider anthropic "$FIX/anthropic_truncated.jsonl")"
 if printf '%s' "$out" | grep -q '"exactness":"lossy"' && printf '%s' "$out" | grep -q '"done":true'; then
   pass=$((pass + 1)); printf 'ok   %-34s\n' "llm truncated is lossy"
 else
@@ -199,7 +200,7 @@ else
 fi
 
 # --sse reads the same events with SSE framing
-out="$(sed 's/^/data: /' llm/fixtures/anthropic_single.jsonl | awk '{print; print ""}' | "$BIN" llm --sse)"
+out="$(sed 's/^/data: /' "$FIX/anthropic_single.jsonl" | awk '{print; print ""}' | "$BIN" llm --sse)"
 if printf '%s' "$out" | grep -q '"unit":"celsius"'; then
   pass=$((pass + 1)); printf 'ok   %-34s\n' "llm --sse"
 else
@@ -207,11 +208,94 @@ else
 fi
 
 # --follow shows every intermediate value
-n="$("$BIN" llm --follow llm/fixtures/anthropic_single.jsonl | wc -l | tr -d ' ')"
+n="$("$BIN" llm --follow "$FIX/anthropic_single.jsonl" | wc -l | tr -d ' ')"
 if [ "$n" -ge 4 ]; then
   pass=$((pass + 1)); printf 'ok   %-34s %s lines\n' "llm --follow" "$n"
 else
   fail=$((fail + 1)); printf 'FAIL %-34s %s lines\n' "llm --follow" "$n"
+fi
+
+# --- round 5 -----------------------------------------------------------------
+# An ambiguous input is repaired by default and flagged.
+STDIN='["a" "b"]'
+check "ambiguous is flagged" 0 '["a","b"]' "adjacent_strings" -- --explain
+# ... and refused when the caller is going to execute the value.
+STDIN='["a" "b"]'
+check "for-execution refuses E011" 5 "" "E011" -- --for-execution
+STDIN='["a" "b"]'
+check "reject-ambiguous refuses E011" 5 "" "E011" -- --reject-ambiguous
+# A unique reading still passes the execution gate.
+STDIN='{"a":1,}'
+check "for-execution accepts uniquely" 0 '{"a":1}' "" -- --for-execution
+# --retry-hint writes a re-ask prompt to stderr and keeps the exit code.
+STDIN='["a" "b"]'
+check "retry-hint prompt" 5 "" "Re-emit the arguments as valid JSON" -- --for-execution --retry-hint
+
+# --chunk feeds the same document in byte sized pieces.
+out="$(printf '%s' '{"a":[1,2,{"b":"x"}]}' | "$BIN" --chunk 1)"
+if [ "$out" = '{"a":[1,2,{"b":"x"}]}' ]; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "--chunk 1"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "--chunk 1" "$out"
+fi
+
+# --batch reports the ambiguity flag and the error code per line.
+out="$(printf '%s\n' '{"id":"a","input":"[1,2]"}' '{"id":"b","input":"[\"a\" \"b\"]"}' \
+  | "$BIN" --batch --for-execution)"
+if printf '%s' "$out" | head -1 | grep -q '"rc":0' \
+   && printf '%s' "$out" | tail -1 | grep -q '"error_code":"E011"'; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "--batch error_code"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "--batch error_code" "$out"
+fi
+
+# readiness reports a median, a field count and a monotone curve.
+out="$(printf '%s' '{"path":"/tmp","old":"x","content":"long enough to matter"}' | "$BIN" readiness)"
+if printf '%s' "$out" | head -1 | grep -q '^jsonmend: readiness median' \
+   && printf '%s' "$out" | grep -q '^field content ' \
+   && printf '%s' "$out" | grep -q '^jsonmend: readiness' ; then
+  mono="$(printf '%s' "$out" | head -1 | sed 's/.*curve //')"
+  if [ "$(printf '%s' "$mono" | tr ' ' '\n' | sort -n | tr '\n' ' ')" = "$mono " ]; then
+    pass=$((pass + 1)); printf 'ok   %-34s\n' "readiness"
+  else
+    fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "readiness curve not monotone" "$mono"
+  fi
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "readiness" "$out"
+fi
+
+# A re-ask hint for a non repair error is absent, not empty.
+STDIN='{"a":1}'
+check "retry-hint absent on success" 0 '{"a":1}' "" -- --for-execution --retry-hint
+
+# llm --text reads the JSON out of a chat answer.
+events='{"choices":[{"index":0,"delta":{"content":"Sure: {\"a\":1}"}}]}
+{"choices":[{"index":0,"delta":{"content":"{\"b\":"}}]}
+{"choices":[{"index":0,"delta":{"content":"2}"},"finish_reason":"stop"}]}'
+out="$(printf '%s\n' "$events" | "$BIN" llm --provider openai --text --skip-prose)"
+if printf '%s' "$out" | grep -q '"value":{"a":1}' \
+   && printf '%s' "$out" | grep -q '"stop_reason":"stop"' \
+   && printf '%s' "$out" | grep -q '"end":"complete"'; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "llm --text"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "llm --text" "$out"
+fi
+
+# llm --batch carries the end reason through the adapter.
+out="$(printf '%s\n' '{"id":"t","events":[{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","name":"f"}},{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"a\":"}},{"type":"message_delta","delta":{"stop_reason":"max_tokens"}}]}' \
+  | "$BIN" llm --provider anthropic --batch)"
+if printf '%s' "$out" | grep -q '"end":"max_tokens"' && printf '%s' "$out" | grep -q '"stop_reason":"max_tokens"'; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "llm --batch max_tokens"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "llm --batch max_tokens" "$out"
+fi
+
+# A ping is ignored, a future event type is ignored, neither is an error.
+out="$(printf '%s\n' '{"type":"ping"}' '{"type":"future_event"}' '{"type":"message_stop"}' | "$BIN" llm --provider anthropic)"
+if [ "$(printf '%s' "$out" | grep -c '"index"')" = 0 ]; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "llm ignores ping/unknown"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "llm ignores ping/unknown" "$out"
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

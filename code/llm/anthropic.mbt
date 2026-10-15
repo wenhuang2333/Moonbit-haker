@@ -4,8 +4,14 @@
 //   content_block_start  -> content_block.type == "tool_use", with name/id
 //   content_block_delta  -> delta.type == "input_json_delta", partial_json
 //   content_block_stop   -> the arguments of that index are complete
-// Everything else (message_start, ping, text deltas, message_stop, …) is
-// ignored, so a mixed stream can be fed through unchanged.
+//   message_delta        -> delta.stop_reason, the provider's own verdict
+//   ping                 -> {"type":"ping"}, any number of them, ignored
+//   error                -> {"type":"error","error":{"type",  "message"}}
+//
+// `message_start`, `message_stop` and any event type added later are ignored as
+// well: the documentation requires a client to handle unknown event types
+// gracefully, so this reader never fails on one. Everything ignored is counted
+// by `ToolStream::ignored_events`.
 
 ///|
 /// Handle one Anthropic event, returning the calls it changed.
@@ -89,10 +95,39 @@ fn ToolStream::push_anthropic(
     }
     for c in self.calls {
       if c.index == index {
-        self.close_call(c)
+        self.close_call(c, Complete)
         out.push(c)
       }
     }
+    return out
+  }
+  if kind == "message_delta" {
+    // The provider's verdict on the whole message: `end_turn`, `tool_use`,
+    // `max_tokens`, `stop_sequence`, `pause_turn`, `refusal`, or something
+    // added later. It arrives after the blocks, so it is recorded on every
+    // call rather than used to close one.
+    match field(v, "delta") {
+      Some(d) =>
+        match field_string(d, "stop_reason") {
+          Some(r) => self.note_stop(r)
+          None => ()
+        }
+      None => ()
+    }
+    return out
+  }
+  if kind == "error" {
+    // An error event (for example `overloaded_error`) ends the stream: no
+    // further argument fragments will arrive.
+    let message = match field(v, "error") {
+      Some(e) =>
+        match field_string(e, "message") {
+          Some(m) => m
+          None => "provider error"
+        }
+      None => "provider error"
+    }
+    self.note_error(message)
     return out
   }
   out

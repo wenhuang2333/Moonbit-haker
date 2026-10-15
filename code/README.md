@@ -4,11 +4,11 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 
 | | |
 | --- | --- |
-| Module | `wenhuang2333/jsonmend` |
-| Version | 0.3.0 |
+| Module | `zhanshishan/jsonmend` |
+| Version | 0.4.0 |
 | License | Apache-2.0 |
 | Preferred target | `wasm` (also builds for `native` and `js`) |
-| Prebuilt binaries | [Release `v0.3.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.3.0) — Linux CLI, wasm probe, browser bundle, `SHA256SUMS` |
+| Prebuilt binaries | [Release `v0.4.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.4.0) — Linux CLI, wasm probe, browser bundle, `SHA256SUMS` |
 
 ## Features
 
@@ -17,8 +17,11 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 - **Streaming partial parsing** with `PartialParser`: `feed` (or `feed_bytes`) any number of chunks, take `snapshot()` at any time, then `finish()`.
 - **Repair records** for every change: stable code (`R001`…`R022`), position (UTF-16 offset plus 1-based line/column), severity, and a fixed English message.
 - **Exactness labels**: every result carries `Exact` / `Cosmetic` / `Lossy`, derived from the severities of the records. `Options::max_loss` turns the first repair that exceeds the budget into a fatal `E010`, so "repair, then execute the arguments" cannot happen silently.
+- **Ambiguity gate**: a repair that admits a second, equally self-consistent reading (`["a" "b"]`, `["a"+"b"]`, `[fast]`, `{"a":1} {"b":2}`) is recorded with an `Ambiguity` class and refused with `E011` under `Options::reject_ambiguous` / `Options::for_execution()`, before the exactness gate. 10/10 adversarial cases are flagged and refused, while both reference libraries answer all 10 with a silent value (`docs/EVAL_AMBIGUITY.md`).
+- **Reject as feedback**: `MendError::retry_hint` (and `--retry-hint`) turns a refusal into a prompt fragment — error code, repair code, position, the second reading, a bounded context window with a caret — that can be fed straight back to the model that produced the input.
+- **Field readiness (FR-29)**: `field_readiness` reports, for every top-level member, the input fraction at which its value is already final, and `FieldTracker` does the same from the delta stream, so a caller can stop the generation as soon as the fields it needs are settled. The decile curve replaces the "95% coverage" figure that an object made structurally uninformative.
 - **Incremental deltas**: with `Options::collect_deltas`, `drain_deltas()` returns `Set` / `AppendText` / `Close` operations with RFC 6901 JSON Pointer paths, so a consumer can patch its own view instead of re-reading snapshots.
-- **LLM provider adapters** in the `jsonmend/llm` sub-package: Anthropic fine-grained tool streaming and OpenAI-compatible tool-call deltas, plus an SSE framer; `jsonmend llm` on the command line.
+- **LLM provider adapters** in the `jsonmend/llm` sub-package (*experimental*): Anthropic fine-grained tool streaming and OpenAI-compatible tool-call deltas, an SSE framer, and a text stream that reads the JSON out of `delta.text` / `delta.content`. The end of a call is reported as `Complete`, `MaxTokens`, `Interrupted` or `ProviderError` with the provider's own `stop_reason` verbatim; `ping` and unknown event types are counted and ignored. `jsonmend llm` on the command line.
 - **Strict mode** (`Mode::Strict`) turns the first repair into a fatal `E010`, and per-rule switches disable individual rules the same way.
 - **Resource limits**: nesting depth, total input length, and single-token length (`E020`/`E021`/`E022`).
 - **Policies** for duplicate keys, non-finite numbers, multiple root values, Markdown fences, leading prose, ambiguous quotes, and output indentation.
@@ -34,14 +37,14 @@ LLM applications stream JSON token by token, and the stream is routinely cut off
 Add the dependency with the MoonBit toolchain:
 
 ```sh
-moon add wenhuang2333/jsonmend
+moon add zhanshishan/jsonmend
 ```
 
 Then import the package in your `moon.pkg` with the alias used throughout this document:
 
 ```
 import {
-  "wenhuang2333/jsonmend" @jsonmend,
+  "zhanshishan/jsonmend" @jsonmend,
 }
 ```
 
@@ -131,6 +134,7 @@ Every field of `Options`. `@jsonmend.Options::default()` is the documented defau
 | `rules` | `RuleSet` | `RuleSet::all()` | Per-rule switches; disabling a rule makes that code raise `E010`. |
 | `indent` | `Int32` | `0` | Output indentation in spaces; `0` renders compact JSON. |
 | `max_repairs` | `Int32` | `10000` | Maximum number of repair records kept; beyond it repairs still apply but the result sets `repairs_truncated`. |
+| `reject_ambiguous` | `Bool` | `false` | Refuse a repair that admits a second reading (`E011`) instead of applying it. `Options::for_execution()` sets it. |
 | `max_loss` | `Exactness` | `Lossy` | Highest acceptable exactness. The first record that exceeds it raises `E010` with that code and position. `Options::for_execution()` sets `Cosmetic`. |
 | `collect_deltas` | `Bool` | `false` | Collect incremental deltas; read them with `PartialParser::drain_deltas()`. Cannot be combined with `duplicate_keys: KeepFirst` or `incomplete_number: TrimToValid`. |
 
@@ -225,6 +229,25 @@ jsonmend [选项] [文件]
   --skip-prose        跳过 JSON 之前的说明文字
   --quote-lookahead   启用引号歧义前瞻
   --max-repairs N     最多记录多少条修复记录，默认 10000
+  --max-loss LEVEL    精确度上限：exact、cosmetic 或 lossy，默认 lossy
+  --for-execution     执行档：等价于 --max-loss cosmetic --reject-ambiguous
+  --reject-ambiguous  拒绝有第二种读法的修复，报 E011（退出码 5）
+  --retry-hint        拒绝时在标准错误上打印可直接回灌模型的提示
+  --chunk N           分块喂入：每次喂 N 个码元（≤1048576），用来验证流式路径（默认一次喂完）
+  --explain           在标准错误上逐条解释修复，并打印精确度小结
+  --batch             逐行读取 {"id","input"} JSON，逐行输出结果 JSON
+                      与 --chunk N 同用可把每条输入按 N 字节分块喂入
+
+jsonmend readiness [选项] [文件]
+  打印字段就绪曲线：每个顶级字段在输入消耗到多少时已定稿。
+  --step N            每 N 个码元观察一次，默认按长度自适应
+
+jsonmend llm [选项] [文件]
+  把模型的事件流喂给 provider 适配器，每个工具调用输出一行结果 JSON。
+  --provider NAME     anthropic（默认）或 openai
+  --sse               输入是 SSE 文本（默认按每行一个事件 JSON 读取）
+  --text              读取文本增量（delta.content / text_delta）而不是工具调用参数（配 --skip-prose 可跳过前言）
+  --follow            每次增量都输出一行，而不是只在结束时输出
   -h, --help          显示帮助
   --version           显示版本
 
@@ -251,7 +274,7 @@ Flags and their meanings:
 | `--batch` | Read `{"id","input"}` objects line by line and write one result object per line. |
 | `llm` (subcommand) | Feed a provider event stream through the adapter: `jsonmend llm [--provider anthropic\|openai] [--sse] [--follow] [file]`. |
 | `-h`, `--help` | Show help. |
-| `--version` | Show the version (`jsonmend 0.3.0`). |
+| `--version` | Show the version (`jsonmend 0.4.0`). |
 | file, or `-` | Read a file; `-` or an omitted argument reads standard input. |
 
 `--indent=N`, `--multi-root=MODE`, and `--max-repairs=N` are accepted as equivalent to the space-separated forms.
@@ -277,29 +300,38 @@ cd code
 moon test                      # default backend (wasm-gc)
 moon test --target native      # host backend
 moon test --target js          # JavaScript backend
-bash tests/cli_smoke.sh        # 36 command line assertions
+bash tests/cli_smoke.sh        # 48 command line assertions
 bash tests/examples.sh         # example inputs vs code/examples/cases/*.expected
 node ../code/tests/demo_smoke.mjs   # the committed browser bundle still answers
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 python3 tests/eval/run_eval.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/eval/run_eval_paths.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/eval/check_amb_guard.py    # the adversarial suite's guard still fires
+python3 tests/eval/run_ambiguity.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/eval/refcompare.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 python3 tests/gen_llm_fixtures.py --check
+python3 tests/memory_baseline.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 ```
 
-| Suite | Size | Result (0.3.0) |
+| Suite | Size | Result (0.4.0) |
 | --- | --- | --- |
 | Golden cases (spec appendices A and B) | 126 | pass |
 | Documented streaming cases (S-001…S-021) + chunk invariance | 21 + invariance checks | pass |
 | Property and fuzz tests (TC-P-01…TC-P-06) | 8 groups × 400 cases (`JSONMEND_LONGRUN` raises it; nightly runs 1 000 000) | pass, no counterexample |
 | Exactness labels | hand-written table + 240 property cases + the `max_loss` gate | pass |
 | Incremental deltas (replay == snapshot) | 400 generated + 400 mutated documents | pass |
-| LLM adapters (both providers, 9 fixtures) | 19 tests | pass |
+| LLM adapters (both providers, 9 generated fixtures + documented event shapes) | 30 tests | pass |
+| Adapter path against the ground-truth corpus | 1200 cases × (both providers × tool args and text) | **1200/1200 on all four** ([docs/EVAL_PATHS.md](docs/EVAL_PATHS.md)) |
+| Adversarial ambiguity suite `amb-1` | 24 handwritten cases, frozen fingerprint | 10/10 flagged and refused, 14/14 controls pass, 0 failures ([docs/EVAL_AMBIGUITY.md](docs/EVAL_AMBIGUITY.md)) |
+| Reference libraries on the same corpus | 1200 cases × (`jsonrepair` 3.15.0, `json_repair` 0.64.0) | JSONMend silent wrong values 0, `jsonrepair` 122, `json_repair` 189 ([docs/EVAL_REFERENCE.md](docs/EVAL_REFERENCE.md)) |
+| Chunked paths against the ground-truth corpus | 1200 cases × chunk 1/3/7/random | 1200/1200 each, 0 regressions |
 | Public surface (every `R` code and `E` code) | 22 + 10 codes checked field by field | pass |
 | Ground-truth evaluation (protocol frozen first) | 1200 cases (19 mutation families + 1 control × 60) | recovery **100.00%**, 0 mislabelled, 4/4 pre-registered criteria PASS |
-| Command line smoke (exit codes 0/1/2/3/4/5/70) | 36 assertions | pass |
+| Command line smoke (exit codes 0/1/2/3/4/5/70) | 48 assertions | pass |
 | Differential corpus against `jsonrepair` / `json-repair` | 402 cases | 202 divergences, all documented, 0 unexplained |
-| Line coverage of the library | 1378/1487 lines (root), 223/243 (`llm`) | 92.7% / 91.8% |
+| Line coverage of the library | 1378/1487 lines (root), 223/243 (`llm`) | 92.7% / 91.8% (measured at 0.3.0; `moon coverage` cannot instrument the `cmd` package, which calls `quit()`) |
 
-Cross-backend results are identical: 69 tests pass on wasm-gc, native and
+Cross-backend results are identical: 95 tests pass on wasm-gc, native and
 JavaScript. `.github/workflows/ci.yml` runs the same commands on every push, so
 the numbers above are re-derived rather than trusted. Reproduction steps,
 thresholds and the known shortfalls are in
@@ -315,6 +347,19 @@ JSONMend is not a port of `jsonrepair` and does not aim for byte-identical outpu
 
 ## Performance
 
+![Field readiness curve](../static/readiness-curve.svg)
+
+The figure is produced by `code/tests/readiness_figure.py` from the real output of
+`jsonmend readiness`: the left panel is a tool-call document (`name` 188,
+`arguments` 858, `id` 981, median 858/1000) and the right panel is the decile
+curve of a flat 200-member record (`0 10 21 30 41 51 61 71 80 90 100`). The
+dashed line is the ideal baseline — a field final when its own share of the input
+has been read. This replaces the previous "95% coverage" figure, which an object
+made structurally uninformative (it sat at 95.3% regardless of quality). The
+limitation is on the figure too: the metric covers **top-level** members only, so
+`arguments` cannot settle before its container closes, which is the only reason
+the left panel leaves the diagonal.
+
 `bench/main.mbt` measures one-shot repair throughput over valid, flawed, deeply nested, and long-string corpora, plus parse-only cost, scaling at n/2n/4n, and streaming overhead as a function of chunk size and snapshot frequency:
 
 ```sh
@@ -326,41 +371,46 @@ On a 2026 Apple-silicon laptop, native measured 41–42 MB/s (valid), 83–87 MB
 (flawed) and 594 MB/s (one long string); js measured 22–39 MB/s. The same run
 also measures two things that matter for streaming: the **first visible value**
 appears at 0.7% of the document (median over tool-call payloads), and enabling
-`collect_deltas` costs 1.39–1.51 × the baseline time — that last number is a
+`collect_deltas` costs 1.40–1.46 × the baseline time on a 1 MB document — that number is a
 **known shortfall**, not a win.
 
 These figures are observations, not a guarantee: throughput depends on the input
 shape, chunk size, snapshot frequency, and the toolchain version. Memory
-(17.6–38.0 × input, also a known shortfall) and artifact size are measured
+(13.7 × input; Node is 10.6 × and Python 14.3 × on the same file, so the 4 × budget itself is unrealistic) and artifact size are measured
 separately from the process. The full method, tables and decision records are in
 [docs/BENCHMARK.md](docs/BENCHMARK.md), and
 [docs/REPRODUCE.md](docs/REPRODUCE.md) explains how to rerun the benchmarks.
 
 ## Known limitations
 
-- **The `FR-16` event/callback interface is not implemented.** `snapshot()` returns a full deep copy, so its cost is proportional to the tree size and frequent snapshots are expensive overall.
+- **The `FR-16` event interface is a thin wrapper.** `feed_with` / `feed_bytes_with` iterate `drain_deltas`, and the callback runs inside `feed`, so a callback must not feed the same parser again. It is not a separate push interface (the reasoning is in [docs/ONEPAGE.md](docs/ONEPAGE.md)).
 - **Only `...` in a value position is dropped.** `R020` handles `[1,...,3]` and `{"a":1,...}`; an ellipsis anywhere else is not treated as a placeholder.
 - **A truncated literal prefix is completed regardless of the following character.** For example, a bare `tru` followed by an unexpected character is completed to `true` and the unexpected character is handled separately.
 - **`incomplete_number` and `pending_key` only affect snapshots.** They do not change `finish`: the final result trims the number (`R011`) and fills a dangling key with `null` (`R008`) under their own rules.
 - **Lone surrogates differ by backend.** On the wasm backend, `\uD800`-style lone surrogates survive in the output; on the other backends the `InvalidUtf8` (`E040`) path substitutes U+FFFD.
+- **The `jsonmend/llm` and delta sub-packages are experimental.** Their APIs may change in a minor release; the core `repair` / `parse` / `PartialParser` surface is the stable one.
 - **The CLI is native-only.** `cmd/jsonmend/moon.pkg` declares `supported_targets = "native"`.
 - **Recovery guarantees are heuristic, not a conformance claim.** JSONMend is not a JSON standard, and it does not guarantee a particular interpretation for every malformed input; the differential report is the evidence for the behaviour it does document.
 - **`Json` numbers follow the core representation.** Very large integers may lose precision in the tree, although the repaired text keeps the number's original digits.
 - **`quote_lookahead` is off by default.** When enabled, a sequence of strings that is missing commas is biased toward being read as string content.
 - **Repair records are capped by `max_repairs` (default 10000).** Further repairs are applied but not recorded, and the result sets `repairs_truncated`; the CLI prints a note to standard error.
-- **Incremental deltas are correct but not cheap.** Each change allocates one `Delta` plus a path array, so a 1 MB document produces ~195 000 records and takes 1.39–1.51 × the baseline. A compact delta buffer is the planned fix.
+- **Incremental deltas are correct but not cheap.** Each change allocates one `Delta` plus a path array, so a 1 MB document produces ~195 000 records and takes 1.40–1.46 × the baseline. In the agent scenario (4 KB, 3-code-unit chunks) the whole stream is 0.115 ms, so the overhead is not on the critical path and the compact buffer is no longer the next thing to build.
 - **`--skip-prose` only skips prose before a container root.** A scalar root preceded by prose (`Sure!\n42`) still raises `E002`.
-- **`DeltaOp::Retract` is never emitted.** It exists in the enum to fix the contract; the default `KeepLast` policy never needs to retract.
-- **Memory is 17.6–38.0 × the input.** The budget is 4 ×; reaching it requires a "render text without building a tree" mode.
+- **Memory is 13.7 × the input** (177.9 MB for a 12.95 MB document). On the same input Node's `JSON.parse` is 10.6 × and Python's `json.loads` is 14.3 ×, so **a 4 × budget is not realistic for any tree-building parser**, Node included. Reaching it requires a "render text without building a tree" mode ([docs/MEMORY.md](docs/MEMORY.md)).
+- **The per-feed p99 is only an upper bound.** The runtime clock is millisecond-resolution and exposes no allocation counter, so the scenario benchmark reports an amortised µs/feed plus the count of feeds that reached the clock resolution ([docs/BENCHMARK.md](docs/BENCHMARK.md)).
+- **The readiness curve covers top-level members only.** A nested member (`{"arguments":{…}}`) is ready only when its container closes; the curve costs ~1.8 ms/KiB, and early stopping saves ~0 on flat records by construction.
+- **Text mode does not skip prose by default.** `--skip-prose` starts a value only at `{` or `[`, so it would skip a scalar root (`0`, `42`, `false`); prose followed by a scalar root still raises `E002`.
 - **The JS backend still allocates one `Position` per code unit.** The n/2n/4n ratio therefore reaches 2.3–2.8 against a 2.3 target. Absolute throughput is well above the 5 MB/s floor, so this is recorded as a decision rather than fixed.
 - **Parser instances are not thread-safe.** Use one instance per input stream.
 
 ## Roadmap
 
-- Publish on mooncakes.io (`moon login` needs one interactive browser authorisation; everything else is ready).
-- Make the delta stream cheap: encode operations into a reusable buffer and share path prefixes, targeting ≤ 1.11 × the baseline instead of 1.39–1.51 ×.
-- Add the `FR-16` event/callback interface so streaming consumers can avoid full snapshot copies.
-- Add a text-only mode (`want_value = false`) so the streaming path can meet the 4 × input memory budget; the current peak is 17.6–38.0 ×.
+- ~~Publish on mooncakes.io~~: `zhanshishan/jsonmend` 0.3.0 is published; 0.4.0 ships with this round.
+- Make the delta stream cheap: encode operations into a reusable buffer and share path prefixes, targeting ≤ 1.11 × the baseline instead of 1.40–1.46 × (lower priority now that the scenario benchmark shows it is off the critical path).
+- ~~The `FR-16` event interface~~: done as the `feed_with` thin wrapper.
+- Record real provider streams to replace the documented event shapes (needs credentials; `tests/record_stream.py` is ready).
+- Extend the readiness curve to nested members and give it a zero-sampling, delta-driven implementation.
+- Add a text-only mode (`want_value = false`). The cross-implementation baseline shows the 4 × budget is unrealistic for any tree builder (Node itself is 10.6 ×), so this needs the metric changed first.
 - Add a fourth panel to the browser demo that plays a recorded LLM event stream, so the label and the growing arguments are visible without a terminal.
 - Split the engine's current position from its recorded positions to remove the per-code-unit allocation on the JS backend.
 - Widen the differential corpus further and add memory-budget tests for the streaming path.

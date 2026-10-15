@@ -63,10 +63,27 @@ jobs:
           python3 tests/eval/run_eval.py \
             --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 
+      - name: Adversarial ambiguity suite and its guard (must exit 0)
+        working-directory: code
+        run: |
+          python3 tests/eval/run_ambiguity.py \
+            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+          python3 tests/eval/check_amb_guard.py \
+            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+
+      - name: Chunked and adapter paths against the corpus (must exit 0)
+        working-directory: code
+        run: |
+          python3 tests/eval/run_eval_paths.py \
+            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+
       - uses: actions/upload-artifact@v4
         with:
           name: evaluation-report
-          path: code/docs/EVAL.md
+          path: |
+            code/docs/EVAL.md
+            code/docs/EVAL_PATHS.md
+            code/docs/EVAL_AMBIGUITY.md
 
       - name: Example inputs
         working-directory: code
@@ -78,7 +95,7 @@ jobs:
           moon coverage clean
           moon test --enable-coverage
           echo "== library package =="
-          moon coverage report -f summary -p wenhuang2333/jsonmend
+          moon coverage report -f summary -p zhanshishan/jsonmend
           echo "== including bench =="
           moon coverage report -f summary
 

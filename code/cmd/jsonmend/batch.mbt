@@ -28,18 +28,48 @@ fn read_all(stream : Int64) -> String {
 }
 
 ///|
+/// Feed `input` as one piece, or in `chunk` byte pieces. Byte boundaries are
+/// honoured literally, so a chunk may split a UTF-8 sequence or a surrogate
+/// pair; that is the point of the streaming check.
+fn feed_in_chunks(
+  p : @mend.PartialParser,
+  input : String,
+  chunk : Int32,
+) -> Unit raise @mend.MendError {
+  let bs = @utf8.encode(input)
+  let n = bs.length()
+  if chunk <= 0 {
+    p.feed_bytes(bs)
+    return
+  }
+  let mut i = 0
+  while i < n {
+    let to = if i + chunk > n { n } else { i + chunk }
+    p.feed_bytes(Bytes::makei(to - i, j => bs[i + j]))
+    i = to
+  }
+}
+
+///|
 /// Outcome of one batch input, rendered as one JSON object.
-fn batch_line(id : String, input : String, opts : @mend.Options) -> String {
+fn batch_line(
+  id : String,
+  input : String,
+  opts : @mend.Options,
+  chunk : Int32,
+) -> String {
   let sb = StringBuilder()
   sb.write_string("{\"id\":")
   sb.write_string(Json::string(id).stringify())
   sb.write_string(",\"rc\":")
   let rc = try {
     let p = @mend.PartialParser::new(options=opts)
-    p.feed_bytes(@utf8.encode(input))
+    feed_in_chunks(p, input, chunk)
     let r = p.finish()
     sb.write_string("0,\"exactness\":")
     sb.write_string(Json::string(r.exactness.name()).stringify())
+    sb.write_string(",\"ambiguous\":")
+    sb.write_string(if r.ambiguous { "true" } else { "false" })
     sb.write_string(",\"codes\":[")
     for i = 0; i < r.repairs.length(); i = i + 1 {
       if i > 0 {
@@ -56,7 +86,8 @@ fn batch_line(id : String, input : String, opts : @mend.Options) -> String {
     e => {
       sb.write_string(
         error_exit_code(e).to_string() +
-        ",\"exactness\":\"none\",\"codes\":[],\"value\":null,\"text\":\"\"",
+        ",\"exactness\":\"none\",\"ambiguous\":false,\"codes\":[],\"value\":null,\"text\":\"\",\"error_code\":" +
+        Json::string(e.code()).stringify(),
       )
       error_exit_code(e)
     }
@@ -68,7 +99,7 @@ fn batch_line(id : String, input : String, opts : @mend.Options) -> String {
 
 ///|
 /// Run the batch driver over standard input.
-fn run_batch(opts : @mend.Options) -> Unit {
+fn run_batch(opts : @mend.Options, chunk : Int32) -> Unit {
   let stream = open_input(None)
   if stream == 0L {
     eprintln("jsonmend: 无法读取 <stdin>")
@@ -88,7 +119,7 @@ fn run_batch(opts : @mend.Options) -> Unit {
         println(
           "{\"id\":" +
           Json::string(id).stringify() +
-          ",\"rc\":2,\"exactness\":\"none\",\"codes\":[],\"value\":null,\"text\":\"\",\"error\":\"input line is not valid JSON\"}",
+          ",\"rc\":2,\"exactness\":\"none\",\"ambiguous\":false,\"codes\":[],\"value\":null,\"text\":\"\",\"error\":\"input line is not valid JSON\"}",
         )
         continue
       }
@@ -109,6 +140,6 @@ fn run_batch(opts : @mend.Options) -> Unit {
         }
       _ => ""
     }
-    println(batch_line(real_id, input, opts))
+    println(batch_line(real_id, input, opts, chunk))
   }
 }

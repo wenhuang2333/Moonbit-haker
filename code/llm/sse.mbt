@@ -1,4 +1,4 @@
-// A minimal server-sent-events reader (FR-22). It exists because an LLM stream
+// A minimal server-sent-events reader (FR-23). It exists because an LLM stream
 // is normally an SSE stream, and every caller otherwise rewrites this loop.
 //
 // The rules implemented are the ones that matter for event payloads:

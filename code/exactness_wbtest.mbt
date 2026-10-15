@@ -166,11 +166,17 @@ test "max_loss gates the result before it can be executed" {
   let ex : Options = Options::for_execution()
   assert_eq(ex_run("{'a':1}", ex).err, "")
   assert_eq(ex_run("[1,,2]", ex).err, "")
-  // ... and rejects anything invented or dropped.
+  assert_eq(ex_run("[1 2]", ex).err, "")
+  // ... rejects a repair that admits a second reading (FR-27) ...
   assert_true(
-    ex_run("{\"mode\": fast}", ex).err.contains("E010"),
+    ex_run("{\"mode\": fast}", ex).err.contains("E011"),
     msg=ex_run("{\"mode\": fast}", ex).err,
   )
+  assert_true(
+    ex_run("[\"a\" \"b\"]", ex).err.contains("E011"),
+    msg=ex_run("[\"a\" \"b\"]", ex).err,
+  )
+  // ... and rejects anything invented or dropped.
   assert_true(
     ex_run("{\"a\":\"x}", ex).err.contains("E010"),
     msg=ex_run("{\"a\":\"x}", ex).err,

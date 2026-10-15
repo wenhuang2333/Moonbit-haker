@@ -209,19 +209,44 @@ def main() -> int:
             ),
         )
     )
-    notation = [r for r in results if r["case"]["family"] in NOTATION]
+    # Criterion 3, refined by `eval-3`: the `literal_case` family replaces
+    # `null` with the Python word `None`, which is a different word rather than
+    # a different spelling of the same one. That sub-case must be labelled
+    # `lossy` (the value `null` is invented) and is checked by criterion 3b.
+    def is_word_replacement(r):
+        return r["case"]["family"] == "literal_case" and "None" in r["case"]["input"]
+
+    notation = [
+        r
+        for r in results
+        if r["case"]["family"] in NOTATION and not is_word_replacement(r)
+    ]
     notation_ok = all(
         r["hit"] and r["exactness"] in ("exact", "cosmetic") for r in notation
     )
     checks.append(
         (
-            "记法族恢复率 1 且标签不为 lossy",
+            "记法族恢复率 1 且标签不为 lossy（`null`→`None` 见判据 3b）",
             notation_ok,
             "%d 条中 %d 条恢复，%d 条标签为 exact/cosmetic"
             % (
                 len(notation),
                 sum(1 for r in notation if r["hit"]),
                 sum(1 for r in notation if r["exactness"] in ("exact", "cosmetic")),
+            ),
+        )
+    )
+    replaced = [r for r in results if is_word_replacement(r)]
+    replaced_ok = all(r["hit"] and r["exactness"] == "lossy" for r in replaced)
+    checks.append(
+        (
+            "3b：`literal_case` 的 `null`→`None` 恢复原值且标签为 lossy",
+            replaced_ok,
+            "%d 条中 %d 条恢复，%d 条标签为 lossy"
+            % (
+                len(replaced),
+                sum(1 for r in replaced if r["hit"]),
+                sum(1 for r in replaced if r["exactness"] == "lossy"),
             ),
         )
     )

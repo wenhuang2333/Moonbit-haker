@@ -1,6 +1,6 @@
 import {
   "moonbitlang/core/env",
-  "wenhuang2333/jsonmend" @mend,
+  "zhanshishan/jsonmend" @mend,
 }
 
 pkgtype(kind: "executable")
