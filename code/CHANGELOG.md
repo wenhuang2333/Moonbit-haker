@@ -59,7 +59,8 @@
   `--for-execution` 拒绝 **254/1200** 且放行的错值 0（`docs/EVAL_REFERENCE.md`；
   `eval-3` 的标签修订使这 11 条 `null`→`None` 用例也进入拒绝集，见 `docs/EVAL_REGISTRATION.md` §11）。
 - 场景基准：4 KB 工具调用文档按 3 码元分块，0.08 µs/feed（摊还），290 000 次 feed 中
-  0 次达到毫秒时钟分辨率；就绪曲线十分位 `0 10 21 30 41 51 61 71 80 90 100`（`docs/BENCHMARK.md`）。
+  只有 17 次跨过 1 ms 时钟格、**没有任何一次单 feed 达到 1 ms 量级**（p99 只能给上界）；
+  就绪曲线十分位 `0 10 21 30 41 51 61 71 80 90 100`（`docs/BENCHMARK.md`）。
 - 内存横向基线：12.95 MB 输入下 JSONMend 13.7 ×、Node 10.6 ×、Python 14.3 ×；
   「≤ 4 ×」对任何建树实现都不现实（`docs/MEMORY.md`）。
 - `moon test` 95/95（wasm-gc / native / js 一致）；`tests/cli_smoke.sh` 48/48。
