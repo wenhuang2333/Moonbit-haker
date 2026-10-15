@@ -1,0 +1,21 @@
+{
+  "calls": [
+    {
+      "arguments": "{\"note\":\"caf\\u00e9 \\ud83d\\ude00 done\"}",
+      "done": true,
+      "end": "complete",
+      "exactness": "exact",
+      "id": "toolu_loopback_02",
+      "index": 0,
+      "name": "note",
+      "stop_reason": "tool_use",
+      "value": {
+        "note": "café 😀 done"
+      }
+    }
+  ],
+  "provider": "anthropic",
+  "scenario": "escape_split",
+  "transport": "loopback-sse",
+  "wire": "anthropic/v1/messages"
+}

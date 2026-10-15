@@ -1,0 +1,17 @@
+: provenance transport=loopback-sse scenario=truncated wire=anthropic/v1/messages generator=code/tests/record_stream.py --loopback
+
+event: jsonmend.provenance
+data: {"type":"jsonmend.provenance","transport":"loopback-sse","scenario":"truncated","wire":"anthropic/v1/messages","generator":"code/tests/record_stream.py --loopback","vendor_capture":false}
+
+event: message_start
+data: {"type":"message_start","message":{"id":"msg_loopback","type":"message","role":"assistant","model":"loopback-anthropic-compatible","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":64,"output_tokens":1}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_loopback_03","name":"get_weather","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"location\":\"Paris\","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"\"unit\":\"cei"}}
+

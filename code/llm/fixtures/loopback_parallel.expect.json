@@ -1,0 +1,34 @@
+{
+  "calls": [
+    {
+      "arguments": "{\"q\":\"alpha\"}",
+      "done": true,
+      "end": "complete",
+      "exactness": "exact",
+      "id": "toolu_loopback_10",
+      "index": 0,
+      "name": "search",
+      "stop_reason": "tool_use",
+      "value": {
+        "q": "alpha"
+      }
+    },
+    {
+      "arguments": "{\"path\":\"/tmp/notes.md\"}",
+      "done": true,
+      "end": "complete",
+      "exactness": "exact",
+      "id": "toolu_loopback_11",
+      "index": 1,
+      "name": "read_file",
+      "stop_reason": "tool_use",
+      "value": {
+        "path": "/tmp/notes.md"
+      }
+    }
+  ],
+  "provider": "anthropic",
+  "scenario": "parallel",
+  "transport": "loopback-sse",
+  "wire": "anthropic/v1/messages"
+}

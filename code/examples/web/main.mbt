@@ -178,6 +178,7 @@ pub fn live_text(input : String, upto : Int32, schema : String) -> String {
         _ =>
           {
             syntax_permille: -1,
+            settled_permille: -1,
             schema_permille: -1,
             step: 1,
             verdict: {
@@ -193,14 +194,23 @@ pub fn live_text(input : String, upto : Int32, schema : String) -> String {
       sb.write_string(full.syntax_permille.to_string())
       sb.write_string(",\"schema_ready\":")
       sb.write_string(full.schema_permille.to_string())
+      // `settled` is when every declared member became final, whether or not it
+      // had the declared kind. It is the number a streaming caller acts on: a
+      // wrong-typed argument settles early and the page can say "decided at
+      // N%, the answer is no" instead of "not ready until the end".
+      sb.write_string(",\"settled_ready\":")
+      sb.write_string(full.settled_permille.to_string())
       sb.write_string(",\"declared\":")
       sb.write_string(full.verdict.satisfied.to_string())
       sb.write_string(",\"declared_total\":")
       sb.write_string(full.verdict.total.to_string())
       // Execution readiness: every member the caller declared is already final,
       // and nothing seen so far had two readings. That is the moment the caller
-      // may stop the generation, which is usually long before the end.
-      let reached = n == 0 || cap * 1000 / n >= full.schema_permille
+      // may stop the generation, which is usually long before the end. The
+      // arrival is `settled_permille`, not `schema_permille`: for an argument
+      // of the wrong kind the arrival is early and the answer is no, and the
+      // page should be able to stop there.
+      let reached = n == 0 || cap * 1000 / n >= full.settled_permille
       sb.write_string(",\"execution_ready\":")
       sb.write_string(
         (reached && full.verdict.ok && !snap.ambiguous).to_string(),

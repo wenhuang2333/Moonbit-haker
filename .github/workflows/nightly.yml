@@ -82,15 +82,15 @@ jobs:
       - name: Differential report
         working-directory: code
         run: |
-          python3 tests/diff/run_diff.py \\
-            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe \\
-            --node-module-dir "$RUNNER_TEMP/node-oracle/node_modules" \\
+          python3 tests/diff/run_diff.py \
+            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe \
+            --node-module-dir "$RUNNER_TEMP/node-oracle/node_modules" \
             --out "$RUNNER_TEMP/diff-report.md"
 
       - name: Ground truth evaluation
         working-directory: code
         run: |
-          python3 tests/eval/run_eval.py \\
+          python3 tests/eval/run_eval.py \
             --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 
       - uses: actions/upload-artifact@v4

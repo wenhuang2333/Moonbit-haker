@@ -1,0 +1,2 @@
+{"index":0,"id":"toolu_loopback_10","name":"search","done":true,"exactness":"exact","end":"complete","stop_reason":"tool_use","value":{"q":"alpha"}}
+{"index":1,"id":"toolu_loopback_11","name":"read_file","done":true,"exactness":"exact","end":"complete","stop_reason":"tool_use","value":{"path":"/tmp/notes.md"}}

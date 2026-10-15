@@ -1,0 +1,34 @@
+{"type":"message_start","message":{"id":"9ee15096c4ee475991885ba0a8471a78","type":"message","role":"assistant","model":"LongCat-2.0","content":[],"stop_reason":null,"stop_sequence":null,"usage":{}}}
+{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"We"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" need"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" to get the weather"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" in Paris, in"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Celsius. The user"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" asks"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" \""}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"What is the weather"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" in Paris, in"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" celsius?\" We"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" need"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" to call the get"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"_weather function with"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" location \""}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Paris\" and unit"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" \"celsius\"."}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" The function returns weather"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" info"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":". Then"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" we should"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" answer"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" with the weather"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
+{"type":"content_block_stop","index":0}
+{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"call_61c682d16cf2400cb9631eff","name":"get_weather","input":{}}}
+{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"location\": \"Paris\""}}
+{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":", \"unit\": \"celsius\""}}
+{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"}"}}
+{"type":"content_block_stop","index":1}
+{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":29,"output_tokens":89,"cache_read_input_tokens":128}}
+{"type":"message_stop"}

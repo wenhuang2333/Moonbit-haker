@@ -1,0 +1,14 @@
+{
+  "endpoint": "https://api.longcat.chat/anthropic/v1/messages",
+  "endpoint_label": "longcat-anthropic-relay",
+  "provider": "anthropic",
+  "recorded_at": "2026-10-15T17:23:54Z",
+  "response_bytes": 3722,
+  "response_sha256": "fbe167ab2477efa5a6589307d17ec2f1c5c3cafcc9ad272a173e33b3498ed765",
+  "scene": "parallel",
+  "sse_events_kept": 28,
+  "sse_events_received": 28,
+  "transport": "live-http-sse",
+  "truncated_by_recorder": false,
+  "vendor_capture": true
+}

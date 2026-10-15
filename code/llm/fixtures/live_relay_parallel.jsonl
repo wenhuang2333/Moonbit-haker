@@ -1,0 +1,28 @@
+{"type":"message_start","message":{"id":"33d13e23caa54472a40b1539b732d418","type":"message","role":"assistant","model":"LongCat-2.0","content":[],"stop_reason":null,"stop_sequence":null,"usage":{}}}
+{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" user wants me to"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" call both tools in"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a single response."}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" I need to:\n"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"1. Search for"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the query \"alpha"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\"\n2. Read"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the file /tmp"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"/notes.md\n\n"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Let"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" me make both function"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" calls.\n"}}
+{"type":"content_block_stop","index":0}
+{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"call_031fffe3fd1f492f9cbe6d35","name":"search","input":{}}}
+{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"q\": \"alpha\""}}
+{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"}"}}
+{"type":"content_block_stop","index":1}
+{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"call_08ed4e592c94416d96fcd527","name":"read_file","input":{}}}
+{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"path\": \""}}
+{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"/tmp/notes.md"}}
+{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"\"}"}}
+{"type":"content_block_stop","index":2}
+{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":199,"output_tokens":78}}
+{"type":"message_stop"}

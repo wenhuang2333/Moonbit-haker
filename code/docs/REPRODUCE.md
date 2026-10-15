@@ -59,10 +59,17 @@ JSONMEND_LONGRUN=1000000 moon test --target native
 cd code
 moon coverage clean                     # 清掉上一轮的 .trace 文件，避免计数错位
 moon test --enable-coverage
-moon coverage report -f summary -p zhanshishan/jsonmend      # 根包 2312/2651 = 87.2%
+moon coverage report -f summary -p zhanshishan/jsonmend      # 根包 2371/2661 = 89.1%
 moon coverage report -f summary -p zhanshishan/jsonmend/llm  # llm 包 337/391 = 86.2%
-moon coverage report -f summary                               # 含 bench：2649/3415 = 77.6%
+moon coverage report -f summary                               # 含 bench：2708/3469 = 78.1%
 ```
+
+上表三个数字取自 GitHub Actions 的 `ci.yml` 第 18 次运行（run
+`38759105731`，`f94f9121`，2026-10-15T15:18Z）下载的日志：`-p` 报告末尾的
+`Total: 2371/2661`、完整报告末尾的 `Total: 2708/3469`，`llm` 包由完整报告里
+`llm/*` 六个文件相加得到（57+32+74+55+53+66 = 337，分母 70+34+82+59+55+91 =
+391）。此前这里写的是 `2312/2651`、`2649/3415`，差 59 行覆盖 / 10 行分母、
+bench 从 373 行涨到 417 行 —— 那是更早一次提交的数字，已经过期。
 
 `cmd/jsonmend` 在覆盖率报告里会因 `quit()` 的 native 实现而抛内部错误，属已知的
 工具链限制，因此只对根包与 `llm` 包设口径。
@@ -198,10 +205,46 @@ python3 tests/memory_baseline.py --cli ./_build/native/release/build/cmd/jsonmen
 python3 tests/gen_llm_fixtures.py --check
 ```
 
-真实 provider 流的录制（需要凭据，默认不跑）：
+`llm` 适配器的三类证据（合成夹具、文档转录、真实录制）与其来源的区别见
+`docs/LLM_EVENTS.md`；本机凭据探测的结果与「有 Key 时的一条命令」见
+`docs/PROVIDER_PROBE.md`。
+
+真实传输的 loopback 录制（不需要任何第三方 Key）：`record_stream.py --loopback`
+在 `127.0.0.1` 起一个本地 HTTP 服务，按 Anthropic `/v1/messages` 线格式发真实 SSE
+字节流，再用普通 HTTP 客户端从真实 socket 读回，写出的夹具标记为
+`transport: loopback-sse`（四个场景：正常工具调用、`\uXXXX` 转义中间切分、
+无 `message_stop` 的截断、交错的并行工具调用）：
 
 ```bash
-ANTHROPIC_API_KEY=... OPENAI_API_KEY=... python3 tests/record_stream.py --out llm/fixtures
+cd code
+python3 tests/record_stream.py --loopback --out llm/fixtures \
+  --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+```
+
+一条命令重录并逐字节比对全部 loopback 夹具，再把每个夹具同时经 `--sse`（原始字节）
+与 `.jsonl`（逐行载荷）喂给真实 CLI 并对照金标准（CI 中也会执行）：
+
+```bash
+cd code
+python3 tests/run_llm_loopback.py
+```
+
+真实供应商流的录制（需要凭据）：`docs/PROVIDER_PROBE.md` 记录了本机的探测结果——
+没有第一方供应商 Key，只有一个 Anthropic 兼容中继（Claude Code 的
+`~/.claude/settings.json` 里配置的 endpoint），`live_relay_*.{sse,jsonl}` 就是它的
+实况录制，标记为 `transport: live-http-sse`。有 Key 时的命令用 `read -s`，密钥不进
+shell 历史：
+
+```bash
+cd code
+read -rsp 'ANTHROPIC_API_KEY: ' ANTHROPIC_API_KEY && export ANTHROPIC_API_KEY && \
+  python3 tests/record_stream.py --provider anthropic \
+    --out llm/fixtures/anthropic_recorded.jsonl \
+    --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+# 已有 Claude Code 配置时，连密钥都不用手输：
+python3 tests/record_stream.py --provider anthropic --from-claude-settings \
+  --out llm/fixtures/live_relay_tool_call.jsonl \
+  --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
 ```
 
 ## 6. 浏览器演示页（TC-W-01）

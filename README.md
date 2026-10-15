@@ -40,6 +40,32 @@ JSONMend 与它的分工不同，一句话概括：
 > **每个结果都带精确度标签**：`Exact`（没修）、`Cosmetic`（只改记法）、`Lossy`（发明或丢弃了信息）。
 > 需要直接执行参数时设 `max_loss: Cosmetic`，一旦有损就在第一条记录处抛错，而不是先执行再后悔。
 
+0.6.0 把这件事说清楚，因为它是这个库存在的理由：
+
+> ### JSONMend 不把「语法合法」当成「可以执行」。
+>
+> `{"a":"b","a":"c"}` 是合法 JSON —— RFC 8259 允许重复键，把「谁赢」留给消费者 ——
+> 但它没有唯一含义：`KeepLast` 和 `KeepFirst` 得到不同的值。JSONMend 因此把它归一化（R018）、
+> 标记 `exactness = Lossy`、并把 `ambiguity` 报成 **语义歧义**；在执行档（`for_execution` / `for_agent`）
+> 下直接拒绝执行。它不会因为「能解析」就放行。
+>
+> 这两个问题在库里由两个不同的数回答，`jsonmend explain --json` 同时给出：
+>
+> | 字段 | 回答的问题 |
+> | --- | --- |
+> | `valid_json` | 这段文本本身是不是合法 JSON？ |
+> | `normalized` | JSONMend 有没有改写它？ |
+> | `ambiguity` | `none` / `syntactic`（记法有两种读法，值相同）/ `semantic`（两个值被合成一个，消费者可以不同意） |
+> | `execution` | `allowed` / `blocked` |
+>
+> ```
+> $ printf '%s' '{"a":"b","a":"c"}' | jsonmend explain --json --policy execution
+> {"decision":"lossy_repair", ..., "valid_json":true, "normalized":true,
+>  "ambiguity":"semantic", "execution":"blocked", ...}
+> ```
+>
+> `valid_json:true` 与 `execution:"blocked"` 并列，就是这条原则的全文。
+
 ## 快速开始
 
 ```bash

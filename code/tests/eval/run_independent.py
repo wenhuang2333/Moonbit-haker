@@ -486,11 +486,19 @@ def main() -> int:
         r["check"] = run_jsonmend_extra(
             args.cli, raw_of[r["file"]], ["--check"], args.file_timeout
         )
+        # The agent protocol turns prose skipping on (`Options::for_agent`), and
+        # skipping looks for the first `{` or `[`. A document whose root is a
+        # scalar has none, so this mode is the one that can refuse a valid
+        # document outright. Exit 3 with `E002` here is a **false refusal**.
+        r["agent_mode"] = run_jsonmend_extra(
+            args.cli, raw_of[r["file"]], ["--skip-prose"], args.file_timeout
+        )
     for r in offenders:
         r["explain"] = run_jsonmend_extra(
             args.cli, raw_of[r["file"]], ["--explain"], args.file_timeout
         )
     y_gate_refused = [r for r in y_rows if r["gate"]["rc"] == 5]
+    y_agent_refused = [r for r in y_rows if r["agent_mode"]["rc"] == 3]
     y_check_failed = [r for r in y_rows if r["check"]["rc"] == 1]
     y_oracle_rejects = [
         r
@@ -625,7 +633,24 @@ def main() -> int:
     add("| **repair records in total** | **%d** |" % total_records)
     add("| `--check` exits 1 (repairs needed) on | %d |" % len(y_check_failed))
     add("| refused by `--for-execution` (exit 5) | %d |" % len(y_gate_refused))
+    add(
+        "| **refused with prose skipping on (`--skip-prose`, exit 3)** | **%d** |"
+        % len(y_agent_refused)
+    )
     add("")
+    if y_agent_refused:
+        add(
+            "**%d valid document(s) are refused outright by the agent protocol**, which is"
+            % len(y_agent_refused)
+        )
+        add("the mode `Options::for_agent()` and `jsonmend explain` use:")
+        add("")
+        for r in y_agent_refused[:20]:
+            add(
+                "- `%s` — exit %s, `%s`"
+                % (r["file"], r["agent_mode"]["rc"], r["agent_mode"]["code"] or "?")
+            )
+        add("")
     if not offenders:
         add(
             "**Zero.** All %d `y_*` files are accepted by JSONMend with no repair record: no"

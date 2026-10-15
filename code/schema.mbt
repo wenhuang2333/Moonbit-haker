@@ -138,6 +138,46 @@ pub fn Schema::field(self : Schema, key : String) -> SchemaMember? {
   }
 }
 
+///|
+/// The declaration a dotted path points at, or `None` (FR-36, FR-39).
+///
+/// A path is spelled the way `Schema::required_paths` produces it: member names
+/// joined with `.`, where a numeric step selects an array element. A member
+/// name that itself contains a `.` is therefore ambiguous; the declaration
+/// language has no way to write one, so `required_paths` cannot produce one
+/// either, and the two agree by construction.
+pub fn Schema::at_path(self : Schema, path : String) -> Schema? {
+  if path == "" {
+    return Some(self)
+  }
+  let mut cur = self
+  for seg in path.split(".") {
+    cur = match cur {
+      Obj(members) => {
+        let mut next : Schema? = None
+        for m in members {
+          if m.key == seg.to_owned() {
+            next = Some(m.schema)
+          }
+        }
+        match next {
+          Some(s) => s
+          None => return None
+        }
+      }
+      Arr(inner) => {
+        let idx = @string.parse_int(seg.to_owned()) catch { _ => -1 }
+        if idx < 0 {
+          return None
+        }
+        inner
+      }
+      _ => return None
+    }
+  }
+  Some(cur)
+}
+
 // ---------------------------------------------------------------------------
 // The text form.
 // ---------------------------------------------------------------------------
@@ -615,8 +655,15 @@ pub(all) struct SemanticReadiness {
   /// closing, or `1000` when that never happened before the end.
   syntax_permille : Int32
   /// First input fraction, in per mille, at which every required member of the
-  /// skeleton was already present and final, or `1000`.
+  /// skeleton was already present and final *and* the document satisfied the
+  /// skeleton, or `1000` when that never happened before the end. A document
+  /// that is decidable and invalid never fires here: see `settled_permille`.
   schema_permille : Int32
+  /// First input fraction, in per mille, at which every required member of the
+  /// skeleton was already present and final, whether or not it had the declared
+  /// kind (FR-39). This is the moment a *runtime* can decide: `schema_permille`
+  /// answers "may I execute", this answers "do I know yet".
+  settled_permille : Int32
   /// Sampling step actually used.
   step : Int32
   /// Verdict of the finished document.
@@ -686,10 +733,86 @@ pub fn syntax_readiness_permille(input : String, step? : Int32) -> Int32 {
 
 ///|
 /// Syntax readiness and schema readiness of one document against one skeleton
-/// (FR-36).
+/// (FR-36, FR-39).
 ///
-/// The cost is the same as `field_readiness`: `O(n / step)` partial parses.
+/// Since 0.6.0 this is a thin report over `SemanticWatcher`: the document is fed
+/// in `step`-sized pieces and the numbers are read off the events, so the cost
+/// is one pass plus one delta drain per piece instead of one partial parse *and
+/// one snapshot* per piece. The result is the same kind of measurement — a
+/// fraction of the input — but it no longer rebuilds the value tree a thousand
+/// times, and `settled_permille` is new: the moment the answer became final
+/// even when the answer is no.
 pub fn semantic_readiness(
+  input : String,
+  schema : Schema,
+  step? : Int32,
+  options? : Options,
+) -> SemanticReadiness raise MendError {
+  let opts = match options {
+    Some(o) => o
+    None => Options::default()
+  }
+  if opts.duplicate_keys is KeepFirst {
+    // The delta stream cannot represent a value it had to ignore, and
+    // `Options::validate` refuses the pair, so this one option value keeps the
+    // sampling implementation. It is the only caller of it.
+    return semantic_readiness_sampled(input, schema, step?, options?)
+  }
+  let n = input.length()
+  let st = auto_step(
+    n,
+    match step {
+      Some(v) => v
+      None => 0
+    },
+  )
+  let w = SemanticWatcher::new(schema, options?)
+  let mut i = 0
+  while i < n {
+    let next = if i + st > n { n } else { i + st }
+    w.feed(input[i:next].to_owned())
+    i = next
+    // The events are consumed to keep the watcher's array from growing; the
+    // numbers come from the offsets it recorded.
+    let _ = w.drain_events()
+  }
+  let fin = w.finish()
+  let required = schema.required_paths()
+  let none_required = required.length() == 0
+  let verdict = schema.evaluate(fin.value)
+  let syntax = if w.syntax_at() < 0 { 1000 } else { permille(w.syntax_at(), n) }
+  let settled = if none_required {
+    0
+  } else if w.settled_at() < 0 {
+    1000
+  } else {
+    permille(w.settled_at(), n)
+  }
+  let schema_perm = if verdict.ok {
+    if none_required {
+      0
+    } else if w.settled_at() < 0 {
+      1000
+    } else {
+      permille(w.settled_at(), n)
+    }
+  } else {
+    1000
+  }
+  {
+    syntax_permille: syntax,
+    schema_permille: schema_perm,
+    settled_permille: settled,
+    step: st,
+    verdict,
+  }
+}
+
+///|
+/// The 0.5.0 sampling implementation, kept for `duplicate_keys KeepFirst`
+/// (FR-36). `O(n / step)` partial parses, each followed by a path lookup per
+/// required member.
+fn semantic_readiness_sampled(
   input : String,
   schema : Schema,
   step? : Int32,
@@ -717,6 +840,11 @@ pub fn semantic_readiness(
   if schema_seen {
     schema_perm = 0
   }
+  // The same moment without the "and the skeleton is satisfied" condition, so
+  // that a decidable-and-invalid document still reports when it was decided
+  // (FR-39).
+  let mut settled_seen = required.length() == 0
+  let mut settled_perm = if settled_seen { 0 } else { 1000 }
   let mut i = 0
   while i < n {
     let next = if i + st > n { n } else { i + st }
@@ -734,7 +862,7 @@ pub fn semantic_readiness(
         None => ()
       }
     }
-    if !schema_seen && verdict.ok {
+    if !settled_seen || (!schema_seen && verdict.ok) {
       // "Every required member is already final": for each declared required
       // path, the value the snapshot holds there must be the value it ends up
       // with. Nothing else is required — not the end of the document, and not
@@ -755,13 +883,25 @@ pub fn semantic_readiness(
             }
           }
           if all {
-            schema_perm = p
-            schema_seen = true
+            if !settled_seen {
+              settled_perm = p
+              settled_seen = true
+            }
+            if !schema_seen && verdict.ok {
+              schema_perm = p
+              schema_seen = true
+            }
           }
         }
         None => ()
       }
     }
   }
-  { syntax_permille: syntax, schema_permille: schema_perm, step: st, verdict, }
+  {
+    syntax_permille: syntax,
+    schema_permille: schema_perm,
+    settled_permille: settled_perm,
+    step: st,
+    verdict,
+  }
 }

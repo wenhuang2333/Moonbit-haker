@@ -176,7 +176,7 @@ fn run() -> Unit {
     }
     Version => {
       // Keep in sync with `version` in moon.mod; cli_smoke.sh checks it.
-      println("jsonmend 0.5.0")
+      println("jsonmend 0.6.0")
       quit(0)
     }
     Llm => {
@@ -226,7 +226,36 @@ fn run() -> Unit {
       piece = read_chunk(stream, chunk_cap)
     }
     close_input(stream)
-    let fin = parser.finish()
+    let fin = parser.finish() catch {
+      e =>
+        // `skip_prose` looks for the first `{` or `[`, because that is where a
+        // chatty model puts the arguments. A document whose root is a scalar
+        // — `true`, `42`, `"ok"`, which RFC 8259 allows — has no such
+        // character, so the whole input is skipped as prose and a valid
+        // document is refused. When the buffered prefix holds the whole input
+        // and that input is valid JSON as written, the skip was wrong: parse it
+        // again with the skip undone. The retry is gated on a strict parser
+        // accepting the input, so prose is never read as a value; it is
+        // skipped when the prefix is incomplete, which is the only case where
+        // the buffered text is not the whole document.
+        match e {
+          @mend.NoJsonFound(_) =>
+            if options.skip_prose && prefix.length() < prefix_max {
+              let text = @utf8.decode_lossy(Bytes::from_array(prefix[:])[:])
+              if @mend.is_valid_json(text) {
+                let again : @mend.Options = { ..options, skip_prose: false, }
+                let retry = @mend.PartialParser::new(options=again)
+                retry.feed(text)
+                retry.finish()
+              } else {
+                raise e
+              }
+            } else {
+              raise e
+            }
+          _ => raise e
+        }
+    }
     if o.explain {
       explain(fin.repairs, @utf8.decode_lossy(Bytes::from_array(prefix[:])[:]))
       eprintln("jsonmend: exactness " + fin.exactness.name())

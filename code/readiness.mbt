@@ -34,35 +34,16 @@ pub impl Eq for FieldReady with fn equal(self : FieldReady, other : FieldReady) 
 pub extend FieldReady with Eq::{not_equal, equal}
 
 ///|
-/// Whether the value at `key` of `snap` is already the value it ends up with.
-fn field_ready_now(
-  snap : Json?,
-  finmap : Map[String, Json],
-  key : String,
-) -> Bool {
-  let want = match finmap.get(key) {
-    Some(v) => v
-    None => return false
-  }
-  let seen = match snap {
-    Some(Json::Object(m)) =>
-      match m.get(key) {
-        Some(v) => v
-        None => return false
-      }
-    _ => return false
-  }
-  json_equal(seen, want)
-}
-
-///|
 /// Readiness curve of one document (FR-29).
 ///
 /// `step` is the number of code units fed between two observations; `0` (the
 /// default) picks a step that samples the document about a thousand times, so
-/// the result does not depend on the document length. The function costs
-/// `O(n / step)` partial parses, so it is meant for the payloads a model
-/// produces (a few kilobytes), not for a 10 MB file.
+/// the result does not depend on the document length.
+///
+/// Since 0.6.0 this listens to the delta stream instead of re-reading the
+/// document: a top-level member is ready at the offset of its own final delta,
+/// which is one pass with one drain per step rather than one partial parse *and
+/// one snapshot* per step (FR-39). On a 100 KiB payload that is ~30x.
 ///
 /// A document whose root is not an object has no fields and yields `[]`.
 pub fn field_readiness(
@@ -76,44 +57,43 @@ pub fn field_readiness(
     Json::Object(m) => m
     _ => return []
   }
-  let s = match step {
-    Some(v) => if v > 0 { v } else { 0 }
-    None => 0
+  let st = auto_step(
+    n,
+    match step {
+      Some(v) => v
+      None => 0
+    },
+  )
+  // The final member list is what the report is about; each one is followed
+  // with an `any` declaration, because FR-29 asks *when the value was final*,
+  // not whether it had the declared kind.
+  let members : Array[String] = []
+  let specs : Array[SchemaMember] = []
+  for k, _v in finmap {
+    members.push(k)
+    specs.push({ key: k, required: true, schema: Any, })
   }
-  let step = if s > 0 {
-    s
-  } else {
-    let auto = n / 1000
-    if auto < 1 {
-      1
-    } else {
-      auto
+  let skeleton = Obj(specs)
+  let events = watch_readiness(input, skeleton, chunk=st, options?)
+  let seen : Map[String, Int32] = Map([])
+  for e in events {
+    let key = e.event.path()
+    if key == "" || seen.contains(key) {
+      continue
+    }
+    match e.event {
+      FieldReady(_) | FieldInvalid(_, _) =>
+        // `-1` means the member was only settled by `finish()`: "not before the
+        // end".
+        seen[key] = if e.permille < 0 { 1000 } else { e.permille }
+      _ => ()
     }
   }
   let out : Array[FieldReady] = []
-  let done : Map[String, Bool] = Map([])
-  for k, _v in finmap {
-    done[k] = false
-  }
-  let parser = PartialParser::new(options?)
-  let mut i = 0
-  while i < n {
-    let next = if i + step > n { n } else { i + step }
-    parser.feed(input[i:next].to_owned())
-    i = next
-    let snap = parser.snapshot().value
-    let permille = i * 1000 / n
-    for k, _v in finmap {
-      if !done[k] && field_ready_now(snap, finmap, k) {
-        done[k] = true
-        out.push({ key: k, permille, })
-      }
-    }
-  }
-  // A member that never became finmap on its own is finmap at the end.
-  for k, _v in finmap {
-    if !done[k] {
-      out.push({ key: k, permille: 1000, })
+  for k in members {
+    match seen.get(k) {
+      Some(p) => out.push({ key: k, permille: p, })
+      None => out.push({ key: k, permille: 1000, })
     }
   }
   out

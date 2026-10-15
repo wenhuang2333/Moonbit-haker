@@ -5,6 +5,92 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.0] - 2026-10-16
+
+第七轮优化版本（`优化.md`），主题是**流式语义安全**：把「就绪」从采样工具变成运行时，
+并把一件事写进产品表面 —— **语法合法不等于可以执行**。
+本轮新增 `FR-39`（增量流式就绪）与 `FR-40`（回环 SSE 传输取证），
+把 `NFR-PERF-09`（内存指标按模式报告）与 `NFR-TEST-02`（覆盖率下限）变成可执行的门禁。
+
+### 修复
+
+- **合法标量根文档被拒（正确性缺陷，本轮最重要的修复）**。`true`、`null`、`42`、`"ok"`、`""`
+  都是合法 JSON（RFC 8259 允许任何值作为根），但任何开启 `skip_prose` 的路径都会拒绝它们：
+  跳过前言只看第一个 `{` 或 `[`（`code/engine_flow.mbt` 前言阶段），标量根没有这个字符，
+  整份输入被当成前言丢光，最后抛 `E002 NoJsonFound`。受影响的是
+  `jsonmend explain`（默认 agent 协议）、`jsonmend --skip-prose`、
+  `analyze(input, options=Options::for_agent())`。
+  独立语料 `jsonmend-haker` 的 95 个 `y_*`（合法 JSON）文件里有 **8 个** 被直接拒绝。
+  现在 `repair` / `analyze` / 流式 CLI 三条可拿到全文的入口都会在
+  `NoJsonFound` 且 `is_valid_json(输入)` 为真时撤销跳过重解析；判断条件是"严格解析器接受全文"，
+  因此前言不会被误读成值（`true story: {"a":1}` 仍然走 `R021` 并取到对象）。
+  `code/tests/eval/run_independent.py` 新增 `--skip-prose` 假拒绝列作为回归门禁：
+  对 0.5.0 二进制报 **8**，对 0.6.0 报 **0**。
+  **已知限制**：只流式喂入、且调用方自己不保存全文的场景无法事后重解析，
+  引擎层的前言重放留到 0.7；`产品文档.md` §21 记录了复现步骤。
+- **`NoJsonFound` 偏移在一次性与分块路径间不一致**。`repair` 的回退分支把偏移硬编码成 `0`，
+  破坏了 `prop_wbtest.mbt` 的分块不变性属性（TC-P-03）。现在原样回抛 `NoJsonFound(off)`，
+  两条路径重新一致。
+
+### 新增
+
+- **增量流式就绪（FR-39，0.6.0 的 P0）**。`code/stream_readiness.mbt`：
+  - `ReadinessEvent`：`FieldReady(path)` / `FieldInvalid(path, expected)` /
+    `FieldIncomplete(path, expected)` / `RootReady` / `RootInvalid(offset)`，
+    以及 `kind()` / `path()` / `is_verdict()` / `to_json()`；
+  - `SemanticWatcher`：`new(schema, options?)`、`feed(chunk)`、`drain_events()`、
+    `settled_at()`、`syntax_at()`、`concluded()`、`conflict()`、`verdict()`、`finish()`。
+    它跟随 delta 流，而不是每一步重新快照整个文档；
+  - `watch_readiness(input, schema, chunk?)` → 带 `permille` 的事件表（`-1` = 只有 `finish()` 能给出）、
+    `decided_at_permille(...)`、`readiness_events_json(events)`。
+  - `Schema::at_path(path)`：按路径取声明，供事件把路径映射回声明的类型。
+- **`SemanticReadiness.settled_permille`**：每个声明成员"值已定"的输入比例，
+  **不管类型对不对**；`schema_permille` 保持原义（已定 *且* 骨架满足），
+  因此可判定的非法文档仍然报 `1000`。`jsonmend explain` 与 `explain --json` 现在同时打印三者。
+  这修掉了 0.5.0 的观测盲点：`{"query":"MoonBit","limit":"ten",…}` 过去只能看到
+  `syntax-ready 999/1000 schema-ready 1000/1000`，看起来像"永远没结论"，
+  现在是 `settled 218/1000` —— 结论早就到了，结论是"不行"。
+- **`jsonmend explain --json` 增加四个字段（Q-26）**：`valid_json`、`normalized`、
+  `ambiguity`（`none` / `syntactic` / `semantic`）、`execution`（`allowed` / `blocked`）。
+  `valid_json` 的口径是"输入本身是合法 JSON，JSONMend 只对重复键做了归一化"；
+  该口径在独立语料的 95 个合法文件上验证过：只有 `R018` 会在合法 JSON 上触发。
+  因此 `{"a":"b","a":"c"}` 现在报
+  `valid_json:true, normalized:true, exactness:lossy, ambiguity:"semantic", execution:"blocked"`，
+  `R018` 在产品叙述里改称**重复键归一化**（DuplicateKeyNormalization），
+  而不是"修复合法 JSON"。
+
+### 变更
+
+- **就绪不再靠重采样**。`semantic_readiness` 与 `field_readiness`（FR-29）都改成
+  delta 流的薄报表：前者 `O(n/step)` 次重新快照 → 一次跟随，后者用手表
+  （最终成员表 + `any` 声明）复用同一条路径。同一台机器、三个 target、release 构建：
+  - `semantic_readiness`：**32.7–34.3× repair → 2.42–3.47×**（同轮实测 0.5.0 实现 2233–3150 µs）；
+  - `field_readiness`：**1794 µs/KiB → 154–191 µs/KiB**（约 9.4–10.8×）；
+  - 实时路径 `watcher`（64 字节块逐块喂入 + 每次 drain）：**1.64–2.00× repair**，
+    这才是运行时真正付的代价。
+  文档里 0.5.0 的旧数字保留在对照列，便于审计。
+- **内存指标改为按模式报告（NFR-PERF-09）**。撤销"峰值内存 ≤ 4× 输入"这条统一阈值：
+  它把建树的解析器和流式解析器放在一起比，没有意义。改为按模式报告峰值 RSS，
+  并声明（**不声称已达成**）尚未存在的两个模式的目标：纯文本 ≤ 4×、无树 ≤ 2×，留给 0.7。
+- **覆盖率政策（NFR-TEST-02）**：整体 ≥ 85%，核心模块（`policy` / `decision` / `schema` /
+  `plan` / `stream_readiness`）≥ 90%，由 `code/tests/coverage.sh` 执行；
+  撤销 0.5.0"新增文件 ≥ 90%"的单条规则。
+- 版本号 `0.5.0` → `0.6.0`。
+
+### 测试
+
+- 新增 `code/stream_readiness_wbtest.mbt`：事件序列、字符串成员只报一次就绪、
+  容器成员在 `Close` 才就绪、重复键 `conflict()`、非法值早判定（`RootInvalid` 偏移小于输入一半）、
+  缺失成员、截断输入、`Schema::at_path`、增量与批量口径一致、`decided_at_permille`、
+  `readiness_events_json` 转义。
+- `code/schema_wbtest.mbt` 增加 Q-23 往返不变量：`parse → stringify → parse` 语义不变、
+  `stringify` 幂等，且 `{a:string}` 与 `{?a:string}` 的规范化文本必须不同 ——
+  "无标记即必填"的文本 DSL 保留，但 `stringify()` 永远不能丢掉 `?`。
+- `code/tests/cli_smoke.sh` 增加 12 条：标量根（含 `--skip-prose`）、
+  重复键的四个语义字段、相邻字符串的 `syntactic` 歧义、`readiness` 的 `settled` 列。
+- `code/tests/eval/run_independent.py` 增加 agent 模式的假拒绝门禁（见上）；
+  `moon test --target all`：**170/170**，四个后端同源全过（0.5.0 为 129）。
+
 ## [0.5.0] - 2026-10-15
 
 第六轮优化版本（`优化.md`），主题是**从解析库转为 AI 输出安全运行时**：不再增加修复规则，

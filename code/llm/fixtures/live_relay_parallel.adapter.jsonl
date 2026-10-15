@@ -1,0 +1,2 @@
+{"index":1,"id":"call_031fffe3fd1f492f9cbe6d35","name":"search","done":true,"exactness":"exact","end":"complete","stop_reason":"tool_use","value":{"q":"alpha"}}
+{"index":2,"id":"call_08ed4e592c94416d96fcd527","name":"read_file","done":true,"exactness":"exact","end":"complete","stop_reason":"tool_use","value":{"path":"/tmp/notes.md"}}

@@ -1,0 +1,22 @@
+{
+  "calls": [
+    {
+      "arguments": "{\"location\":\"Paris\",\"unit\":\"cei",
+      "done": true,
+      "end": "interrupted",
+      "exactness": "lossy",
+      "id": "toolu_loopback_03",
+      "index": 0,
+      "name": "get_weather",
+      "stop_reason": "",
+      "value": {
+        "location": "Paris",
+        "unit": "cei"
+      }
+    }
+  ],
+  "provider": "anthropic",
+  "scenario": "truncated",
+  "transport": "loopback-sse",
+  "wire": "anthropic/v1/messages"
+}

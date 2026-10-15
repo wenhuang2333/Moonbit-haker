@@ -329,6 +329,25 @@ pub fn repair(
     None => Options::default()
   }
   opts.validate()
+  repair_once(input, opts) catch {
+    NoJsonFound(off) =>
+      // See `analyze`: `skip_prose` has no container to find in a scalar-root
+      // document, so a valid document is refused as prose. Undo the skip when
+      // the input is valid JSON as written. The offset is re-raised unchanged,
+      // because `prop_wbtest.mbt` TC-P-03 requires the one-shot and the chunked
+      // path to agree on it.
+      if opts.skip_prose && is_valid_json(input) {
+        repair_once(input, { ..opts, skip_prose: false, })
+      } else {
+        raise NoJsonFound(off)
+      }
+    e => raise e
+  }
+}
+
+///|
+/// One attempt at repairing `input` with `opts`.
+fn repair_once(input : String, opts : Options) -> RepairResult raise MendError {
   let engine = Engine::make(opts)
   engine.feed_str(input)
   let fin = engine.finish_engine()

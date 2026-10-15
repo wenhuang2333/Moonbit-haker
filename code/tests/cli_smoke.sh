@@ -76,7 +76,7 @@ STDIN='' check "empty input" 3 '' "E001" --
 STDIN='hello world' check "no JSON value" 3 '' "E002" --
 STDIN='{"a":1}' check "unknown option" 2 '' "未知选项" -- --bogus
 STDIN='{"a":1}' check "--help exit code" 0 '' "" -- --help
-STDIN='{"a":1}' check "--version" 0 'jsonmend 0.5.0' "" -- --version
+STDIN='{"a":1}' check "--version" 0 'jsonmend 0.6.0' "" -- --version
 STDIN='{"a":1} {"b":2}' check "multi-root default" 0 '{"a":1}' "R016" -- --report
 STDIN='{"a":1} {"b":2}' check "--multi-root array" 0 '[{"a":1},{"b":2}]' "" -- --multi-root array
 STDIN='Here you go: {"a":1}' check "prose rejected by default" 3 '' "E002" --
@@ -361,6 +361,39 @@ fi
 # `readiness --schema` prints the two fractions next to the field curve.
 STDIN='{"a":1,"b":2222222222}'
 check_has "readiness --schema" 0 "schema-ready" out -- readiness --schema '{!a:integer,!b:integer}'
+
+# --- 0.6.0: scalar roots, semantic ambiguity, the runtime number -----------
+#
+# A scalar root is valid JSON (RFC 8259) and has to survive the agent protocol's
+# prose skipping, which looks for the first `{` or `[` and finds none. Before
+# 0.6.0 every one of these cases was refused with E002.
+STDIN='true' check "scalar root (true)" 0 'true' "" --
+STDIN='42' check "scalar root (42)" 0 '42' "" --
+STDIN='null' check "scalar root (null)" 0 'null' "" --
+STDIN='"a"' check "scalar root (string)" 0 '"a"' "" --
+STDIN='true' check "scalar root with --skip-prose" 0 'true' "" -- --skip-prose
+STDIN='true' check_has "explain: scalar root is valid JSON" 0 '"valid_json":true' out -- explain --json
+STDIN='true' check_has "explain: scalar root is safe" 0 '"decision":"safe"' out -- explain --json
+
+# Valid JSON with no single meaning: the distinction the product is about.
+STDIN='{"a":"b","a":"c"}'
+check_has "dup key is valid_json" 5 '"valid_json":true' out -- explain --json --policy execution
+STDIN='{"a":"b","a":"c"}'
+check_has "dup key is semantic ambiguity" 5 '"ambiguity":"semantic"' out -- explain --json --policy execution
+STDIN='{"a":"b","a":"c"}'
+check_has "dup key is blocked" 5 '"execution":"blocked"' out -- explain --json --policy execution
+STDIN='{"a":"b","a":"c"}'
+check_has "dup key is normalised" 5 '"normalized":true' out -- explain --json --policy execution
+STDIN='{"a":1}' check_has "plain JSON is allowed" 0 '"execution":"allowed"' out -- explain --json
+STDIN='{"words":["colour" "color"]}'
+check_has "adjacent strings are syntactic" 5 '"ambiguity":"syntactic"' out -- explain --json
+
+# `settled` is the runtime number: when the answer arrived, even when the answer
+# is no. `schema-ready` is 1000 here because the skeleton is never satisfied.
+STDIN='{"limit":"ten","pad":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}'
+check_has "readiness reports settled" 0 "settled" out -- readiness --schema '{!limit:integer}'
+STDIN='{"limit":"ten","pad":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}'
+check_has "invalid settles before the end" 0 "settled 218/1000" out -- readiness --schema '{!limit:integer}'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]

@@ -1,0 +1,18 @@
+{
+  "cut_before_last": "",
+  "derived_from": "code/llm/fixtures/live_relay_tool_call.sse",
+  "derived_from_sha256": "fff9c5a6a7ce0d501d4c2a91d25da3d5b080ee0227d52e0cb52a4f53b1068f28",
+  "endpoint": "https://api.longcat.chat/anthropic/v1/messages",
+  "endpoint_label": "longcat-anthropic-relay",
+  "keep_events": 29,
+  "provider": "anthropic",
+  "recorded_at": "2026-10-15T17:23:47Z",
+  "response_bytes": 3982,
+  "response_sha256": "76c5b409b7a752daf2ec8fdda11f21ec0ef4e55fc50c963c0a930e25bf4b9cd3",
+  "scene": "tool_call",
+  "sse_events_kept": 29,
+  "sse_events_received": 34,
+  "transport": "live-http-sse",
+  "truncated_by_recorder": true,
+  "vendor_capture": true
+}

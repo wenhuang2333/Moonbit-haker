@@ -51,6 +51,13 @@ jobs:
         working-directory: code
         run: python3 tests/gen_llm_fixtures.py --check
 
+      - name: LLM loopback transport recording and replay (must exit 0)
+        working-directory: code
+        run: |
+          moon build cmd/jsonmend --target native --release
+          python3 tests/run_llm_loopback.py \
+            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+
       - name: Command line smoke test
         working-directory: code
         run: |

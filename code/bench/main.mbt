@@ -549,6 +549,28 @@ fn bench_readiness() -> Unit {
 }
 
 ///|
+/// One live streaming watcher over `doc` (FR-39): a fresh `SemanticWatcher` for
+/// the skeleton, fed in `chunk` code units with an event drain after every feed,
+/// then closed. The events are dropped on purpose: this measures the cost of
+/// *producing* readiness on the stream, not of noticing it.
+fn run_watcher(doc : String, schema : @mend.Schema, chunk : Int32) -> Unit {
+  try {
+    let watcher = @mend.SemanticWatcher::new(schema)
+    let n = doc.length()
+    let mut i = 0
+    while i < n {
+      let to = if i + chunk < n { i + chunk } else { n }
+      watcher.feed(doc[i:to].to_owned())
+      let _ = watcher.drain_events()
+      i = to
+    }
+    let _ = watcher.finish()
+  } catch {
+    _ => ()
+  }
+}
+
+///|
 /// The price of the safety layer (FR-32 … FR-36): repairing the same 4 KiB tool
 /// call four ways.
 ///
@@ -557,6 +579,19 @@ fn bench_readiness() -> Unit {
 /// `+schema` adds the skeleton check on top of that. Reported per document and
 /// as a ratio against the engine alone, because "how much does the decision
 /// cost" is the number a caller weighing the API needs.
+///
+/// 0.6.0 adds the FR-39 rows on the same corpus and against the same `repair`
+/// baseline, so the batch measurement and the runtime path are directly
+/// comparable:
+///
+/// * `field_readiness` — the FR-29 curve, which used to cost an offline
+///   re-reading of the document (two extra columns: µs/KiB);
+/// * `watcher` — the live path: one watcher per document, 64 code unit chunks,
+///   one drain per chunk;
+/// * `decided` — `decided_at_permille` over the corpus;
+/// * `semantic_readiness sampled (0.5.0)` — the pre-0.6.0 implementation, still
+///   reachable through the `duplicate_keys: KeepFirst` fallback, kept as the
+///   auditable baseline for the rows above.
 fn bench_gate() -> Unit {
   let docs : Array[String] = []
   let mut bytes = 0
@@ -602,15 +637,59 @@ fn bench_gate() -> Unit {
       }
     }
   })
-  let rows : Array[(String, Double)] = [
-    ("repair", plain),
-    ("analyze", plan),
-    ("analyze for_agent", gated),
-    ("analyze +schema", checked),
-    ("semantic_readiness", ready),
+  // The 0.5.0 implementation, kept in `schema.mbt` for `duplicate_keys:
+  // KeepFirst`: it re-reads the document once per sample point. Measuring it
+  // here is what makes the 0.6.0 improvement auditable on one machine instead of
+  // against a number copied from the previous report.
+  let sampled = median5(() => {
+    let opts : @mend.Options = {
+      ..@mend.Options::default(),
+      duplicate_keys: @mend.KeepFirst,
+    }
+    for doc in docs {
+      try {
+        let _ = @mend.semantic_readiness(doc, schema, options=opts)
+      } catch {
+        _ => ()
+      }
+    }
+  })
+  let curve = median5(() => {
+    for doc in docs {
+      ignore(@mend.field_readiness(doc)) catch {
+        _ => ()
+      }
+    }
+  })
+  let watching = median5(() => {
+    for doc in docs {
+      run_watcher(doc, schema, 64)
+    }
+  })
+  let decided = median5(() => {
+    for doc in docs {
+      ignore(@mend.decided_at_permille(doc, schema)) catch {
+        _ => ()
+      }
+    }
+  })
+  let rows : Array[(String, Double, String)] = [
+    ("repair", plain, ""),
+    ("analyze", plan, ""),
+    ("analyze for_agent", gated, ""),
+    ("analyze +schema", checked, ""),
+    ("semantic_readiness", ready, ""),
+    ("semantic_readiness sampled (0.5.0)", sampled, ""),
+    (
+      "field_readiness",
+      curve,
+      "\t" + round2(ms_per_kib(curve, bytes)) + " us/KiB",
+    ),
+    ("watcher chunk 64", watching, ""),
+    ("decided", decided, ""),
   ]
   for row in rows {
-    let (name, ms) = row
+    let (name, ms, extra) = row
     println(
       name +
       "\t" +
@@ -623,10 +702,22 @@ fn bench_gate() -> Unit {
       round2(ms * 1000.0 / docs.length().to_double()) +
       " us/call\t" +
       round2(ms / plain) +
-      "x repair\t" +
+      "x repair" +
+      extra +
+      "\t" +
       round1(mbps(bytes, ms)) +
       " MB/s",
     )
+  }
+}
+
+///|
+/// Microseconds per KiB of `bytes` bytes in `ms` milliseconds.
+fn ms_per_kib(ms : Double, bytes : Int32) -> Double {
+  if bytes <= 0 {
+    0.0
+  } else {
+    ms * 1000.0 * 1024.0 / bytes.to_double()
   }
 }
 

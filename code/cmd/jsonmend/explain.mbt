@@ -81,6 +81,7 @@ fn print_readiness_lines(
       {
         syntax_permille: 0,
         schema_permille: 0,
+        settled_permille: 0,
         step: 0,
         verdict: {
           total: 0,
@@ -99,6 +100,13 @@ fn print_readiness_lines(
   let sb = StringBuilder()
   sb.write_string("jsonmend: syntax-ready ")
   sb.write_string(r.syntax_permille.to_string())
+  sb.write_string("/1000 settled ")
+  // `settled` is the runtime number: every declared member is final, whether or
+  // not it had the declared kind. `schema-ready` additionally requires the
+  // skeleton to be satisfied, so a decidable-and-invalid document reports it as
+  // `1000` — "not before the end" — while `settled` says when the answer
+  // actually arrived (FR-39).
+  sb.write_string(r.settled_permille.to_string())
   sb.write_string("/1000 schema-ready ")
   sb.write_string(r.schema_permille.to_string())
   sb.write_string("/1000 declared ")

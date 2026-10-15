@@ -8,6 +8,9 @@
 编号沿用在 `FR-26` 之后，**不与 `FR-21`…`FR-26` 重号**；`FR-16` 由「未实现」转为「通过」。
 `FR-32` … `FR-38` 是 0.5.0 新增的需求，来自第六轮优化文档（`优化.md`），
 主题从「修得更准」转为「修出来的值能不能执行、什么时候可以执行、不能执行时怎么回灌模型」。
+`FR-39`（与它的非功能侧 `NFR-PERF-09`）是 0.6.0「Streaming Semantic Safety」新增的：
+把就绪从「离线重放测量」改成「增量事件流」，使 `semantic_readiness` / `field_readiness`
+进入热路径，并让「可判定但无效」与「还没定」在数字上可区分。
 
 ## 功能需求
 
@@ -42,16 +45,17 @@
 | FR-26 | 修复解释输出 | P2 | BR-20 | TC-C-01 | CLI `--explain`：级别 + 位置 + 插入符片段 + 精确度小结；有歧义时追加 `[ambiguous: <类名>]` | 通过 |
 | FR-27 | 歧义标记与执行闸 | P0 | BR-13 BR-19 | TC-EVAL、TC-X-01、TC-AMB | `Ambiguity` 五态进入每条记录；`Options::reject_ambiguous` 在 `max_loss` 判定**之前**抛 `E011`（退出码 5）；`--for-execution` 同时打开两道闸。对抗语料 `amb-1` 24 例：10 例歧义全部标记且全部拒绝，14 例对照全部放行，0 失败（`docs/EVAL_AMBIGUITY.md`，指纹 `c75989b1…`） | 通过 |
 | FR-28 | 拒绝即反馈 | P1 | BR-19 | TC-HINT | `RetryHint`：错误码、修复码、位置、歧义类、原因、上下文窗口与插入符；`to_prompt()` 可直接回灌模型；非修复类错误返回 `None`；CLI `--retry-hint` 写标准错误且不改退出码 | 通过 |
-| FR-29 | 字段就绪曲线与早停 | P1 | BR-16 | TC-READY | `field_readiness`/`readiness_median`/`readiness_deciles`/`early_stop_saving` 与增量驱动的 `FieldTracker`；CLI `readiness` 子命令；20 份扁平记录十分位 `0 10 21 30 41 51 61 71 80 90 100`；成本 1 794 µs/KiB（`docs/BENCHMARK.md`）。**只覆盖顶层成员**，嵌套成员与「全字段早停≈0」的构造性结果已如实记录 | 通过（指标已量化，边界已记录） |
+| FR-29 | 字段就绪曲线与早停 | P1 | BR-16 | TC-READY | `field_readiness`/`readiness_median`/`readiness_deciles`/`early_stop_saving`；0.6.0 起由增量流驱动，热路径 API 是 `SemanticWatcher` / `FieldTracker`；CLI `readiness` 子命令；20 份扁平记录十分位 `0 10 21 30 41 51 61 71 80 90 100`；成本 **155 – 191 µs/KiB**（0.6.0 实测，0.5.0 基线 1 794 µs/KiB，`docs/BENCHMARK.md`）。**只覆盖顶层成员**，嵌套成员与「全字段早停≈0」的构造性结果已如实记录 | 通过（指标已量化，边界已记录） |
 | FR-30 | 适配器事件完备性与结束原因 | P1 | BR-16 | TC-LLM | `ping` 与未知事件类型计数后忽略（文档要求）；`error` 事件置 `ProviderError` 并暴露消息；`message_delta.stop_reason` 与 `finish_reason` 映射到 `CallEnd`；三种结束（正常 / `max_tokens` / 连接中断）暴露在 `ToolCallView`；`TextStream` 读取 `delta.text` / `delta.content`。事件形状来源与「文档转录 ≠ 实况录制」的差别见 `docs/LLM_EVENTS.md` | 通过（形状为文档转录，未录制真实流，已披露） |
 | FR-31 | 参照库对照与多路径真值 | P1 | — | TC-EVAL | 同一 1200 条语料上跑 `jsonrepair` 3.15.0 与 `json_repair` 0.64.0：静默错值 122 / 189 例，JSONMend 0 例（`docs/EVAL_REFERENCE.md`）；8 条路径（1/3/7/随机分块、双 provider 工具流、双 provider 文本流）全部 1200/1200（`docs/EVAL_PATHS.md`） | 通过 |
 | FR-32 | 安全档位 | P0 | BR-13 BR-19 | TC-POLICY | `SafetyPolicy` 五档（permissive / interactive / execution / agent / strict）；`with_policy` 只换安全字段、保留协议字段；`of_options` 可反查档位名，未知组合返回 `None`（`policy_wbtest.mbt` 7 例） | 通过 |
 | FR-33 | 修复计划与单次调用 | P0 | BR-19 BR-20 | TC-PLAN | `RepairPlan` + `PlanOp`（动作、位置、严重度、歧义类、置信类别、是否丢信息）；`analyze` 永不抛错，拒绝放在返回值里；`prompt()` / `suggestions()` / `summary()` / `explain_text()` / `to_json()`（`plan_wbtest.mbt` 22 例） | 通过 |
 | FR-34 | 执行决策 | P0 | BR-13 BR-19 | TC-DECISION | `ExecutionDecision` 五态与 `rank` / `worse_of`；`decide` 与 `decide_error` 的映射由测试固定（`plan_wbtest.mbt`） | 通过 |
 | FR-35 | 自愈闭环 | P1 | BR-19 | TC-X-02 | `examples/agent_loop`：4 个 episode（相邻字符串 E011、截断 E010、骨架不符 E070、无改进则放弃）；`moon run examples/agent_loop --target native --release` 在 CI 中执行 | 通过 |
-| FR-36 | 骨架感知就绪 | P1 | BR-16 | TC-READY2 | `Schema` 文本 DSL + `semantic_readiness`（语法/骨架两层分数、缺失与类型不符清单）；`schema_wbtest.mbt` 5 例；`tests/eval/run_readiness.py` 7 场景（4 落差 + 3 并列），`docs/READINESS.md`；CLI `explain --schema`、`readiness --schema`；新错误码 `E070` | 通过 |
+| FR-36 | 骨架感知就绪 | P1 | BR-16 | TC-READY2 | `Schema` 文本 DSL + `semantic_readiness`（语法/`settled`/骨架三层分数、缺失与类型不符清单）；`schema_wbtest.mbt` 5 例；`tests/eval/run_readiness.py` **10 场景（4 落差 + 3 并列 + 3 可判定但无效）**，`docs/READINESS.md`；CLI `explain --schema`、`readiness --schema`；新错误码 `E070` | 通过 |
 | FR-37 | 流式 live 演示 | P1 | BR-16 | TC-W-02 | `static/demo/live.html` 四场景逐帧重放；bundle 入口 `live`；`code/tests/demo_smoke.mjs` 的 live 断言（帧形状、成员就绪、执行判定、重试提示） | 通过（无头浏览器验证在本机做过，CI 里只跑帧级断言，见备注） |
 | FR-38 | 独立第三方语料 | P1 | — | TC-EVAL | `nst/JSONTestSuite`（318 文件，MIT，commit `1ef36fa0`）逐字节 vendor + `tests/eval/run_independent.py`：`y_` 误修 2/95（均为重复键）、`n_` 有效值 165/188（`json_repair` 166/188、`jsonrepair` 144/188），`docs/EVAL_INDEPENDENT.md` | 通过（2 条误修与 8 条 UTF-8 拒绝已如实记录） |
+| FR-39 | 增量流式就绪 | P0 | BR-16 BR-19 | TC-READY3 | `ReadinessEvent`（`FieldReady`/`FieldInvalid`/`FieldIncomplete`/`RootReady`/`RootInvalid(offset)`，含 `kind()`/`path()`/`to_json()`）+ `SemanticWatcher`（`new`/`feed`/`drain_events`/`bytes`/`settled_at`/`syntax_at`/`all_settled`/`ready_count`/`total_required`/`watched_paths`/`verdict`/`finish`/`concluded`/`conflict`）+ `watch_readiness`/`decided_at_permille`；`semantic_readiness` 与 `field_readiness` 重接到这条流上，`SemanticReadiness` 新增 `settled_permille`（`schema_permille` 对「可判定但无效」的文档报 `1000`，`settled_permille` 给出真正的判定时刻），`Schema::at_path` 新增；closer 通过 `is_prefix()` 决定容器内部缺失的成员。证据：`stream_readiness_wbtest.mbt`（事件、偏移与重复键冲突语义）；`code/bench/main.mbt` 的 `semantic_readiness` / `semantic_readiness sampled (0.5.0)` / `watcher chunk 64` / `decided` 行；`docs/READINESS.md` 的三行三方契约 —— `declared member, wrong kind`（`schema ready = 1000‰` 而 `settled = 128‰`，由成员自己的值决定）、`declared member, absent in a container`（`schema ready = 1000‰` 而 `settled = 84‰`，由容器的 closer 决定，`is_prefix()`）与 `declared member, absent at the root`（`settled = 1000‰`，只有输入结束才决定）。`--check` 同时断言前两行 `schema ready = 1000` 且 `settled < 500`、第三行 `settled = 1000`。同机同轮 0.5.0 实现是 30.82 – 44.10× `repair`，增量实现是 2.42 – 3.47×（`docs/BENCHMARK.md`、`NFR-PERF-09`） | 通过 |
 
 ## 非功能需求
 
@@ -70,7 +74,8 @@
 | NFR-PERF-05 | 增量流开销 | TC-B-07 | `collect_deltas` 打开后耗时是基线的 1.39–1.44 倍（native）、1.14–1.36 倍（JS），**未达到「不低于基线 90%」** | 削减（每条变更分配一个 `Delta` 与路径数组；见 `docs/BENCHMARK.md`） |
 | NFR-PERF-06 | 首个可见值 | TC-B-08 | 工具调用文档中位数：首个值出现在文档长度 0.7% 处；「95% 覆盖」判据为 95.3%（对象结构决定，几乎无收益）。0.4.0 以 **FR-29 字段就绪曲线**为主指标（十分位 `0 10 21 30 41 51 61 71 80 90 100`），95% 覆盖仅作历史对照 | 通过（指标已替换，原因见 `docs/BENCHMARK.md`） |
 | NFR-PERF-07 场景延迟（0.4.0 新增） | TC-B-09 | 4 KB 工具调用文档按 3 码元分块：0.08 µs/feed（摊还），290 000 次 feed 中 0 次达到毫秒时钟分辨率；p99 ≤ 1 ms（只能给上界，`@env.now()` 为毫秒分辨率，运行时无分配计数） | 已实测 |
-| NFR-PERF-04 | 内存 | TC-B-04 | 12.95 MB 对象数组：JSONMend 177.9 MB（13.7 × 输入）、Node `JSON.parse` 137.5 MB（10.6 ×）、Python `json.loads` 185.5 MB（14.3 ×，其中 tracemalloc 峰值 66.7 MB）。**4 × 预算对任何建树实现都不现实**（Node 自身即 10.6 ×），要达标只能做「不建树」模式（N2） | 削减（已用横向基线替换自比，N2 的取舍有了依据；见 `docs/MEMORY.md`） |
+| NFR-PERF-09 增量就绪（0.6.0 新增，无阈值） | TC-B-10 | 20 份 4.9 KiB 工具调用文档、20 次调用、`median5`，同一 `repair` 基准：`semantic_readiness`（增量驱动）**191 – 248 µs = 2.42 – 3.47×**；0.5.0 实现同机同轮 2 150 – 3 150 µs = 30.82 – 44.10×，**同轮比值 10.6 – 12.7×**；`field_readiness` 266 – 333 µs = 3.67 – 4.67×（54.7 – 68.6 µs/KiB）；`watcher chunk 64` 114 – 143 µs = **1.64 – 2.00×**；`decided` 179 – 243 µs = 2.54 – 3.40×。命令：`moon run bench --target native --release`（`docs/BENCHMARK.md` 有原始输出与六次运行的区间） | 已实测（比例抖动 ±15%，故报区间；`watcher` 是流式路径的真实单价） |
+| NFR-PERF-04 | 内存 | TC-B-04 | **统一的「≤ 4 × 输入」阈值已撤销**，改为按模式报告（`docs/BENCHMARK.md`「内存指标的重新定义」）：`repair()` / `analyze()` 报峰值 RSS（建树，无阈值）、streaming 报峰值工作集、`text-only ≤ 4 ×` 与 `no-tree ≤ 2 ×` 声明给 0.7。横向证据：12.95 MB 对象数组 JSONMend 177.9 MB（13.7 × 输入）、Node `JSON.parse` 137.5 MB（10.6 ×）、Python `json.loads` 185.5 MB（14.3 ×，其中 tracemalloc 峰值 66.7 MB） | 削减（统一阈值撤销，因为建树实现与流式设想不可比；0.6.0 无 `text-only`/`no-tree` 模式，两条目标不声称达标；数值证据见 `docs/MEMORY.md`） |
 | NFR-SIZE-01 | 产物体积 | TC-B-05 | wasm-gc release 103 784 B（101.4 KiB），上限 150 KB | 通过 |
 | NFR-PORT-01 | 跨后端一致 | TC-X-01 | `moon test`（wasm-gc）、`--target native`、`--target js` 均 95/95 通过 | 通过 |
 | NFR-DET-01 | 确定性 | TC-X-02 | 固定种子的 LCG；同一输入重复运行输出逐字节相同 | 通过 |
@@ -108,7 +113,7 @@
 | --- | --- | --- |
 | FR-16 事件接口 | P2，0.2.0 未实现 | 需要回调式接口的调用方只能用 `snapshot()` 轮询 |
 | NFR-PERF-01（JS） | JS 产物每码元构造一个 `Position` 对象 | 4n/2n 达 2.3–2.8，超出 2.3；需把当前位置与历史位置分离 |
-| NFR-PERF-04 内存预算 | 完整解析树常驻内存 | 12.95 MB 输入峰值 230.6 MB（单个 10 MB 字符串为 38 倍）；需要「只产出文本、不建树」的模式才能达标 |
+| NFR-PERF-04 内存预算 | 统一阈值不可比：完整解析树常驻内存，而阈值是按「流式文本修复」写的 | 自比 12.95 MB 输入峰值 230.6 MB（单个 10 MB 字符串为 38 倍）；横向 Node 自身即 10.6 ×。统一阈值撤销，改为按模式报告；`text-only ≤ 4 ×` / `no-tree ≤ 2 ×` 属 0.7，需要「只产出文本、不建树」的模式（`Options.want_value = false`）才能达标 |
 | NFR-REL-01 发布 | 未发布到 mooncakes.io（`moon whoami` 未登录） | 只能通过仓库源码使用 |
 | NFR-PERF-05 增量流开销 | 每条变更分配一个 `Delta` 记录与一份路径数组 | 1 MB 口径 1.40–1.46 × 基线耗时；agent 场景（4 KB/3 码元）整条流 0.115 ms，不在关键路径；紧凑增量缓冲优先级下调 |
 | NFR-PERF-06「95% 覆盖」判据 | JSON 对象只有接近闭合才「几乎完整」 | 该判据结构性不敏感（95.3%）；「首个可见值」0.7% 才是有效指标 |

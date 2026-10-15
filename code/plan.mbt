@@ -165,6 +165,9 @@ pub(all) struct RepairPlan {
   /// Whether the repair log was cut short by `max_repairs`.
   repairs_truncated : Bool
   exactness : Exactness
+  /// Whether the input was already well-formed JSON and the only thing JSONMend
+  /// had to decide was what its repeated member names mean (Q-26).
+  valid_json : Bool
   /// Whether any repair admitted a second reading (FR-27).
   ambiguous : Bool
   completeness : Completeness
@@ -378,6 +381,7 @@ fn plan_of_final(
     repairs: ops,
     repairs_truncated: fin.repairs_truncated,
     exactness: fin.exactness,
+    valid_json: input_was_valid_json(ops),
     ambiguous: fin.ambiguous,
     completeness: fin.completeness,
     decision: verdict.decision(decision),
@@ -392,6 +396,76 @@ fn plan_of_final(
     schema_total: verdict.total,
     schema_satisfied: verdict.satisfied,
     schema_missing: verdict.missing,
+  }
+}
+
+///|
+/// Whether the input was already well-formed JSON, so that the only thing
+/// JSONMend had to decide was what a repeated member name means (Q-26).
+///
+/// `R018` is the rule that fires on text a strict JSON reader accepts: RFC 8259
+/// permits a repeated name and leaves "which one wins" to the consumer. Every
+/// other rule fires on text that is not JSON yet. So "no repair at all" and
+/// "only duplicate-key normalisation" are exactly the cases in which
+/// *syntactically valid* and *safe to execute* come apart, which is the
+/// distinction this field exists to report. The claim is checked against the
+/// independent corpus by `code/tests/eval/run_independent.py`.
+fn input_was_valid_json(ops : Array[PlanOp]) -> Bool {
+  for op in ops {
+    if op.rule != "R018" {
+      return false
+    }
+  }
+  true
+}
+
+///|
+/// Whether the value JSONMend hands over was produced by rewriting the input:
+/// `true` as soon as any repair was recorded, including the ones that only
+/// normalise notation.
+pub fn RepairPlan::normalized(self : RepairPlan) -> Bool {
+  self.repairs.length() > 0
+}
+
+///|
+/// Which kind of second reading the plan admits (Q-26).
+///
+/// `semantic` — two values became one (`merge`), so two consumers that disagree
+/// about repeated member names would end up with different values; the plan
+/// cannot be executed without choosing for them.
+/// `syntactic` — the notation could be read two ways, but the value is the same
+/// under both readings.
+/// `none` — one reading only.
+pub fn RepairPlan::ambiguity_kind(self : RepairPlan) -> String {
+  let mut syntactic = false
+  for op in self.repairs {
+    match op.action {
+      // A merge is only a second *meaning* when the two values differ. Merging
+      // `{"a":1,"a":1}` loses nothing and both readings give the same value, so
+      // the record is Info and this is not an ambiguity at all.
+      Merge =>
+        if op.information_loss() {
+          return "semantic"
+        } else if op.ambiguity.is_ambiguous() {
+          syntactic = true
+        }
+      _ => if op.ambiguity.is_ambiguous() { syntactic = true }
+    }
+  }
+  if syntactic {
+    "syntactic"
+  } else {
+    "none"
+  }
+}
+
+///|
+/// `allowed` when the plan may be handed to a tool, `blocked` otherwise.
+pub fn RepairPlan::execution(self : RepairPlan) -> String {
+  if self.is_executable() {
+    "allowed"
+  } else {
+    "blocked"
   }
 }
 
@@ -508,6 +582,13 @@ fn plan_of_error(e : MendError, input : String) -> RepairPlan {
     repairs: ops,
     repairs_truncated: false,
     exactness,
+    // A refusal is still a statement about the input: when the rule that was
+    // refused is the duplicate-key normalisation, the input *was* well-formed
+    // JSON and the refusal is about its meaning, not its syntax (Q-26).
+    valid_json: match refused {
+      Some((c, _, _, _)) => c is MergeDuplicateKey
+      None => false
+    },
     ambiguous,
     completeness: Empty,
     decision: decide_error(code),
@@ -544,12 +625,55 @@ pub fn analyze(
   }
   try {
     opts.validate()
-    let engine = Engine::make(opts)
-    engine.feed_str(input)
-    plan_of_final(engine.finish_engine(), input, step, schema)
+    analyze_once(input, opts, step, schema)
   } catch {
-    e => plan_of_error(e, input)
+    e => {
+      let mut retried : RepairPlan? = None
+      if opts.skip_prose && refused_no_json(e) && is_valid_json(input) {
+        // `skip_prose` looks for the first `{` or `[`, because that is what a
+        // chatty model puts the arguments in. A document whose root is a scalar
+        // — `true`, `42`, `"ok"`, which RFC 8259 allows — has no such
+        // character, so the whole input is skipped as prose and a perfectly
+        // valid document is refused. When the input is in fact valid JSON, the
+        // skip was wrong and is undone. The retry only happens on that refusal
+        // and only for input a strict parser accepts, so prose is never
+        // reinterpreted as a value.
+        let again : Options = { ..opts, skip_prose: false, }
+        try {
+          retried = Some(analyze_once(input, again, step, schema))
+        } catch {
+          e2 => retried = Some(plan_of_error(e2, input))
+        }
+      }
+      match retried {
+        Some(p) => p
+        None => plan_of_error(e, input)
+      }
+    }
   }
+}
+
+///|
+/// Whether the refusal is "there is no JSON here", the only one that says
+/// anything about `skip_prose`.
+fn refused_no_json(e : MendError) -> Bool {
+  match e {
+    NoJsonFound(_) => true
+    _ => false
+  }
+}
+
+///|
+/// One attempt at analysing `input` with `opts`.
+fn analyze_once(
+  input : String,
+  opts : Options,
+  step : Int32,
+  schema : Schema?,
+) -> RepairPlan raise MendError {
+  let engine = Engine::make(opts)
+  engine.feed_str(input)
+  plan_of_final(engine.finish_engine(), input, step, schema)
 }
 
 ///|
@@ -740,6 +864,17 @@ pub fn RepairPlan::to_json(self : RepairPlan) -> String {
   sb.write_string(self.ambiguous.to_string())
   sb.write_string(",\"information_loss\":")
   sb.write_string((self.exactness is Lossy).to_string())
+  // Q-26: "syntactically valid" is not "safe to execute", and the pair
+  // `valid_json` / `normalized` is what says so. A document can be valid JSON
+  // and still be blocked, because a repeated member name has no single meaning.
+  sb.write_string(",\"valid_json\":")
+  sb.write_string(self.valid_json.to_string())
+  sb.write_string(",\"normalized\":")
+  sb.write_string(self.normalized().to_string())
+  sb.write_string(",")
+  sb.write_string(kv("ambiguity", self.ambiguity_kind()))
+  sb.write_string(",")
+  sb.write_string(kv("execution", self.execution()))
   sb.write_string(",\"executable\":")
   sb.write_string(self.is_executable().to_string())
   sb.write_string(",\"syntax_ready_permille\":")

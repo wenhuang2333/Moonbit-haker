@@ -1,0 +1,22 @@
+{
+  "calls": [
+    {
+      "arguments": "{\"location\":\"Paris\",\"unit\":\"celsius\"}",
+      "done": true,
+      "end": "complete",
+      "exactness": "exact",
+      "id": "toolu_loopback_01",
+      "index": 0,
+      "name": "get_weather",
+      "stop_reason": "tool_use",
+      "value": {
+        "location": "Paris",
+        "unit": "celsius"
+      }
+    }
+  ],
+  "provider": "anthropic",
+  "scenario": "tool_call",
+  "transport": "loopback-sse",
+  "wire": "anthropic/v1/messages"
+}

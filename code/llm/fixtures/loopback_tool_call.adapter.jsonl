@@ -1,0 +1,1 @@
+{"index":0,"id":"toolu_loopback_01","name":"get_weather","done":true,"exactness":"exact","end":"complete","stop_reason":"tool_use","value":{"location":"Paris","unit":"celsius"}}

@@ -16,8 +16,80 @@
 // `strict` is `JSON.parse` on the untouched text, `valid` is `JSON.parse` on the
 // text `jsonrepair` returned, which is what a caller would do next.
 
+// `jsonrepair` is loaded through CommonJS resolution, not through a bare ESM
+// `import`. The ESM resolver ignores `NODE_PATH` (that variable is CJS-only), so
+// `import { jsonrepair } from "jsonrepair"` only works when the package happens
+// to sit in a `node_modules` above this file — on a developer machine that is
+// often true by accident, and in CI it never is, because the package is
+// installed into `$RUNNER_TEMP`. The column then degraded to `n/a (library not
+// installed)` with only a printed note, so every CI run silently published an
+// independent-corpus report without the third oracle. Requiring the package by
+// absolute path fixes that and keeps the column honest.
+//
+// The candidate list mirrors `code/tests/diff/run_diff.py::find_node_modules`;
+// both conventions of the `--node-dir` argument are accepted, because the
+// scripts in this directory disagree about whether it names `node_modules`
+// itself or the directory that holds it.
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
-import { jsonrepair } from "jsonrepair";
+import { existsSync } from "node:fs";
+import path from "node:path";
+
+const require = createRequire(import.meta.url);
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+function searchDirs() {
+  const dirs = [];
+  const push = (d) => {
+    if (d && !dirs.includes(d)) dirs.push(d);
+  };
+  for (const entry of (process.env.NODE_PATH || "").split(path.delimiter)) {
+    if (!entry) continue;
+    push(entry); // NODE_PATH names the node_modules directory
+    push(path.join(entry, "node_modules")); // ...or the directory holding it
+    push(path.dirname(entry)); // ...or the doubled form (`x/node_modules/node_modules`)
+  }
+  let d = HERE;
+  for (let i = 0; i < 4; i += 1) {
+    d = path.dirname(d);
+    push(path.join(d, "node_modules"));
+  }
+  for (const base of ["/private/tmp", "/tmp", "/var/tmp"]) {
+    push(path.join(base, "node_modules"));
+  }
+  return dirs;
+}
+
+function loadJsonrepair() {
+  const tried = [];
+  for (const dir of searchDirs()) {
+    const pkg = path.join(dir, "jsonrepair");
+    if (!existsSync(path.join(pkg, "package.json"))) {
+      tried.push(dir);
+      continue;
+    }
+    try {
+      const mod = require(pkg);
+      const fn = mod.jsonrepair || (mod.default && mod.default.jsonrepair);
+      if (typeof fn === "function") return fn;
+      tried.push(dir + " (no jsonrepair export)");
+    } catch (e) {
+      tried.push(dir + " (" + String(e).slice(0, 60) + ")");
+    }
+  }
+  throw new Error(
+    "jsonrepair not found; searched: " + (tried.length ? tried.join(", ") : "(none)")
+  );
+}
+
+let jsonrepair;
+try {
+  jsonrepair = loadJsonrepair();
+} catch (e) {
+  process.stderr.write("jsonrepair unavailable: " + String(e.message) + "\n");
+  process.exit(1);
+}
 
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 const out = [];
