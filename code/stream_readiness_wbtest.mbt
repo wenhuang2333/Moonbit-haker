@@ -749,3 +749,57 @@ test "an empty input has no events, and asking is not an error" {
   // byte-wise helper has no events to report rather than an empty verdict.
   assert_true(sr_feed_one_by_one("", s) is None, msg="finish on empty input")
 }
+
+// ---------------------------------------------------------------------------
+// The one-shot helpers, including the step they choose themselves.
+// ---------------------------------------------------------------------------
+
+///|
+test "the one-shot helpers pick their own step and decide at the end" {
+  let s = sr_schema("{!a:integer,!b:string}")
+  // No `chunk` argument: the step is automatic. A document whose closing
+  // brace never arrives cannot be decided while it is being fed, so the two
+  // events that close the case carry `-1` rather than a fraction.
+  let evs = watch_readiness("{\"a\":1", s) catch {
+    _ => return assert_true(false, msg="watch_readiness failed")
+  }
+  let raw : Array[ReadinessEvent] = []
+  for e in evs {
+    raw.push(e.event)
+  }
+  assert_eq(sr_names_of(raw), "field_ready:a,field_invalid:b,root_invalid:")
+  // Even `a`, whose value is complete in the text, is not *final* until a
+  // delimiter or the end: a trailing digit could still grow. So every event
+  // here is produced by `finish()`.
+  assert_eq(sr_event_permille(evs, "field_ready"), -1)
+  assert_eq(sr_event_permille(evs, "field_invalid"), -1)
+  assert_eq(sr_event_permille(evs, "root_invalid"), -1)
+  assert_eq(sr_last_settle(evs), -1)
+  // The same for `decided_at_permille`: nothing is final during the feed, so
+  // the answer can only be "not before the end".
+  let decided = decided_at_permille("{\"a\":1", s) catch {
+    _ => return assert_true(false, msg="decided_at_permille failed")
+  }
+  assert_eq(decided, 1000)
+  // An empty input is never decided at all.
+  let empty = decided_at_permille("", s) catch { _ => -2 }
+  assert_eq(empty, -1)
+  // A document that closes early is decided at the fraction, not at the end.
+  let early = decided_at_permille("{\"a\":1}   ", s) catch { _ => -2 }
+  assert_eq(early, 700)
+  let late = decided_at_permille("{\"a\":1}", s) catch { _ => -2 }
+  assert_eq(late, 1000)
+  // Text with no JSON in it is refused at the end, so the answer is "only when
+  // the stream ends" (`1000`), not "never".
+  let prose = decided_at_permille("no json here", s) catch { _ => -2 }
+  assert_eq(prose, 1000)
+  // Whitespace alone produces no value at all, so there is no decision to
+  // report and the answer is `-1`.
+  let blank = decided_at_permille("   ", s) catch { _ => -2 }
+  assert_eq(blank, -1)
+  // Input the delta parser rejects outright propagates the refusal instead,
+  // which is why the caller of `decided_at_permille` must still handle an
+  // error; `@@@` is the smallest example.
+  let bad = decided_at_permille("@@@", s) catch { _ => -2 }
+  assert_eq(bad, -2)
+}

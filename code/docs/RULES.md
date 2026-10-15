@@ -1,11 +1,14 @@
 # 修复规则
 
-本文件描述 JSONMend 0.5.0 的 22 条修复规则（`R001`–`R022`）。
+本文件描述 JSONMend 0.6.0 的 22 条修复规则（`R001`–`R022`）。
 
-> **0.5.0 没有新增任何规则，也没有改变任何规则的触发条件、级别或消息。**
-> 这一轮的改动全部在「修复之后」：把 22 条规则记录翻译成可执行的决策与计划
+> **0.6.0 没有新增规则，也没有改变任何规则的触发条件、级别或消息。**
+> 0.5.0 把 22 条规则记录翻译成可执行的决策与计划
 > （`RuleSet` → `PlanOp` 的 `action` 映射是**全函数**，新增规则必须同时给出动作，
 > 否则 `plan_action` 的总性测试会失败），详见 `docs/ONEPAGE.md` 与产品文档 §16。
+> 0.6.0 的改动在「安全」这一层：计划新增 `valid_json` / `normalized` / `execution`
+> 三个字段，R018 因此在本文件中改写为**重复键规范化**（Q-26）：语义与实现不变，
+> 只是把它与「修复非法 JSON」区分开——见 [R018](#r018-重复键合并重复键规范化q-26)。
 > 22 个码到动作的映射（`plan_action`，全函数）：
 > `remove`（R001、R002、R005、R016、R017、R020、R021）、`wrap`（R004）、
 > `insert`（R006、R007、R008、R009、R010）、`replace`（R012、R015）、
@@ -42,7 +45,7 @@
 | R015 | MismatchedCloser | Info | 数组遇到 `}`，或对象遇到 `]` |
 | R016 | DropUnexpected | Warning | 当前状态无法识别的内容、非注释的 `/`、以及 `multi_root=KeepFirst` 时根值之后的内容 |
 | R017 | DropExtraCloser | Info | 根值结束后、栈空时出现多余的 `}` 或 `]` |
-| R018 | MergeDuplicateKey | 见下 | 对象中同一个键被赋值两次；两次取值结构相等时为 Info，否则 Warning |
+| R018 | MergeDuplicateKey | 见下 | 对象中同一个键被赋值两次；两次取值结构相等时为 Info，否则 Warning。这是**重复键规范化**（合法 JSON 的语义歧义），不是修复非法 JSON |
 | R019 | ConcatStrings | Info | 相邻字符串用 `+` 拼接（BR-21） |
 | R020 | DropEllipsis | Warning | 独立的 `...` 裸词占位符 |
 | R021 | SkipProse | Info | `skip_prose=true` 且第一个 `{` 或 `[` 之前存在非空白文字 |
@@ -314,19 +317,40 @@ R003 的前瞻分支（Warning）、R004 的值位置（Warning）、R018 的相
 记录：R017@7, R017@8
 ```
 
-### R018 重复键合并
+### R018 重复键合并（重复键规范化，Q-26）
 
 - 名称：`MergeDuplicateKey`
-- 级别：Warning
+- 级别：默认 `Warning`；仅当两次取值**结构相等**时降为 `Info`。`error.mbt` 的 `RepairCode::severity()` 对 R018 返回 `Warning`（它只把记号类规则列为 `Info`），引擎在记录时用 `json_equal(kept, v)` 覆盖：相等给 `Info`，否则给 `Warning`（`engine_flow.mbt` 的 R018 分支）。
 - 消息：`duplicate key merged`
+- 动作：`merge`（`plan.mbt` 的 `plan_action`：`MergeDuplicateKey => Merge`）。不是 `remove`、`replace` 或 `normalize`；计划 JSON 里的 `action` 就是 `merge`。
 - 触发条件：对象中同一个键被第二次赋值。
 - 行为：按 `duplicate_keys` 处理：`KeepLast`（默认）以后一个值覆盖并记录；`KeepFirst` 保留第一个值并记录；`AsError` 抛 `E010(R018@…)`。记录位置为后一次出现的键的起始位置。
 - 金样例：G-032、G-033、G-034、G-270、G-271。
 
+**这是「重复键规范化」，不是「修复非法 JSON」。** RFC 8259 允许对象里出现重复名，并把「哪一个胜出」留给消费者；`{"a":"b","a":"c"}` 是**语法合法**的 JSON，读它不需要修任何语法错误。R018 记录的是 JSONMend 替调用方做的一次**语义决定**：两个值只剩一个。这就是它的默认级别是 `Warning`（信息丢失）而不是 `Info`（记号规范化）的原因，也是同一份输入上 `valid_json=true` 与 `exactness=lossy` 同时为真的原因——`valid_json` 回答「输入本来是不是合法 JSON」，`exactness` 回答「输出丢了没有」，是两个问题。
+
+于是 `{"a":"b","a":"c"}` 在 `--for-execution`（等于 `--max-loss cosmetic --reject-ambiguous`）下被拒绝，退出码 5，`E010`：
+
 ```text
-输入：{"a":1,"a":2}
-输出：{"a":2}
-记录：R018@7
+jsonmend: E010 StrictViolation at 1:10 (offset 9): R018 MergeDuplicateKey: exactness lossy exceeds max_loss cosmetic
+```
+
+决策为 `lossy_repair`、`execution=blocked`：**语法合法不等于执行安全**。反过来，`{"a":1,"a":1}` 合并两个结构相等的值不丢信息，级别是 `Info`、`exactness=cosmetic`、`ambiguity=none`、`execution=allowed`，可以执行。
+
+> JSONMend does not confuse syntactic validity with execution safety.
+
+```text
+输入：{"a":"b","a":"c"}      # 合法 JSON，但合并会丢一个值
+输出：{"a":"c"}
+记录：R018@9  severity=warning action=merge information_loss=true
+     → decision=lossy_repair exactness=lossy valid_json=true normalized=true execution=blocked
+```
+
+```text
+输入：{"a":1,"a":1}          # 合法 JSON，两个值相等，合并不丢信息
+输出：{"a":1}
+记录：R018@7  severity=info action=merge information_loss=false
+     → decision=cosmetic_repair exactness=cosmetic valid_json=true normalized=true execution=allowed
 ```
 
 ### R019 字符串拼接

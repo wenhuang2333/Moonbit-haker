@@ -1,29 +1,55 @@
-# 内存基线：与 Node / Python 的横向对照（NFR-PERF-04）
+# 内存基线：按模式与跨实现对照（NFR-PERF-04）
 
-由 `code/tests/memory_baseline.py` 在 2026-10-15 18:01 CST 生成。
+由 `code/tests/memory_baseline.py` 在 2026-10-16 01:59 CST 生成。
 
-| 项 | 值 |
+| 环境 | 值 |
 | --- | --- |
 | 输入 | 同一份对象数组文档，13579171 B（12.95 MB） |
-| 计时工具 | `/usr/bin/time -l` |
-| JSONMend | `../../../../../tmp/jsonmend` |
+| 计时工具 | `/usr/bin/time -l`（峰值 RSS） |
+| JSONMend | `_build/native/release/build/cmd/jsonmend/jsonmend.exe` |
 | Node | v24.15.0 |
 | Python | 3.12.6 |
 
-## 峰值 RSS
+## 一、按模式的峰值内存
+
+| 模式 | 工作负载 | 指标 | 峰值 | 相对输入 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| repair() | 值树 + 渲染输出 | 峰值 RSS | 178.1 MB | 13.7 × |  |
+| analyze() | 计划（explain --json），不渲染值 | 峰值 RSS | 326.4 MB | 25.2 × |  |
+| streaming feed | 分块喂入 64 KiB（--chunk 65536） | 峰值工作集（峰值 RSS） | 178.0 MB | 13.7 × |  |
+| streaming readiness | 字段就绪事件流（readiness） | 峰值工作集（峰值 RSS） | 202.8 MB | 15.7 × |  |
+| text-only (llm --text) | 文本增量 → TextStream → PartialParser | 峰值工作集（峰值 RSS） | 500.7 MB | 33.8 × | 事件文件 15552749 B（文档的 1.15 ×） |
+| no-tree | 完全不建值树 | — | 未测得 | — | 0.6.0 无此模式：`Options::for_text()` 仍走建树解析，未测得 |
+
+`analyze()` 比 `repair()` 高（326.4 MB vs 178.1 MB，1.83 ×）：计划模式并不更省，因为它同样建值树，还额外保留修复后的文本并渲染整份机器可读计划。
+
+每个模式的「相对输入」都是**峰值 RSS ÷ 该模式实际读入的字节数**。
+`text-only (llm --text)` 这一行的分母是事件文件（15552749 B），
+不是文档本身，因为该模式读的就是事件流。
+
+## 二、与 Node / Python 的横向对照
 
 | 实现 | 峰值 RSS | 相对输入 | 相对 Node | 备注 |
 | --- | --- | --- | --- | --- |
-| python3 json.loads + json.dumps | 185.5 MB | 14.3 × | 1.35 × | tracemalloc peak 66.7 MB, i.e. 64% of the RSS is interpreter + GC slack |
-| node JSON.parse + JSON.stringify | 137.5 MB | 10.6 × | 1.00 × |  |
-| jsonmend (default repair) | 177.9 MB | 13.7 × | 1.29 × |  |
-| jsonmend --chunk 65536 (streaming) | 177.9 MB | 13.7 × | 1.29 × |  |
-| jsonmend --check (no output written) | 177.9 MB | 13.7 × | 1.29 × |  |
+| python3 json.loads + json.dumps | 178.3 MB | 13.8 × | 1.30 × | tracemalloc 峰值 66.7 MB，即 RSS 的 63% 是解释器与 GC 空闲 |
+| node JSON.parse + JSON.stringify | 137.6 MB | 10.6 × | 1.00 × |  |
+| jsonmend repair（本表第一行） | 178.1 MB | 13.7 × | 1.29 × | 同一份文档，同一次运行 |
 
-## 这张表能回答什么，不能回答什么
+## 三、两条声明目标：声明了，本次未达成 / 未测得
 
-能回答：**同样的文档、同样的「读入 + 建树 + 保留」工作负载**下，JSONMend 的峰值内存与调用方本来就会用的两个运行时相比是高还是低、差多少倍。NFR-PERF-04 的「≤ 4 × 输入」是否现实，取决于这个差距，而不是取决于 0.3.0 与 0.2.0 的自比。
+| 目标 | 状态 | 依据 |
+| --- | --- | --- |
+| text-only ≤ 4 × 输入 | 33.8 × 事件文件（目标 ≤ 4 × 输入，未据此判定达成） | 该数值里含事件文件本身的 15552749 B（文档的 1.15 ×）与 `read_all` 的整段缓冲，只能作为上界，不能用来宣称纯文本路径达标 |
+| no-tree ≤ 2 × 输入 | 未达成（模式不存在） | `Options::for_text()` 仍然建值树，0.6.0 没有关闭建树的入口，因此这条目标只能声明、不能测 |
 
-不能回答：MoonBit **core** 的 `@json.parse` 单独占多少。core 没有文件读取入口，本库也刻意不暴露一个，所以能测到的最接近的两臂是 `jsonmend --check`（建树但不渲染输出）与 `jsonmend`（建树并渲染），两者峰值相同即说明峰值来自值树而不是输出。两者的差异是引擎的记录数组与位置对象，量级远小于此处比较的实现间差异，但如果需要一个精确的 core 基线，需要给基准程序加一个 FFI 读文件入口（core 自身没有文件读取 API）。
+这两条目标来自 0.6.0 冻结的内存策略。本文件只报告状态：不把「流式路径的峰值恰好低于 4 ×」当成达标，因为该峰值包含整段输入缓冲（见下一节），也不把尚未实现的 no-tree 写成达标。
 
-另外，Python 一行的注释给出 `tracemalloc` 峰值：它是 Python **自身分配**的精确值，与 RSS 的差额是解释器与 GC 的空闲内存。把这个差值当成「实现效率」是不对的，这也是为什么同一张表里既给 RSS 也给 tracemalloc。
+## 四、这张表能回答什么，不能回答什么
+
+能回答：**同一份文档、同一个「读入 + 建树 + 保留」工作负载**下，各模式的峰值差多少，以及 JSONMend 与调用方本来就会用的两个运行时相比是高还是低。
+
+不能回答：MoonBit **core** 的 `@json.parse` 单独占多少。core 没有文件读取入口，本库也刻意不暴露一个。能测到的最接近的两臂是 `--check`（建树、不渲染，本次 178.0 MB）与 `repair()`（建树并渲染，本次 178.1 MB）：两者在噪声内相同，所以峰值不是输出渲染造成的，而是「输入缓冲 + 值树」；core 自身在这部分里占多少，从这两个数里拆不出来。要一个精确的 core 基线，需要给基准程序加一个 FFI 读文件入口（core 自身没有文件读取 API）。
+
+也不能回答「有没有真正的流式 I/O」：`cmd/jsonmend` 的每一条路径都先调用 `read_all`（`code/cmd/jsonmend/batch.mbt`），把整份输入建成一个 `StringBuilder`，之后才交给解析器。所以每个峰值都至少包含输入文本、解码后的 `String` 与值树；`streaming feed`、`readiness`、`llm --text` 三行之间以及它们与 `repair` 之间的差额，是计划、事件表与渲染输出的**边际**成本，而不是「流式模式省掉了值树」的证据。
+
+另外，Python 一行的备注给出 `tracemalloc` 峰值：它是 Python **自身分配**的精确值，与 RSS 的差额是解释器与 GC 的空闲内存。把这个差值当成「实现效率」是不对的，这也是为什么同一张表里既给 RSS 也给 tracemalloc。

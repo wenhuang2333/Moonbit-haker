@@ -97,7 +97,17 @@ pub fn Schema::stringify(self : Schema) -> String {
         }
         let m = members[i]
         sb.write_string(if m.required { "!" } else { "?" })
-        sb.write_string(m.key)
+        // A name containing `:`, whitespace or a quote cannot be written bare:
+        // the parser would stop at the first delimiter and read a different
+        // skeleton back. Quoting it is what makes `parse(stringify(s))` mean the
+        // same as `s` (Q-23) for names like `{"name with space":string}`.
+        if name_needs_quotes(m.key) {
+          sb.write_char('"')
+          sb.write_string(m.key)
+          sb.write_char('"')
+        } else {
+          sb.write_string(m.key)
+        }
         sb.write_char(':')
         sb.write_string(m.schema.stringify())
       }
@@ -106,6 +116,31 @@ pub fn Schema::stringify(self : Schema) -> String {
     }
     _ => self.name()
   }
+}
+
+///|
+/// Whether a member name cannot be written as a bare identifier.
+///
+/// The bare form ends at `:`, space, tab, newline or carriage return, so a name
+/// containing any of those has to be quoted. A name containing `"` cannot be
+/// represented at all — the parser has no escape — but such a name can only
+/// come from a hand-built `Obj`, because parsing stops at the first quote.
+fn name_needs_quotes(key : String) -> Bool {
+  if key == "" {
+    return true
+  }
+  for i = 0; i < key.length(); i = i + 1 {
+    let c = key.at(i).to_int()
+    if c == 0x3A ||
+      c == 0x20 ||
+      c == 0x09 ||
+      c == 0x0A ||
+      c == 0x0D ||
+      c == 0x22 {
+      return true
+    }
+  }
+  false
 }
 
 ///|

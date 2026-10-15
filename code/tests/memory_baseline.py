@@ -1,24 +1,39 @@
 #!/usr/bin/env python3
-"""Peak memory of the same parse in JSONMend, Node and Python (NFR-PERF-04).
+"""Peak memory per mode, and the same parse in JSONMend, Node and Python (NFR-PERF-04).
 
-The 0.3.0 report only compared JSONMend 0.3.0 with 0.2.0, which cannot answer
-"is the 4x input budget reasonable": for that the same document has to be parsed
-by the other implementations a caller would actually use. This harness does
-exactly that, on one file, in one process at a time:
+0.6.0 asks a narrower question than 0.3.0 did. The old report answered "is the
+4x input budget reasonable" by comparing one JSONMend arm with Node and Python.
+The frozen memory policy for this release names **modes**, because the modes
+allocate differently:
+
+    repair()      peak RSS        (value tree + rendered output)
+    analyze()     peak RSS        (plan, no rendered value)
+    streaming     peak working set (chunks fed through PartialParser)
+    text-only     target <= 4x input   (declared, not claimed here)
+    no-tree       target <= 2x input   (declared, not claimed here)
+
+so every arm below is labelled with the mode it measures, and the two declared
+targets are reported as *targets* with their real status rather than folded into
+the comparison table.
 
     python3 code/tests/memory_baseline.py [--size-mb 12.95] [--out code/docs/MEMORY.md]
 
-Every arm reads the same file and then keeps the parsed value alive while a
-result is derived from it, so the peak covers "text + value tree". Peak RSS is
-read from `/usr/bin/time -l` (macOS) or `/usr/bin/time -v` (Linux); Python also
-reports `tracemalloc` peak, which is exact for its own allocation and shows how
-much of the RSS is the garbage collector's slack rather than live data.
+Two facts about the harness that the numbers depend on, both stated in the
+output as well:
+
+* `/usr/bin/time -l` (macOS) or `-v` (Linux) gives the process peak RSS. Python
+  additionally gives `tracemalloc`, which is exact for its own allocation.
+* No CLI arm is truly streaming. Every path in `cmd/jsonmend` calls `read_all`,
+  which builds the whole input as a `StringBuilder` before any parser sees it,
+  so each peak includes at least the input text, the decoded `String`, and the
+  value tree. The difference between the arms is the *marginal* cost of the
+  plan, the event log or the rendered output — not a demonstration that a
+  mode avoids the tree.
 
 The MoonBit *core* `@json.parse` is not measured separately: core has no file
-reading entry point, and the library package deliberately does not expose one,
-so the closest reachable arm is `jsonmend parse`, which is this library's own
-(value tree building) parse. The difference is stated in the output rather than
-hidden.
+reading entry point and this library deliberately does not expose one, so the
+closest reachable arm is a JSONMend CLI arm. The difference is stated in the
+output rather than hidden.
 """
 
 from __future__ import annotations
@@ -35,6 +50,10 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 DEFAULT_OUT = os.path.join(ROOT, "docs", "MEMORY.md")
+
+# Text deltas are emitted in chunks of this many characters when building the
+# synthetic Anthropic event stream for the `llm --text` arm.
+EVENT_CHUNK = 8192
 
 NODE_SCRIPT = (
     "const fs=require('fs');"
@@ -76,8 +95,34 @@ def make_document(target_bytes: int) -> str:
     return "[" + ",".join(parts) + "]"
 
 
+def make_events(doc: str, path: str) -> int:
+    """Write the document as an Anthropic `text_delta` stream; return its size.
+
+    This is the input `jsonmend llm --text` is designed for: the model streams
+    the document one delta at a time and the adapter feeds `TextStream`, which
+    feeds a `PartialParser`. The file is larger than the document because every
+    delta carries JSON envelope, which the note in the output accounts for.
+    """
+    lines = []
+    for i in range(0, len(doc), EVENT_CHUNK):
+        lines.append(
+            json.dumps(
+                {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {"type": "text_delta", "text": doc[i:i + EVENT_CHUNK]},
+                },
+                separators=(",", ":"),
+            )
+        )
+    body = "\n".join(lines) + "\n"
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(body)
+    return len(body.encode())
+
+
 def peak_rss(command, stdin=None):
-    """Run `command` under `/usr/bin/time` and return (peak MiB, stdout, rc)."""
+    """Run `command` under `/usr/bin/time` and return (peak MiB, stdout, rc, stderr)."""
     time_bin = "/usr/bin/time"
     flag = "-l" if sys.platform == "darwin" else "-v"
     proc = subprocess.run(
@@ -88,7 +133,6 @@ def peak_rss(command, stdin=None):
         input=stdin,
         timeout=1800,
     )
-    # The measurement goes to stderr, mixed with the program's own stderr.
     text = proc.stderr
     peak = None
     if flag == "-l":
@@ -124,17 +168,88 @@ def main() -> int:
 
     size = int(args.size_mb * 1048576)
     doc = make_document(size)
+    actual = len(doc.encode())
+    mb = actual / 1048576.0
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as fh:
         fh.write(doc)
         path = fh.name
-    actual = len(doc.encode())
+    events_path = path + ".events.jsonl"
+    events_bytes = make_events(doc, events_path)
     try:
-        arms = []
+        # ------------------------------------------------------------------
+        # The modes of this release.
+        # ------------------------------------------------------------------
+        modes = [
+            {
+                "mode": "repair()",
+                "what": "值树 + 渲染输出",
+                "metric": "峰值 RSS",
+                "argv": [args.cli, path],
+                "input": actual,
+            },
+            {
+                "mode": "analyze()",
+                "what": "计划（explain --json），不渲染值",
+                "metric": "峰值 RSS",
+                "argv": [args.cli, "explain", "--json", path],
+                "input": actual,
+            },
+            {
+                "mode": "streaming feed",
+                "what": "分块喂入 64 KiB（--chunk 65536）",
+                "metric": "峰值工作集（峰值 RSS）",
+                "argv": [args.cli, "--chunk", "65536", path],
+                "input": actual,
+            },
+            {
+                "mode": "streaming readiness",
+                "what": "字段就绪事件流（readiness）",
+                "metric": "峰值工作集（峰值 RSS）",
+                "argv": [args.cli, "readiness", path],
+                "input": actual,
+            },
+            {
+                "mode": "text-only (llm --text)",
+                "what": "文本增量 → TextStream → PartialParser",
+                "metric": "峰值工作集（峰值 RSS）",
+                "argv": [args.cli, "llm", "--text", events_path],
+                "input": events_bytes,
+                "extra": "事件文件 %d B（文档的 %.2f ×）"
+                % (events_bytes, events_bytes / actual),
+            },
+        ]
 
-        def add(name, value, note):
-            arms.append({"name": name, "peak": value, "note": note})
+        for m in modes:
+            peak, out, rc, err = peak_rss(m["argv"])
+            if peak is None or rc not in (0, 1):
+                m["peak"] = None
+                m["note"] = "failed (rc=%d) %s" % (rc, err.strip().splitlines()[-1:])
+            else:
+                m["peak"] = peak
+                m["note"] = m.pop("extra", "")
 
-        peak, out, rc, _ = peak_rss([sys.executable, "-c", PY_SCRIPT, path])
+        # A diagnostic, not a mode: the same tree without rendering the value.
+        # The difference against `repair()` is the cost of the output; what is
+        # left is the value tree plus the input buffer, and core's own share is
+        # not separable from that (see section 4).
+        check_peak, _out, _rc, _err = peak_rss([args.cli, "--check", path])
+
+        # The no-tree mode does not exist yet: it is reported as a declared
+        # target, not as a measurement.
+        no_tree = {
+            "mode": "no-tree",
+            "what": "完全不建值树",
+            "metric": "—",
+            "peak": None,
+            "note": "0.6.0 无此模式：`Options::for_text()` 仍走建树解析，未测得",
+            "input": actual,
+        }
+
+        # ------------------------------------------------------------------
+        # The cross-implementation comparison (kept from 0.3.0).
+        # ------------------------------------------------------------------
+        cross = []
+        peak, _, rc = python_peak([sys.executable, "-c", PY_SCRIPT, path])
         py_peak = None
         try:
             body = subprocess.run(
@@ -142,57 +257,86 @@ def main() -> int:
                 capture_output=True, text=True, timeout=1800,
             )
             py_peak = int(body.stdout.strip().splitlines()[-1]) / 1048576.0
-            py_rc = body.returncode
         except Exception:
-            py_rc = rc
-        add(
-            "python3 json.loads + json.dumps",
-            peak,
-            "tracemalloc peak %.1f MB, i.e. %.0f%% of the RSS is interpreter + GC slack"
-            % (py_peak, 100.0 * (peak - py_peak) / peak) if py_peak else "",
-        )
-
+            pass
+        cross.append({
+            "name": "python3 json.loads + json.dumps",
+            "peak": peak,
+            "note": (
+                "tracemalloc 峰值 %.1f MB，即 RSS 的 %.0f%% 是解释器与 GC 空闲"
+                % (py_peak, 100.0 * (peak - py_peak) / peak)
+            ) if py_peak else "",
+        })
         peak, out, rc, _ = peak_rss(["node", "-e", NODE_SCRIPT, path])
-        add("node JSON.parse + JSON.stringify", peak, "")
+        cross.append({"name": "node JSON.parse + JSON.stringify", "peak": peak, "note": ""})
+        cross.append({
+            "name": "jsonmend repair（本表第一行）",
+            "peak": modes[0]["peak"],
+            "note": "同一份文档，同一次运行",
+        })
+        baseline = next((a["peak"] for a in cross if a["name"].startswith("node")), None)
 
-        for label, argv in [
-            ("jsonmend (default repair)", [args.cli, path]),
-            ("jsonmend --chunk 65536 (streaming)", [args.cli, "--chunk", "65536", path]),
-            ("jsonmend --check (no output written)", [args.cli, "--check", path]),
-        ]:
-            peak, out, rc, err = peak_rss(argv)
-            if peak is None or rc not in (0, 1):
-                add(label, None, "failed (rc=%d): %s" % (rc, err.strip().splitlines()[-1:] or ""))
-            else:
-                add(label, peak, "")
-
-        baseline = next((a["peak"] for a in arms if a["name"].startswith("node")), None)
+        # ------------------------------------------------------------------
+        # The document.
+        # ------------------------------------------------------------------
+        now = datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
+        node_version = subprocess.run(
+            ["node", "--version"], capture_output=True, text=True
+        ).stdout.strip()
 
         lines = []
-        lines.append("# 内存基线：与 Node / Python 的横向对照（NFR-PERF-04）")
+        lines.append("# 内存基线：按模式与跨实现对照（NFR-PERF-04）")
         lines.append("")
-        lines.append(
-            "由 `code/tests/memory_baseline.py` 在 %s 生成。"
-            % datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
-        )
+        lines.append("由 `code/tests/memory_baseline.py` 在 %s 生成。" % now)
         lines.append("")
-        lines.append("| 项 | 值 |")
+        lines.append("| 环境 | 值 |")
         lines.append("| --- | --- |")
-        lines.append("| 输入 | 同一份对象数组文档，%d B（%.2f MB） |" % (actual, actual / 1048576.0))
-        lines.append("| 计时工具 | `/usr/bin/time %s` |" % ("-l" if sys.platform == "darwin" else "-v"))
+        lines.append("| 输入 | 同一份对象数组文档，%d B（%.2f MB） |" % (actual, mb))
+        lines.append("| 计时工具 | `/usr/bin/time %s`（峰值 RSS） |" % ("-l" if sys.platform == "darwin" else "-v"))
         lines.append("| JSONMend | `%s` |" % os.path.relpath(args.cli, ROOT))
-        lines.append("| Node | %s |" % subprocess.run(["node", "--version"], capture_output=True, text=True).stdout.strip())
+        lines.append("| Node | %s |" % node_version)
         lines.append("| Python | %s |" % sys.version.split()[0])
         lines.append("")
-        lines.append("## 峰值 RSS")
+
+        lines.append("## 一、按模式的峰值内存")
+        lines.append("")
+        lines.append("| 模式 | 工作负载 | 指标 | 峰值 | 相对输入 | 备注 |")
+        lines.append("| --- | --- | --- | --- | --- | --- |")
+        for m in modes + [no_tree]:
+            if m["peak"] is None:
+                lines.append(
+                    "| %s | %s | %s | 未测得 | — | %s |"
+                    % (m["mode"], m["what"], m["metric"], m["note"])
+                )
+                continue
+            rel = m["peak"] / (m["input"] / 1048576.0)
+            lines.append(
+                "| %s | %s | %s | %.1f MB | %.1f × | %s |"
+                % (m["mode"], m["what"], m["metric"], m["peak"], rel, m["note"])
+            )
+        lines.append("")
+
+        if modes[0]["peak"] and modes[1]["peak"]:
+            lines.append(
+                "`analyze()` 比 `repair()` 高（%.1f MB vs %.1f MB，%.2f ×）：计划模式并不更省，"
+                "因为它同样建值树，还额外保留修复后的文本并渲染整份机器可读计划。"
+                % (modes[1]["peak"], modes[0]["peak"], modes[1]["peak"] / modes[0]["peak"])
+            )
+            lines.append("")
+        lines.append("每个模式的「相对输入」都是**峰值 RSS ÷ 该模式实际读入的字节数**。")
+        lines.append("`text-only (llm --text)` 这一行的分母是事件文件（%d B），" % events_bytes)
+        lines.append("不是文档本身，因为该模式读的就是事件流。")
+        lines.append("")
+
+        lines.append("## 二、与 Node / Python 的横向对照")
         lines.append("")
         lines.append("| 实现 | 峰值 RSS | 相对输入 | 相对 Node | 备注 |")
         lines.append("| --- | --- | --- | --- | --- |")
-        for a in arms:
+        for a in cross:
             if a["peak"] is None:
                 lines.append("| %s | 未测得 | — | — | %s |" % (a["name"], a["note"]))
                 continue
-            rel_in = a["peak"] / (actual / 1048576.0)
+            rel_in = a["peak"] / mb
             rel_node = (a["peak"] / baseline) if baseline else None
             lines.append(
                 "| %s | %.1f MB | %.1f × | %s | %s |"
@@ -205,24 +349,71 @@ def main() -> int:
                 )
             )
         lines.append("")
-        lines.append("## 这张表能回答什么，不能回答什么")
+
+        lines.append("## 三、两条声明目标：声明了，本次未达成 / 未测得")
         lines.append("")
+        lines.append("| 目标 | 状态 | 依据 |")
+        lines.append("| --- | --- | --- |")
+        text_peak = next((m["peak"] for m in modes if m["mode"].startswith("text-only")), None)
+        if text_peak is None:
+            text_status = "未测得"
+            text_why = "`llm --text` 臂未运行成功"
+        else:
+            text_ratio = text_peak / (events_bytes / 1048576.0)
+            text_status = "%.1f × 事件文件（目标 ≤ 4 × 输入，未据此判定达成）" % text_ratio
+            text_why = (
+                "该数值里含事件文件本身的 %d B（文档的 %.2f ×）与 `read_all` 的整段缓冲，"
+                "只能作为上界，不能用来宣称纯文本路径达标"
+                % (events_bytes, events_bytes / actual)
+            )
+        lines.append("| text-only ≤ 4 × 输入 | %s | %s |" % (text_status, text_why))
         lines.append(
-            "能回答：**同样的文档、同样的「读入 + 建树 + 保留」工作负载**下，JSONMend 的峰值"
-            "内存与调用方本来就会用的两个运行时相比是高还是低、差多少倍。NFR-PERF-04 的"
-            "「≤ 4 × 输入」是否现实，取决于这个差距，而不是取决于 0.3.0 与 0.2.0 的自比。"
+            "| no-tree ≤ 2 × 输入 | 未达成（模式不存在） | `Options::for_text()` 仍然建值树，"
+            "0.6.0 没有关闭建树的入口，因此这条目标只能声明、不能测 |"
         )
         lines.append("")
         lines.append(
-            "不能回答：MoonBit **core** 的 `@json.parse` 单独占多少。core 没有文件读取入口，"
-            "本库也刻意不暴露一个，所以能测到的最接近的两臂是 `jsonmend --check`（建树但不渲染输出）与 `jsonmend`（建树并渲染），"
-            "两者峰值相同即说明峰值来自值树而不是输出。两者的差异是引擎的记录数组与位置对象，"
-            "量级远小于此处比较的实现间差异，但如果需要一个精确的 core 基线，"
-            "需要给基准程序加一个 FFI 读文件入口（core 自身没有文件读取 API）。"
+            "这两条目标来自 0.6.0 冻结的内存策略。本文件只报告状态："
+            "不把「流式路径的峰值恰好低于 4 ×」当成达标，因为该峰值包含整段输入缓冲"
+            "（见下一节），也不把尚未实现的 no-tree 写成达标。"
+        )
+        lines.append("")
+
+        lines.append("## 四、这张表能回答什么，不能回答什么")
+        lines.append("")
+        lines.append(
+            "能回答：**同一份文档、同一个「读入 + 建树 + 保留」工作负载**下，各模式的峰值差多少，"
+            "以及 JSONMend 与调用方本来就会用的两个运行时相比是高还是低。"
+        )
+        lines.append("")
+        if check_peak is not None:
+            lines.append(
+                "不能回答：MoonBit **core** 的 `@json.parse` 单独占多少。core 没有文件读取入口，"
+                "本库也刻意不暴露一个。能测到的最接近的两臂是 `--check`（建树、不渲染，本次 %.1f MB）"
+                "与 `repair()`（建树并渲染，本次 %.1f MB）：两者在噪声内相同，"
+                "所以峰值不是输出渲染造成的，而是「输入缓冲 + 值树」；"
+                "core 自身在这部分里占多少，从这两个数里拆不出来。"
+                "要一个精确的 core 基线，需要给基准程序加一个 FFI 读文件入口"
+                "（core 自身没有文件读取 API）。"
+                % (check_peak, modes[0]["peak"])
+            )
+        else:
+            lines.append(
+                "不能回答：MoonBit **core** 的 `@json.parse` 单独占多少。core 没有文件读取入口，"
+                "本库也刻意不暴露一个，`--check`（建树、不渲染）本次也未测得，"
+                "所以没有任何一臂能把「输入缓冲 + 值树」再拆一层。"
+            )
+        lines.append("")
+        lines.append(
+            "也不能回答「有没有真正的流式 I/O」：`cmd/jsonmend` 的每一条路径都先调用 `read_all`"
+            "（`code/cmd/jsonmend/batch.mbt`），把整份输入建成一个 `StringBuilder`，之后才交给解析器。"
+            "所以每个峰值都至少包含输入文本、解码后的 `String` 与值树；"
+            "`streaming feed`、`readiness`、`llm --text` 三行之间以及它们与 `repair` 之间的差额，"
+            "是计划、事件表与渲染输出的**边际**成本，而不是「流式模式省掉了值树」的证据。"
         )
         lines.append("")
         lines.append(
-            "另外，Python 一行的注释给出 `tracemalloc` 峰值：它是 Python **自身分配**的精确值，"
+            "另外，Python 一行的备注给出 `tracemalloc` 峰值：它是 Python **自身分配**的精确值，"
             "与 RSS 的差额是解释器与 GC 的空闲内存。把这个差值当成「实现效率」是不对的，"
             "这也是为什么同一张表里既给 RSS 也给 tracemalloc。"
         )
@@ -232,7 +423,11 @@ def main() -> int:
             fh.write("\n".join(lines))
         print("\n".join(lines))
     finally:
-        os.unlink(path)
+        for p in (path, events_path):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
     return 0
 
 

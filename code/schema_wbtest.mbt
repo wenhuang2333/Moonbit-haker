@@ -393,19 +393,26 @@ test "the separators are interchangeable and normalise to `,`" {
 ///|
 test "a quoted member name is a known round-trip gap" {
   // A quoted name is accepted on input, including one that is not a bare
-  // identifier. `stringify` writes the name back *without* quoting, so the
-  // canonical form of this one declaration class is not re-readable and the
-  // invariant above cannot cover it. The assertions pin the gap; the fix
-  // belongs in `Schema::stringify` (quote the key unless it is a bare
-  // identifier) and this test becomes a plain invariant check once it lands.
+  // identifier. `stringify` used to write the name back *without* quoting, so
+  // the canonical form of this one declaration class was not re-readable and
+  // the invariant above could not cover it. `Schema::stringify` now quotes a
+  // name that cannot be written bare, so this is a plain invariant check: the
+  // canonical form is re-readable and means the same skeleton.
   let quoted = schema_or_any("{\"name with space\":string}")
   assert_eq(quoted.member_keys(), ["name with space"])
   assert_eq(quoted.required_paths(), ["name with space"])
-  assert_eq(quoted.stringify(), "{!name with space:string}")
+  assert_eq(quoted.stringify(), "{!\"name with space\":string}")
+  assert_eq(parse_code(quoted.stringify()), "ok")
+  // The bare form would have parsed to a different skeleton, which is exactly
+  // what the quoting prevents.
   assert_eq(parse_code("{!name with space:string}"), "E070")
   // A quoted name that is a bare identifier is fine, because the quotes were
   // never carrying information.
   assert_eq(schema_or_any("{\"a\":string}").stringify(), "{!a:string}")
+  // A `:` inside a name has the same problem and the same fix.
+  let colon = schema_or_any("{\"a:b\":integer}")
+  assert_eq(colon.stringify(), "{!\"a:b\":integer}")
+  assert_eq(parse_code(colon.stringify()), "ok")
 }
 
 // ---------------------------------------------------------------------------

@@ -1030,8 +1030,8 @@ const _M0FPC28internal7strconv20parse__int64_2einnerN7_2abindS992 = "";
 const _M0FP211zhanshishan8jsonmend12lookup__pathN7_2abindS2401 = ".";
 const _M0FP211zhanshishan8jsonmend17treated__segmentsN7_2abindS1700 = ".";
 const _M0MP211zhanshishan8jsonmend6Schema8at__pathN7_2abindS1736 = ".";
-const _M0MP211zhanshishan8jsonmend9RetryHint9of__errorN5tupleS2748 = { _0: "", _1: 0 };
-const _M0FP411zhanshishan8jsonmend8examples3web10live__textN6constrS2944 = 1;
+const _M0MP211zhanshishan8jsonmend9RetryHint9of__errorN5tupleS2750 = { _0: "", _1: 0 };
+const _M0FP411zhanshishan8jsonmend8examples3web10live__textN6constrS2946 = 1;
 function _M0FPB13consume4__acc(acc, input) {
   const _p = (acc >>> 0) + ((Math.imul(input, -1028477379) | 0) >>> 0) | 0;
   const _p$2 = 17;
@@ -10567,7 +10567,20 @@ function _M0MP211zhanshishan8jsonmend15SemanticWatcher9on__delta(self, d) {
       }
     }
   }
-  if (!self.concluded && (!self.conflict && (!self.checked && self.settled_count === self.watched.length))) {
+  let root_closed;
+  if (d.path.length === 0) {
+    const _bind$2 = d.op;
+    let _tmp$2;
+    if (_bind$2 === 2) {
+      _tmp$2 = true;
+    } else {
+      _tmp$2 = false;
+    }
+    root_closed = _tmp$2;
+  } else {
+    root_closed = false;
+  }
+  if (!self.concluded && (!self.conflict && (!self.checked && (self.settled_count === self.watched.length && (self.watched.length > 0 || root_closed))))) {
     self.checked = true;
     _M0MP211zhanshishan8jsonmend15SemanticWatcher6decide(self);
     return;
@@ -12385,7 +12398,7 @@ function _M0MP211zhanshishan8jsonmend9RetryHint9of__error(e, input, radius) {
   }
   let _bind;
   if (input === undefined) {
-    _bind = _M0MP211zhanshishan8jsonmend9RetryHint9of__errorN5tupleS2748;
+    _bind = _M0MP211zhanshishan8jsonmend9RetryHint9of__errorN5tupleS2750;
   } else {
     const _Some = input;
     const _text = _Some;
@@ -13362,7 +13375,7 @@ function _M0FP411zhanshishan8jsonmend8examples3web10live__text(input, upto, sche
       let _try_err$3;
       _L$4: {
         _L$5: {
-          const _bind$8 = _M0FP211zhanshishan8jsonmend19semantic__readiness(input, sk, _M0FP411zhanshishan8jsonmend8examples3web10live__textN6constrS2944, undefined);
+          const _bind$8 = _M0FP211zhanshishan8jsonmend19semantic__readiness(input, sk, _M0FP411zhanshishan8jsonmend8examples3web10live__textN6constrS2946, undefined);
           if (_bind$8.$tag === 1) {
             const _ok = _bind$8;
             full = _ok._0;

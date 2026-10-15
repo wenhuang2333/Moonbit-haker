@@ -415,7 +415,18 @@ fn SemanticWatcher::on_delta(self : SemanticWatcher, d : Delta) -> Unit {
       }
     }
   }
-  if !self.concluded && !self.conflict && !self.checked && self.all_settled() {
+  // A verdict may only be published once it is final. When every required path
+  // is watched, all of them being settled is that moment. When there is nothing
+  // to watch — an array root such as `[{!a:integer}]` has no object member
+  // paths, and a skeleton whose members are all decided by their own children
+  // is skipped — the value tree is still open, and `evaluate` on a half-read
+  // array would report the skeleton satisfied. Those wait for the root closer.
+  let root_closed = d.path.length() == 0 && d.op is Close
+  if !self.concluded &&
+    !self.conflict &&
+    !self.checked &&
+    self.all_settled() &&
+    (self.watched.length() > 0 || root_closed) {
     self.checked = true
     self.decide()
   }
