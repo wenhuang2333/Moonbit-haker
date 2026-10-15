@@ -332,11 +332,12 @@ CODE_REASON = {
     "R019": "adjacent strings concatenated (BR-21)",
     "R020": "ellipsis placeholder dropped (BR-21)",
     "R021": "prose skipped (FR-08, skip_prose only)",
+    "R022": "literal re-cased (BR-12, nothing invented)",
 }
 
 # The table above is the only place that maps a code to its documented cause,
 # so a typo would silently downgrade a divergence to "unexplained". Guard it.
-_EXPECTED_CODES = ["R%03d" % n for n in range(1, 22)]
+_EXPECTED_CODES = ["R%03d" % n for n in range(1, 23)]
 if sorted(CODE_REASON) != _EXPECTED_CODES:
     raise SystemExit(
         "CODE_REASON must cover R001..R021 exactly; got %s" % sorted(CODE_REASON)

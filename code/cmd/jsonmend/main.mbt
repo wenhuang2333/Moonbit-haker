@@ -59,7 +59,10 @@ fn error_offset(e : @mend.MendError) -> Int32? {
 /// Exit code of a fatal error (D09 9.8).
 fn error_exit_code(e : @mend.MendError) -> Int32 {
   match e {
-    @mend.EmptyInput | @mend.NoJsonFound(_) | @mend.InvalidUtf8(_) => 3
+    @mend.EmptyInput
+    | @mend.NoJsonFound(_)
+    | @mend.InvalidUtf8(_)
+    | @mend.InvalidEvent(_) => 3
     @mend.DepthLimit(_, _) | @mend.SizeLimit(_, _) | @mend.TokenLimit(_, _) => 4
     @mend.StrictViolation(_, _, _) => 5
     @mend.InvalidState(_) => 70
@@ -84,6 +87,48 @@ fn report(repairs : Array[@mend.Repair]) -> Unit {
 }
 
 ///|
+/// `--explain`: one repair per block, with severity and a caret under the
+/// input position, then the exactness summary (FR-17, FR-20).
+fn explain(repairs : Array[@mend.Repair], text : String) -> Unit {
+  for r in repairs {
+    eprintln(
+      r.code.code() +
+      " " +
+      (match r.severity {
+        @mend.Info => "info"
+        @mend.Warning => "warning"
+      }) +
+      " " +
+      r.position.line.to_string() +
+      ":" +
+      r.position.column.to_string() +
+      " " +
+      r.message,
+    )
+    eprintln(snippet(text, r.position.offset))
+  }
+}
+
+///|
+/// The library options a parsed command line asks for.
+fn options_of(o : CliOpts) -> @mend.Options {
+  {
+    ..@mend.Options::default(),
+    mode: if o.strict {
+      @mend.Strict
+    } else {
+      @mend.Lenient
+    },
+    indent: o.indent,
+    multi_root: o.multi_root,
+    skip_prose: o.skip_prose,
+    quote_lookahead: o.quote_lookahead,
+    max_repairs: o.max_repairs,
+    max_loss: o.max_loss,
+  }
+}
+
+///|
 /// Run the command.
 fn run() -> Unit {
   let (o, usage_error) = parse_args(@env.args())
@@ -101,10 +146,18 @@ fn run() -> Unit {
     }
     Version => {
       // Keep in sync with `version` in moon.mod; cli_smoke.sh checks it.
-      println("jsonmend 0.2.0")
+      println("jsonmend 0.3.0")
+      quit(0)
+    }
+    Llm => {
+      run_llm(o)
       quit(0)
     }
     Run => ()
+  }
+  if o.batch {
+    run_batch(options_of(o))
+    quit(0)
   }
   let stream = open_input(o.path)
   if stream == 0L {
@@ -115,26 +168,13 @@ fn run() -> Unit {
     eprintln("jsonmend: 无法读取 " + name)
     return quit(3)
   }
-  let options : @mend.Options = {
-    ..@mend.Options::default(),
-    mode: if o.strict {
-      @mend.Strict
-    } else {
-      @mend.Lenient
-    },
-    indent: o.indent,
-    multi_root: o.multi_root,
-    skip_prose: o.skip_prose,
-    quote_lookahead: o.quote_lookahead,
-    max_repairs: o.max_repairs,
-  }
+  let options = options_of(o)
   // The input is streamed in fixed chunks, so the whole document is never
   // held in memory twice; the first `PREFIX_MAX` bytes are kept only to draw
   // the error snippet.
   let prefix_max = 1048576
   let prefix : Array[Byte] = []
   let chunk_cap = 65536
-  let mut chunk_start : Int32 = 0
   try {
     let parser = @mend.PartialParser::new(options~)
     let mut piece = read_chunk(stream, chunk_cap)
@@ -145,12 +185,14 @@ fn run() -> Unit {
         }
       }
       parser.feed_bytes(piece)
-      chunk_start = chunk_start + piece.length()
       piece = read_chunk(stream, chunk_cap)
     }
     close_input(stream)
     let fin = parser.finish()
-    if o.report {
+    if o.explain {
+      explain(fin.repairs, @utf8.decode_lossy(Bytes::from_array(prefix[:])[:]))
+      eprintln("jsonmend: exactness " + fin.exactness.name())
+    } else if o.report {
       report(fin.repairs)
       if fin.repairs_truncated {
         eprintln(
@@ -172,27 +214,13 @@ fn run() -> Unit {
     e => {
       eprintln("jsonmend: " + e.to_string())
       match error_offset(e) {
+        // Every offset carried by an error is absolute, measured from the start
+        // of the input, and therefore independent of the chunking used here.
         Some(off) =>
-          // E040 offsets are relative to the chunk that failed (docs/ERRORS.md)
-          match e {
-            @mend.InvalidUtf8(within) =>
-              if within < chunk_cap {
-                eprintln(
-                  snippet(
-                    @utf8.decode_lossy(Bytes::from_array(prefix[:])[:]),
-                    chunk_start + within,
-                  ),
-                )
-              }
-            _ =>
-              if off < prefix.length() {
-                eprintln(
-                  snippet(
-                    @utf8.decode_lossy(Bytes::from_array(prefix[:])[:]),
-                    off,
-                  ),
-                )
-              }
+          if off < prefix.length() {
+            eprintln(
+              snippet(@utf8.decode_lossy(Bytes::from_array(prefix[:])[:]), off),
+            )
           }
         None => ()
       }

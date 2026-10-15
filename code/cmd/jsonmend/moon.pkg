@@ -1,7 +1,9 @@
 import {
   "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/json",
   "moonbitlang/core/env",
   "wenhuang2333/jsonmend" @mend,
+  "wenhuang2333/jsonmend/llm",
 }
 
 pkgtype(kind: "executable")

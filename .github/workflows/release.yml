@@ -1,0 +1,64 @@
+# Release artifacts (O-13): a tag produces a GitHub Release with the native
+# CLI, the wasm-gc probe, the browser demo bundle and their checksums.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  artifacts:
+    name: Build and publish artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the MoonBit toolchain
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build
+        working-directory: code
+        run: |
+          moon build cmd/jsonmend --target native --release
+          moon build bench/probe --target wasm-gc --release
+          moon build examples/web --target js --release
+
+      - name: Rebuild the demo bundle and verify it is in sync
+        run: |
+          bash static/demo/build.sh
+          git diff --exit-code -- static/demo/jsonmend.js
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp code/_build/native/release/build/cmd/jsonmend/jsonmend.exe dist/jsonmend-linux-x86_64
+          cp code/_build/wasm-gc/release/build/bench/probe/probe.wasm dist/jsonmend-probe.wasm
+          cp static/demo/jsonmend.js dist/jsonmend-demo.js
+          (cd dist && sha256sum jsonmend-linux-x86_64 jsonmend-probe.wasm jsonmend-demo.js > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "JSONMend $GITHUB_REF_NAME" \
+            --notes-file code/CHANGELOG.md \
+            dist/jsonmend-linux-x86_64 \
+            dist/jsonmend-probe.wasm \
+            dist/jsonmend-demo.js \
+            dist/SHA256SUMS

@@ -232,6 +232,57 @@ fn bench_streaming() -> Unit {
 }
 
 ///|
+/// Streaming with delta tracking (I-2): the same chunking, but the parser
+/// records the changes and the caller drains them after every chunk. Returns
+/// the total number of deltas as well, so the cost can be attributed.
+fn run_deltas(input : String, chunk : Int32) -> Int32 {
+  let n = input.length()
+  try {
+    let parser = @mend.PartialParser::new(options={
+      ..@mend.Options::default(),
+      collect_deltas: true,
+    })
+    let mut total = 0
+    let mut i = 0
+    while i < n {
+      let to = if i + chunk < n { i + chunk } else { n }
+      parser.feed(input[i:to].to_owned())
+      total = total + parser.drain_deltas().length()
+      i = to
+    }
+    ignore(parser.finish())
+    total
+  } catch {
+    _ => 0
+  }
+}
+
+///|
+/// I-2 acceptance: delta tracking must stay within 10% of the same chunking
+/// without it, and the replay of the deltas must reproduce the final value.
+fn bench_deltas() -> Unit {
+  let input = make_valid(1048576)
+  for chunk in [1024, 65536] {
+    let base = median5(() => run_stream(input, chunk, false))
+    let ms = median5(() => ignore(run_deltas(input, chunk)))
+    let deltas = run_deltas(input, chunk)
+    println(
+      "deltas\tchunk " +
+      chunk.to_string() +
+      "\t" +
+      round1(ms) +
+      " ms\t" +
+      round1(mbps(input.length(), ms)) +
+      " MB/s\t" +
+      round1(100.0 * ms / base) +
+      "% of baseline\t" +
+      deltas.to_string() +
+      " deltas",
+    )
+  }
+}
+
+///|
 /// P3-8: repeated snapshots with no new input in between. A snapshot is
 /// O(current value size), so this only stays cheap when the result is reused.
 fn bench_snap_repeat() -> Unit {
@@ -249,6 +300,124 @@ fn bench_snap_repeat() -> Unit {
     }
   })
   println("snapshot	repeat 1000x without feeding\t" + round1(ms) + " ms")
+}
+
+///|
+/// A tool-call shaped document: one object whose `arguments` member grows with
+/// many small fields. This is the shape an LLM writes while streaming.
+fn make_call(target : Int32) -> String {
+  let sb = StringBuilder()
+  sb.write_string("{\"name\":\"submit_record\",\"arguments\":{")
+  let mut n = 0
+  let mut i = 0
+  while n < target {
+    if i > 0 {
+      sb.write_string(",")
+    }
+    let field = "\"field" + i.to_string() + "\":\"value-" + i.to_string() + "\""
+    sb.write_string(field)
+    n = n + field.length()
+    i = i + 1
+  }
+  sb.write_string("}}")
+  sb.to_string()
+}
+
+///|
+/// Time to first usable value (I-4).
+///
+/// `first` is the offset at which `snapshot()` first exposes a value, `ttfv` is
+/// the offset at which that value already covers 95% of the final value's
+/// rendered length, `label` is the exactness the snapshot carried at `first`.
+/// All offsets are divided by the document length, so the baseline "receive
+/// everything, then repair" is 1.0.
+fn ttfv_one(input : String, chunk : Int32) -> (Double, Double, String) {
+  let len = input.length()
+  let full = @mend.parse(input).value.stringify().length() catch { _ => 0 }
+  let target = full * 95 / 100
+  let parser = @mend.PartialParser::new() catch {
+    _ => return (1.0, 1.0, "n/a")
+  }
+  let mut first = -1
+  let mut first_label = "n/a"
+  let mut ttfv = -1
+  let mut i = 0
+  while i < len {
+    let to = if i + chunk < len { i + chunk } else { len }
+    parser.feed(input[i:to].to_owned()) catch {
+      _ => ()
+    }
+    let snap = parser.snapshot()
+    match snap.value {
+      Some(v) => {
+        if first < 0 {
+          first = to
+          first_label = snap.exactness.name()
+        }
+        if ttfv < 0 && v.stringify().length() >= target {
+          ttfv = to
+        }
+      }
+      None => ()
+    }
+    i = to
+  }
+  let f = if first < 0 { len } else { first }
+  let t = if ttfv < 0 { len } else { ttfv }
+  (
+    f.to_double() / len.to_double(),
+    t.to_double() / len.to_double(),
+    first_label,
+  )
+}
+
+///|
+/// Median of a list of doubles.
+fn median(xs : Array[Double]) -> Double {
+  let ys = xs.copy()
+  ys.sort()
+  if ys.length() == 0 {
+    0.0
+  } else {
+    ys[ys.length() / 2]
+  }
+}
+
+///|
+/// I-4: how early a streaming consumer can see something. The registered
+/// metric is `ttfv` (95% of the value); `first` is the weaker but more useful
+/// number for a user interface, and is reported alongside it.
+fn bench_ttfv() -> Unit {
+  for size in [256, 1024, 4096] {
+    let doc = make_call(size)
+    let (first, ttfv, label) = ttfv_one(doc, 16)
+    println(
+      "ttfv\tcall " +
+      doc.length().to_string() +
+      "\tfirst " +
+      round1(first * 100.0) +
+      "%\tttfv95 " +
+      round1(ttfv * 100.0) +
+      "%\tlabel at first " +
+      label,
+    )
+  }
+  // Median over 20 documents of mixed size, the registered aggregate.
+  let firsts : Array[Double] = []
+  let ttfvs : Array[Double] = []
+  for k = 0; k < 20; k = k + 1 {
+    let doc = make_call(256 + k * 200)
+    let (first, ttfv, _label) = ttfv_one(doc, 16)
+    firsts.push(first)
+    ttfvs.push(ttfv)
+  }
+  println(
+    "ttfv\tmedian over 20 documents\tfirst " +
+    round1(median(firsts) * 100.0) +
+    "%\tttfv95 " +
+    round1(median(ttfvs) * 100.0) +
+    "%",
+  )
 }
 
 ///|
@@ -286,4 +455,6 @@ fn main {
   bench_linearity()
   bench_streaming()
   bench_snap_repeat()
+  bench_deltas()
+  bench_ttfv()
 }

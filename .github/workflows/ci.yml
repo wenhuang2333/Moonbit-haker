@@ -47,11 +47,26 @@ jobs:
           moon test --target native
           moon test --target js
 
+      - name: LLM fixtures are in sync
+        working-directory: code
+        run: python3 tests/gen_llm_fixtures.py --check
+
       - name: Command line smoke test
         working-directory: code
         run: |
           moon build cmd/jsonmend --target native --release
           bash tests/cli_smoke.sh
+
+      - name: Ground truth evaluation (must exit 0)
+        working-directory: code
+        run: |
+          python3 tests/eval/run_eval.py \
+            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-report
+          path: code/docs/EVAL.md
 
       - name: Example inputs
         working-directory: code

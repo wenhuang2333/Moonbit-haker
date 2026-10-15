@@ -1,0 +1,101 @@
+# Nightly long run: the same property tests as CI, with the case count raised
+# from 400 to 1,000,000 by `JSONMEND_LONGRUN` (O-6), plus the differential
+# harness. A failure here is reproducible locally with the same variable,
+# because every property uses a fixed seed.
+
+name: Nightly long run
+
+on:
+  schedule:
+    # 18:10 UTC = 02:10 Asia/Shanghai
+    - cron: "10 18 * * *"
+  workflow_dispatch:
+    inputs:
+      cases:
+        description: Cases per property
+        default: "1000000"
+        required: false
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  longrun:
+    name: Property tests at scale
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      JSONMEND_LONGRUN: ${{ github.event.inputs.cases || '1000000' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the MoonBit toolchain
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - name: Toolchain versions
+        run: moon version --all
+
+      - name: Long run (native)
+        working-directory: code
+        run: |
+          echo "cases per property: $JSONMEND_LONGRUN"
+          time moon test --target native
+
+      - name: Long run (wasm-gc)
+        working-directory: code
+        run: moon test
+
+  differential:
+    name: Differential and evaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the MoonBit toolchain
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install the reference implementations
+        run: |
+          python3 -m pip install "json-repair==0.64.0"
+          mkdir -p "$RUNNER_TEMP/node-oracle"
+          cd "$RUNNER_TEMP/node-oracle"
+          npm install --no-audit --no-fund "jsonrepair@3.15.0"
+
+      - name: Build the CLI
+        working-directory: code
+        run: moon build cmd/jsonmend --target native --release
+
+      - name: Differential report
+        working-directory: code
+        run: |
+          python3 tests/diff/run_diff.py \\
+            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe \\
+            --node-module-dir "$RUNNER_TEMP/node-oracle/node_modules" \\
+            --out "$RUNNER_TEMP/diff-report.md"
+
+      - name: Ground truth evaluation
+        working-directory: code
+        run: |
+          python3 tests/eval/run_eval.py \\
+            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nightly-reports
+          path: |
+            ${{ runner.temp }}/diff-report.md
+            code/docs/EVAL.md
