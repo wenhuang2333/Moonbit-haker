@@ -166,7 +166,10 @@ python3 tests/eval/run_eval.py --cli ./_build/native/release/build/cmd/jsonmend/
 python3 tests/gen_llm_fixtures.py --check
 ```
 
-以上命令（含差分与产物体积）也在 `.github/workflows/ci.yml` 中按同样的版本执行。
+以上命令（含差分、真值评测与产物体积）也在 `.github/workflows/ci.yml` 中按同样的版本执行：
+0.3.0 的 `ci.yml` run #7 与 `release.yml` 的 `v0.3.0` run #1 均为 success，
+后者产出 [Release `JSONMend v0.3.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.3.0)
+（Linux CLI、wasm 探针、演示 bundle、`SHA256SUMS`）。
 
 ## 演示页
 
@@ -295,7 +298,7 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 
 ## 路线图
 
-- **发布 0.3.0 到 mooncakes.io**（`moon whoami` 未登录，阻塞中）；`v0.2.0` tag 已推送。
+- **发布 0.3.0 到 mooncakes.io**（`moon whoami` 未登录，阻塞中）；`v0.3.0` tag 已推送，GitHub Release 已产出预编译产物。
 - **紧凑增量缓冲**：把 `op|path|text` 编码进一块可复用的缓冲，只在 `drain_deltas()` 时物化，
   目标是把增量流的开销从 1.39–1.51 倍压到 1.10 倍以内（NFR-PERF-05）。
 - 实现 FR-16 事件/回调接口（`on_value_complete` / `on_repair`），让流式消费方不必轮询快照。

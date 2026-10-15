@@ -8,6 +8,7 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 | Version | 0.3.0 |
 | License | Apache-2.0 |
 | Preferred target | `wasm` (also builds for `native` and `js`) |
+| Prebuilt binaries | [Release `v0.3.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.3.0) — Linux CLI, wasm probe, browser bundle, `SHA256SUMS` |
 
 ## Features
 

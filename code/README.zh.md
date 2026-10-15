@@ -8,6 +8,7 @@
 | 版本 | 0.3.0 |
 | 许可证 | Apache-2.0 |
 | 首选后端 | `wasm`（同时支持 `native` 与 `js`） |
+| 预编译产物 | [Release `v0.3.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.3.0)——Linux CLI、wasm 探针、浏览器包、`SHA256SUMS` |
 
 ## 特性
 
@@ -300,7 +301,11 @@ python3 tests/gen_llm_fixtures.py --check
 | 差分语料（对照 `jsonrepair` / `json-repair`） | 402 条 | 202 处差异全部有文档解释，未解释 0 |
 | 库代码行覆盖率 | 根包 1378/1487 行、`llm` 包 223/243 行 | 92.7% / 91.8% |
 
-三个后端结果一致：wasm-gc、native 与 JavaScript 均为 69 个测试全通过。`.github/workflows/ci.yml` 在每次推送时执行同一组命令，因此上表是重新推导出来的结果，而不是一次性记录。
+三个后端结果一致：wasm-gc、native 与 JavaScript 均为 69 个测试全通过。`.github/workflows/ci.yml`
+在每次推送时执行同一组命令（含差分、真值评测与产物体积），因此上表是重新推导出来的结果，
+而不是一次性记录。0.3.0 的 `ci.yml` run #7 与 `release.yml` 的 `v0.3.0` run #1 均为 success，
+后者产出 [Release `JSONMend v0.3.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.3.0)
+（Linux CLI、wasm 探针、演示 bundle、`SHA256SUMS`）。
 复现步骤、阈值与两项已知未达标项见 [docs/REPRODUCE.md](docs/REPRODUCE.md)
 与 [docs/TRACEABILITY.md](docs/TRACEABILITY.md)。
 

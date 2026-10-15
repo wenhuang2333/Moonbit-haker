@@ -34,7 +34,7 @@
 | FR-22 | 增量补丁流 | P1 | BR-16 | TC-DELTA | `delta_wbtest.mbt`：400 份生成文档 + 400 份变异输入上「增量重放 == 快照」，另有 7 组选项剖面、RFC 6901 指针、空 drain、选项冲突 | 通过（吞吐未达标，见 NFR） |
 | FR-23 | 大模型工具流适配器 | P1 | BR-16 | TC-LLM | `code/llm/`：9 个夹具 × 双 provider，`moon test` 65→69 例；CLI `jsonmend llm`（`--provider`、`--sse`、`--follow`） | 通过 |
 | FR-24 | 真值评测 | P1 | — | TC-EVAL | `tests/eval/corpus.py` 1200 条（协议先冻结于 `docs/EVAL_REGISTRATION.md`）；`run_eval.py` 四条预登记判据全 PASS | 通过 |
-| FR-25 | 长跑属性测试 | P1 | — | TC-P-LONG | `JSONMEND_LONGRUN=N` 提高每个属性的用例数；`.github/workflows/nightly.yml` 以 1 000 000 例夜间运行 | 通过 |
+| FR-25 | 长跑属性测试 | P1 | — | TC-P-LONG | `JSONMEND_LONGRUN=N` 提高每个属性的用例数；本机按 nightly 参数跑过 1 000 000 例（41.2 s，69/69 通过），`.github/workflows/nightly.yml` 以同一参数夜间运行 | 通过 |
 | FR-26 | 修复解释输出 | P2 | BR-20 | TC-C-01 | CLI `--explain`：级别 + 位置 + 插入符片段 + 精确度小结 | 通过 |
 
 ## 非功能需求
@@ -63,7 +63,7 @@
 | NFR-TEST-01 | 覆盖率 | TC-COV-01 | `moon test --enable-coverage` + `moon coverage report -f summary -p wenhuang2333/jsonmend`：根包 **1378/1487 = 92.7%**，`-p wenhuang2333/jsonmend/llm` 为 223/243 = 91.8%（不加 `-p` 时 `bench/main.mbt` 也计入，得 1601/2002 = 80.0%）；`cmd/jsonmend` 因 `quit()` 无法出报告 | 通过 |
 | NFR-SEC-01 | 安全 | TC-P-06、TC-P-07 | 错误消息模板固定、不回显输入；资源上限防止病态输入耗尽内存；无外部依赖 | 通过 |
 | NFR-COMP-01 | 合规 | TC-L-01 | `LICENSE`（Apache-2.0 全文）、`NOTICE`（依赖与参照实现许可证：`jsonrepair` ISC、`json-repair` MIT） | 通过 |
-| NFR-MNT-01 | 可维护 | TC-R-03 | `moon check --deny-warn` 零警告、`moon fmt --check` 干净、`docs/REPRODUCE.md` 一键复现；`.github/workflows/ci.yml` 在两个 job 中执行同一组命令，并已在 GitHub Actions 上跑通（run #1 `eff1ad2`、run #2 `169353e`、run #5 `9bf0a08` 均 success，run #5 覆盖本轮代码改动） | 通过 |
+| NFR-MNT-01 | 可维护 | TC-R-03 | `moon check --deny-warn` 零警告、`moon fmt --check` 干净、`docs/REPRODUCE.md` 一键复现；`.github/workflows/ci.yml` 在两个 job 中执行同一组命令，并已在 GitHub Actions 上跑通（run #1 `eff1ad2`、#2 `169353e`、#5 `9bf0a08`、#6 `231af5b`、**#7 `8b721db` 均 success**，run #7 覆盖 0.3.0 全部代码与真值评测）；`release.yml` 在 `v0.3.0` 上 run #1 success 并产出 4 个资产 | 通过 |
 | NFR-REL-01 | 可发布 | TC-R-01 | `moon.mod` v0.3.0 + Apache-2.0 + repository；`moon package` 通过；未发布到 mooncakes.io | 削减（未发布到注册表） |
 
 ## 反向覆盖
