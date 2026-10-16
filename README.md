@@ -1,6 +1,6 @@
 # JSONMend — 流式 JSON 修复与部分解析库（纯 MoonBit）
 
-**版本**：0.7.0
+**版本**：1.0.0
 
 [![CI](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml/badge.svg)](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](code/LICENSE)
@@ -416,7 +416,7 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 
 ## 路线图
 
-- ~~发布到 mooncakes.io~~：0.3.0 … **0.7.0** 均已发布；tag `v0.5.0` … `v0.7.0` 已推送，`release.yml` 产出四个预编译产物与 `SHA256SUMS`。
+- ~~发布到 mooncakes.io~~：0.3.0 … **1.0.0** 均已发布；tag `v0.5.0` … `v1.0.0` 已推送，`release.yml` 产出四个预编译产物与 `SHA256SUMS`。
   0.7.0 的 CLI 上传路径失败（`receiver is gone`），改用同一份已校验产物 POST 官方端点成功——细节与证据见 [产品文档-精简版.md](产品文档-精简版.md) §11.1b。
 - ~~演示页新增「模拟 LLM 流」标签~~：`static/demo/live.html` 已落地（含重试面板与三层 readiness），并已发布到 GitHub Pages。
 - ~~给骨架加约束~~：`minimum` / `maximum` / `enum` / `maxLength` / `minLength` / `pattern`（字符类子集）已在 0.7.0 落地，见 [code/docs/SPEC.md](code/docs/SPEC.md)。

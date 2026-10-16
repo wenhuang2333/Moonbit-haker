@@ -5,7 +5,7 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 | | |
 | --- | --- |
 | Module | `zhanshishan/jsonmend` |
-| Version | 0.7.0 |
+| Version | 1.0.0 |
 | License | Apache-2.0 |
 | Preferred target | `wasm` (also builds for `native` and `js`) |
 | Prebuilt binaries | [Release `v0.6.1`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.6.1) — Linux CLI, wasm probe, browser bundle, `SHA256SUMS` |
@@ -336,7 +336,7 @@ Flags and their meanings:
 | `--batch` | Read `{"id","input"}` objects line by line and write one result object per line. |
 | `llm` (subcommand) | Feed a provider event stream through the adapter: `jsonmend llm [--provider anthropic\|openai] [--sse] [--follow] [file]`. |
 | `-h`, `--help` | Show help. |
-| `--version` | Show the version (`jsonmend 0.7.0`). |
+| `--version` | Show the version (`jsonmend 1.0.0`). |
 | `--policy NAME` | Safety profile: `permissive`, `interactive`, `execution`, `agent` or `strict`. |
 | `--schema DECL` | Skeleton declaration such as `{!query:string,!limit:integer}`; with `explain` it also prints the syntax-ready and schema-ready fractions. |
 | `--json` | With `explain`: the machine-readable plan instead of the text block. |
@@ -476,7 +476,7 @@ separately from the process. The full method, tables and decision records are in
 
 ## Roadmap
 
-- ~~Publish on mooncakes.io~~: `zhanshishan/jsonmend` 0.3.0 … **0.6.1** are published (`moon publish` exited 0 for every one); 0.7.0 is the current development version (`moon.mod`).
+- ~~Publish on mooncakes.io~~: `zhanshishan/jsonmend` 0.3.0 … **1.0.0** are published; 1.0.0 is the current version (`moon.mod`).
 - ~~A browser tab that plays a model stream~~: `static/demo/live.html`, also published at <https://wenhuang2333.github.io/Moonbit-haker/live.html>.
 - ~~Readiness for the members the caller actually needs~~: `Schema` + `semantic_readiness`.
 - ~~Constraints in the declaration~~: `minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern` (a character-class subset, not a regex) landed in 0.7.0.

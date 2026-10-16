@@ -5,7 +5,7 @@
 | | |
 | --- | --- |
 | 模块 | `zhanshishan/jsonmend` |
-| 版本 | 0.7.0 |
+| 版本 | 1.0.0 |
 | 许可证 | Apache-2.0 |
 | 首选后端 | `wasm`（同时支持 `native` 与 `js`） |
 | 预编译产物 | [Release `v0.6.1`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.6.1)——Linux CLI、wasm 探针、浏览器包、`SHA256SUMS` |
@@ -343,7 +343,7 @@ jsonmend llm [选项] [文件]
 | `--batch` | 逐行读 `{"id","input"}`，逐行输出 `{"id","rc","exactness","codes","value","text"}`。 |
 | `llm` 子命令 | `jsonmend llm [--provider anthropic\|openai] [--sse] [--follow] [文件]`：把事件流喂给 provider 适配器。 |
 | `-h`、`--help` | 显示帮助。 |
-| `--version` | 显示版本（`jsonmend 0.7.0`）。 |
+| `--version` | 显示版本（`jsonmend 1.0.0`）。 |
 | `--policy NAME` | 安全档位：`permissive`、`interactive`、`execution`、`agent` 或 `strict`（见 `SafetyPolicy`）。 |
 | `--schema DECL` | 骨架声明，如 `{!query:string,!limit:integer}`；`explain` 会额外打印语法就绪与骨架就绪两层数字。 |
 | `--json` | 与 `explain` 同用：输出机器可读的 JSON 计划，而不是文本块。 |
@@ -489,7 +489,7 @@ moon run bench --target js --release
 
 ## 路线图
 
-- ~~发布到 mooncakes.io~~：`zhanshishan/jsonmend` 0.3.0 … **0.6.1** 已发布（每个版本的 `moon publish` 退出码均为 0）；0.7.0 是当前开发版本（见 `moon.mod`）。
+- ~~发布到 mooncakes.io~~：`zhanshishan/jsonmend` 0.3.0 … **1.0.0** 已发布；1.0.0 是当前版本（见 `moon.mod`）。
 - ~~给浏览器演示页加一个播放「模型流」的标签页~~：`static/demo/live.html` 已落地（四个真实场景逐帧重放，含重试面板），线上地址 <https://wenhuang2333.github.io/Moonbit-haker/live.html>。
 - ~~把就绪曲线扩展到「调用方真正需要的字段」~~：`Schema` + `semantic_readiness` 已落地（语法/骨架两层分数）。
 - ~~给骨架加约束~~：`minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern`（字符类子集，不是正则）已在 0.7.0 落地。
