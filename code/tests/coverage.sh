@@ -19,9 +19,31 @@
 # A core file that does not appear in the summary is fully covered: the report
 # only lists files that still have an uncovered line.
 #
+# Q-37 — the per-file exemption ratchet (`coverage_exemptions.txt`):
+# the floors above are percentages, and a percentage hides which lines are
+# missing. The exemption file records, per core file, the exact uncovered lines
+# that were accepted when it was written, and the ratchet is:
+#
+#   * a line that is uncovered now and is NOT recorded -> FAIL, naming file:line
+#     (this is the criterion: a line that used to be covered fell back out);
+#   * a recorded line that is covered now -> FAIL, naming file:line and asking
+#     for the entry to be deleted (an exemption may only shrink);
+#   * the file may never grow: `--update-exemptions` rewrites it to the current
+#     state and refuses when the result would be larger, unless
+#     COVERAGE_FORCE_EXEMPTIONS=1 is set (a deliberate re-baseline, reviewable in
+#     the diff).
+#
+# Entries are anchored on the *source text* of the uncovered line, not only on
+# its number, because inserting one line above an exempted line renumbers every
+# line below it; the recorded number is kept as a human hint. The ratchet covers
+# the five core files (the ones with a per-file floor); every other file is held
+# to the overall floor. An exemption never relaxes a floor: exempted lines still
+# count as uncovered in the percentages above.
+#
 # Usage:
-#   code/tests/coverage.sh            measure, print the table, enforce
-#   code/tests/coverage.sh --report   measure and print the table only
+#   code/tests/coverage.sh                     measure, print, enforce
+#   code/tests/coverage.sh --report            measure and print only
+#   code/tests/coverage.sh --update-exemptions rewrite the exemption file
 #
 # Exits non-zero and names every file below its floor when enforcing.
 set -uo pipefail
@@ -39,13 +61,17 @@ export PATH="$HOME/.moon/bin:$PATH"
 OVERALL_FLOOR="${COVERAGE_OVERALL_FLOOR:-85}"
 CORE_FLOOR="${COVERAGE_CORE_FLOOR:-90}"
 CORE_FILES="policy.mbt decision.mbt schema.mbt plan.mbt stream_readiness.mbt"
+EXEMPTIONS_FILE="${COVERAGE_EXEMPTIONS_FILE:-$HERE/coverage_exemptions.txt}"
+REPORT_WIDTH=66
 
 ENFORCE=1
+UPDATE_EXEMPTIONS=0
 for arg in "$@"; do
   case "$arg" in
     --report) ENFORCE=0 ;;
+    --update-exemptions) UPDATE_EXEMPTIONS=1 ;;
     -h|--help)
-      sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,57p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -63,7 +89,10 @@ fi
 SUMMARY_FILE="$(mktemp -t jsonmend_coverage)"
 ROWS_FILE="$(mktemp -t jsonmend_rows)"
 LOG_FILE="$(mktemp -t jsonmend_test_log)"
-trap 'rm -f "$SUMMARY_FILE" "$ROWS_FILE" "$LOG_FILE"' EXIT
+CUR_FILE="$(mktemp -t jsonmend_uncovered)"
+NEW_FILE="$(mktemp -t jsonmend_exc_new)"
+OLD_FILE="$(mktemp -t jsonmend_exc_old)"
+trap 'rm -f "$SUMMARY_FILE" "$ROWS_FILE" "$LOG_FILE" "$CUR_FILE" "$NEW_FILE" "$OLD_FILE"' EXIT
 
 echo "coverage.sh: moon coverage clean"
 moon coverage clean >/dev/null 2>&1
@@ -173,6 +202,87 @@ if [ "$(awk -v c="$LC" -v t="$LT" -v fl="$OVERALL_FLOOR" 'BEGIN { print (t == 0 
   overall  library $LC/$LT ($(awk -v c="$LC" -v t="$LT" 'BEGIN { printf "%.1f", 100.0 * c / t }')%) below ${OVERALL_FLOOR}%"
 fi
 
+# ---------------------------------------------------------------------------
+# Q-37 — the per-file exemption ratchet.
+#
+# One row per uncovered line: `<file>\t<line>\t<source text, trimmed>`. The text
+# is what makes the record survive an insertion above it; the number is a hint.
+# ---------------------------------------------------------------------------
+
+# Every uncovered line of the core files, as file<TAB>line<TAB>text.
+: >"$CUR_FILE"
+for f in $CORE_FILES; do
+  moon coverage report -f caret -F "$f" 2>/dev/null |
+    sed -n 's/^ *--> \([^:]*\):\([0-9][0-9]*\)$/\1 \2/p' |
+    while read -r file line; do
+      text="$(sed -n "${line}p" "$ROOT/$file" 2>/dev/null |
+        sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+      printf '%s\t%s\t%s\n' "$file" "$line" "$text"
+    done >>"$CUR_FILE"
+done
+
+# The recorded exemptions, ignoring comments and blanks.
+: >"$OLD_FILE"
+if [ -f "$EXEMPTIONS_FILE" ]; then
+  awk -F'\t' '!/^[[:space:]]*#/ && NF >= 3 { print $1 "\t" $2 "\t" $3 }' \
+    "$EXEMPTIONS_FILE" >"$OLD_FILE"
+fi
+
+if [ "$UPDATE_EXEMPTIONS" -eq 1 ]; then
+  cur_n="$(wc -l <"$CUR_FILE" | tr -d ' ')"
+  old_n="$(wc -l <"$OLD_FILE" | tr -d ' ')"
+  if [ "$cur_n" -gt "$old_n" ] && [ "${COVERAGE_FORCE_EXEMPTIONS:-0}" != "1" ]; then
+    echo "coverage.sh: refusing to grow the exemption list ($old_n -> $cur_n entries)." >&2
+    echo "coverage.sh: write tests instead, or re-baseline deliberately with COVERAGE_FORCE_EXEMPTIONS=1." >&2
+    exit 1
+  fi
+  {
+    echo "# Per-file coverage exemptions for code/tests/coverage.sh (Q-37)."
+    echo "#"
+    echo "# One line per accepted uncovered line of a core file:"
+    echo "#     <file>\t<line>\t<source text of that line, trimmed>"
+    echo "#"
+    echo "# The ratchet: this list may only shrink. A core line that is uncovered and"
+    echo "# not recorded here fails the gate (it used to be covered), a recorded line"
+    echo "# that is covered now fails it too (delete the entry), and"
+    echo "# \`coverage.sh --update-exemptions\` refuses to write a larger list unless"
+    echo "# COVERAGE_FORCE_EXEMPTIONS=1. The line number is a hint: matching is done on"
+    echo "# the source text, so inserting code above an entry does not invalidate it."
+    sort "$CUR_FILE"
+  } >"$EXEMPTIONS_FILE.tmp"
+  mv "$EXEMPTIONS_FILE.tmp" "$EXEMPTIONS_FILE"
+  echo "coverage.sh: wrote $cur_n exemption(s) to ${EXEMPTIONS_FILE#"$ROOT"/}"
+  exit 0
+fi
+
+EXC_REPORT=""
+if [ ! -f "$EXEMPTIONS_FILE" ]; then
+  echo "coverage.sh: no $EXEMPTIONS_FILE — the per-file ratchet is skipped (floors still enforced)" >&2
+else
+  EXC_REPORT="$(awk -F'\t' '
+    NR == FNR { exc[$1 "\t" $3]++; exc_line[$1 "\t" $3] = $2; next }
+    { cur[$1 "\t" $3]++; cur_line[$1 "\t" $3] = $2; file[$1 "\t" $3] = $1; text[$1 "\t" $3] = $3 }
+    END {
+      for (k in cur) {
+        if (cur[k] > exc[k] + 0) {
+          printf "new\t%s\t%s\t%s\n", file[k], cur_line[k], text[k]
+        }
+      }
+      for (k in exc) {
+        if (exc[k] > cur[k] + 0) {
+          printf "stale\t%s\t%s\t%s\n", (k in file ? file[k] : k), exc_line[k], text[k]
+        }
+      }
+    }
+  ' "$OLD_FILE" "$CUR_FILE" | sort)"
+
+  if [ -n "$EXC_REPORT" ]; then
+    FAIL=1
+    MISSES="$MISSES
+  ratchet  see the per-line report below"
+  fi
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   echo "coverage.sh: FAILED — below the frozen floor:" >&2
   printf '%s\n' "$MISSES" >&2
@@ -188,8 +298,25 @@ if [ "$FAIL" -ne 0 ]; then
       echo "  $f: $lines" >&2
     fi
   done
+  if [ -n "$EXC_REPORT" ]; then
+    echo >&2
+    echo "coverage.sh: FAILED — the core exemption list is stale or incomplete:" >&2
+    printf '%s\n' "$EXC_REPORT" |
+      awk -F'\t' '
+        {
+          kind = $1; file = $2; line = $3; text = $4
+          if (kind == "new") {
+            printf "  not exempt  %s:%s  %s\n", file, line, text
+          } else {
+            printf "  can shrink  %s:%s  %s\n", file, line, text
+          }
+        }' >&2
+    echo >&2
+    echo "  not exempt  = uncovered now, not in ${EXEMPTIONS_FILE#"$ROOT"/} — a line fell out of coverage." >&2
+    echo "  can shrink  = recorded there but covered now — delete that entry." >&2
+  fi
   exit 1
 fi
 
-echo "coverage.sh: OK — library ${LC}/${LT}, core files at or above ${CORE_FLOOR}%"
+echo "coverage.sh: OK — library ${LC}/${LT}, core files at or above ${CORE_FLOOR}%, exemption list matches"
 exit 0

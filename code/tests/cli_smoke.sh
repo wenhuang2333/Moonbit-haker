@@ -92,11 +92,44 @@ fi
 
 # --version must match `version` in moon.mod (the string is hard-coded in main.mbt)
 MOD_VERSION=$(sed -n 's/^version *= *"\(.*\)"/\1/p' "$(dirname "$0")/../moon.mod")
-if [ "$(printf '{"a":1}' | "$BIN" --version)" = "jsonmend $MOD_VERSION" ]; then
-  pass=$((pass + 1)); printf 'ok   %-34s\n' "--version matches moon.mod"
+GOT_VERSION=$(printf '{"a":1}' | "$BIN" --version)
+if [ "$GOT_VERSION" = "jsonmend $MOD_VERSION" ]; then
+  pass=$((pass + 1)); printf 'ok   %-34s %s\n' "--version matches moon.mod" "$GOT_VERSION"
 else
-  fail=$((fail + 1)); printf 'FAIL %-34s\n' "--version matches moon.mod"
+  fail=$((fail + 1))
+  printf 'FAIL %-34s `jsonmend --version` says "%s" but code/moon.mod says "%s"\n' \
+    "--version matches moon.mod" "$GOT_VERSION" "jsonmend $MOD_VERSION"
 fi
+
+# Every document that states a version must state the same one. The published
+# mooncakes page renders code/README.md (`readme = "README.md"` in moon.mod),
+# so a stale string there is the first thing a reader sees; root README.md is
+# the repository front page. A mismatch fails loudly and names both strings.
+REPO="$(cd "$ROOT/.." && pwd)"
+check_doc_version() {
+  local label="$1" file="$2" expr="$3" got
+  got="$(sed -n "$expr" "$REPO/$file" | head -1)"
+  if [ "$got" = "$MOD_VERSION" ]; then
+    pass=$((pass + 1)); printf 'ok   %-34s %s=%s\n' "$label" "$file" "$got"
+  elif [ -z "$got" ]; then
+    fail=$((fail + 1))
+    printf 'FAIL %-34s %s states no version; code/moon.mod says "%s"\n' \
+      "$label" "$file" "$MOD_VERSION"
+  else
+    fail=$((fail + 1))
+    printf 'FAIL %-34s %s says "%s" but code/moon.mod says "%s"\n' \
+      "$label" "$file" "$got" "$MOD_VERSION"
+  fi
+}
+check_doc_version "README version" "README.md" 's/^\*\*版本\*\*：\(.*\)$/\1/p'
+check_doc_version "package README version" "code/README.md" \
+  's/^| Version | \(.*\) |$/\1/p'
+check_doc_version "package README.zh version" "code/README.zh.md" \
+  's/^| 版本 | \(.*\) |$/\1/p'
+# The delivery document repeats the version in its header prose and in the
+# evolution table. Same rule: it must not drift from moon.mod.
+check_doc_version "condensed doc version" "产品文档-精简版.md" \
+  's/^> \*\*版本\*\*：\([0-9.]*\).*$/\1/p'
 
 # --indent
 out="$(printf '%s' '{"a":[1,2]}' | "$BIN" --indent 2)"

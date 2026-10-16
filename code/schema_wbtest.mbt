@@ -226,13 +226,22 @@ test "an unsatisfied skeleton is reported at the end of the stream" {
 
 ///|
 /// Declarations covering every kind, nesting, arrays, optional members and the
-/// separator variants the parser accepts.
+/// separator variants the parser accepts, plus the 0.7.0 constraint list in
+/// every position it can appear.
 fn round_trip_corpus() -> Array[String] {
   [
     "any", "null", "boolean", "bool", "number", "integer", "int", "string", "[integer]",
     "[{!a:string,?b:[number]}]", "{}", "{a:string}", "{?a:string}", "{!a:integer,?b:[string]}",
     "{a:string; b:integer}", "{ a : string }", "{!a:{!b:{?c:[boolean]}}}", "{!list:[{!x:number}],!map:{?k:string}}",
-    "{!a:any,!b:null,!c:boolean,!d:number,!e:integer,!f:string}",
+    "{!a:any,!b:null,!c:boolean,!d:number,!e:integer,!f:string}", "integer(minimum:0)",
+    "integer(maximum:10)", "number(exclusiveMinimum:0)", "number(exclusiveMaximum:1.5)",
+    "number(minimum:-1.5,maximum:2)", "int(minimum:0)", "string(minLength:1)", "string(maxLength:64)",
+    "string(minLength:1,maxLength:8)", "string(pattern:[a-z])", "string(pattern:[^\"])",
+    "string(pattern:[a-zA-Z0-9_])", "string(pattern:[\\d])", "string(pattern:[\\w\\s])",
+    "any(enum:[1,\"two\",null,true])", "string(enum:[\"low\",\"high\"])", "integer(enum:[1,2,3])",
+    "[integer(minimum:0)]", "{!limit:integer(minimum:1),?note:string(maxLength:80)}",
+    "{!kind:string(enum:[\"a\",\"b\"]);?n:number(minimum:0,exclusiveMaximum:1)}",
+    "{!items:[string(pattern:[A-Z])]}", "any(enum:[null])",
   ]
 }
 
@@ -248,15 +257,37 @@ fn round_trip_value() -> Json {
 }
 
 ///|
+/// Every mismatch of a verdict as `path|expected|got`, joined with `,`.
+fn mismatch_text(v : SchemaVerdict) -> String {
+  let parts : Array[String] = []
+  for m in v.mismatched {
+    parts.push(m.path + "|" + m.expected + "|" + m.got)
+  }
+  parts.join(",")
+}
+
+///|
 /// The values the acceptance decision is compared over: one per kind, plus a
-/// non-integer number so that `integer` and `number` cannot be confused.
+/// non-integer number so that `integer` and `number` cannot be confused, plus
+/// the values that discriminate the constraints (0.7.0): below/at/above a bound,
+/// short/long strings, a string outside a class, and a literal that is and is
+/// not in an `enum`.
 fn round_trip_probes() -> Array[Json] {
   [
     Json::null(),
     jv("true"),
     Json::number(1.0),
     Json::number(1.5),
+    Json::number(0.0),
+    Json::number(-1.0),
+    Json::number(2.0),
+    Json::number(3.0),
     Json::string("x"),
+    Json::string(""),
+    Json::string("abc"),
+    Json::string("AZ_9"),
+    Json::string("a-b"),
+    Json::string("low"),
     Json::array([]),
     Json::object(Map([])),
   ]
@@ -320,6 +351,13 @@ test "a round trip preserves meaning, not just spelling" {
     assert_eq(
       text + " mismatched " + b.mismatched.length().to_string(),
       text + " mismatched " + a.mismatched.length().to_string(),
+    )
+    // Not just how many, but what each one expected: a round trip that lost a
+    // constraint would still have the same count only by coincidence, and the
+    // `expected` string is what a caller acts on.
+    assert_eq(
+      text + " mismatches " + mismatch_text(b),
+      text + " mismatches " + mismatch_text(a),
     )
     // The same acceptance decision on every probe, `integer` vs `number`
     // included.
@@ -895,4 +933,462 @@ test "R018 is duplicate key normalisation, and valid JSON can still be blocked" 
   assert_eq(clean.normalized(), false)
   assert_eq(clean.execution(), "allowed")
   assert_eq(clean.decision.name(), "safe")
+}
+
+// ---------------------------------------------------------------------------
+// 0.7.0 — value constraints.
+//
+// A constraint is part of the declaration language, not a separate validator:
+// it parses with the same `E070`, it stringifies back (the corpus above proves
+// the round trip), it is checked by `accepts`/`evaluate`, and the streaming
+// watcher refuses a value on the delta that makes it final
+// (`stream_readiness_wbtest.mbt`).
+// ---------------------------------------------------------------------------
+
+///|
+/// The `E070` diagnostic of a declaration, or `"ok"`.
+fn parse_error(text : String) -> String {
+  try {
+    ignore(Schema::parse(text))
+    "ok"
+  } catch {
+    e => e.to_string()
+  }
+}
+
+///|
+test "the constraint list round trips in a canonical spelling" {
+  // Whitespace, `;` and the written order are normalised; the kind is not.
+  assert_eq(
+    schema_or_any("integer( minimum : 0 )").stringify(),
+    "integer(minimum:0)",
+  )
+  assert_eq(
+    schema_or_any("number(maximum:10,minimum:0)").stringify(),
+    "number(minimum:0,maximum:10)",
+  )
+  assert_eq(
+    schema_or_any("string(maxLength:8;minLength:1)").stringify(),
+    "string(minLength:1,maxLength:8)",
+  )
+  assert_eq(schema_or_any("NUMBER(MINIMUM:0)").stringify(), "number(minimum:0)")
+  assert_eq(schema_or_any("int(minimum:0)").stringify(), "integer(minimum:0)")
+  assert_eq(
+    schema_or_any("any(enum:[1,\"two\",null,true])").stringify(),
+    "any(enum:[1,\"two\",null,true])",
+  )
+  assert_eq(
+    schema_or_any("string(pattern:[a-z])").stringify(),
+    "string(pattern:[a-z])",
+  )
+  // `pattern` is stored as written, so its escapes survive the trip.
+  assert_eq(
+    schema_or_any("string(pattern:[\\d\\-])").stringify(),
+    "string(pattern:[\\d\\-])",
+  )
+  // A kind with no constraint list is the plain kind, exactly as in 0.6.x.
+  assert_eq(schema_or_any("integer").stringify(), "integer")
+  assert_eq(schema_or_any("{!a:integer}").stringify(), "{!a:integer}")
+  // The expectation is the declaration as written.
+  assert_eq(schema_or_any("integer").expectation(), "integer")
+  assert_eq(
+    schema_or_any("integer(minimum:0)").expectation(),
+    "integer(minimum:0)",
+  )
+  assert_eq(schema_or_any("integer(minimum:0)").name(), "integer")
+}
+
+///|
+test "a numeric constraint reports the violated bound, not the kind" {
+  let s = schema_or_any("{!limit:integer(minimum:1)}")
+  let v = s.evaluate(jv("{\"limit\":0}"))
+  assert_eq(v.ok, false)
+  assert_eq(v.satisfied, 0)
+  assert_eq(v.mismatched[0].path, "limit")
+  assert_eq(v.mismatched[0].expected, "integer >= 1")
+  assert_eq(v.mismatched[0].got, "number")
+  // Inclusive at the bound.
+  assert_eq(s.evaluate(jv("{\"limit\":1}")).ok, true)
+  // Exclusive variants.
+  let e = schema_or_any("{!n:number(exclusiveMinimum:0)}")
+  assert_eq(e.evaluate(jv("{\"n\":0}")).mismatched[0].expected, "number > 0")
+  assert_eq(e.evaluate(jv("{\"n\":0.5}")).ok, true)
+  let x = schema_or_any("{!n:number(exclusiveMaximum:1)}")
+  assert_eq(x.evaluate(jv("{\"n\":1}")).mismatched[0].expected, "number < 1")
+  assert_eq(x.evaluate(jv("{\"n\":0.999}")).ok, true)
+  let m = schema_or_any("{!n:number(maximum:2)}")
+  assert_eq(m.evaluate(jv("{\"n\":2}")).ok, true)
+  assert_eq(m.evaluate(jv("{\"n\":2.5}")).mismatched[0].expected, "number <= 2")
+  // Two bounds: the one that failed is the one named.
+  let both = schema_or_any("{!n:number(minimum:0,maximum:10)}")
+  assert_eq(
+    both.evaluate(jv("{\"n\":11}")).mismatched[0].expected,
+    "number <= 10",
+  )
+  assert_eq(
+    both.evaluate(jv("{\"n\":-1}")).mismatched[0].expected,
+    "number >= 0",
+  )
+  // The whole declaration is what `expected` says when the kind is wrong.
+  assert_eq(
+    both.evaluate(jv("{\"n\":\"x\"}")).mismatched[0].expected,
+    "number(minimum:0,maximum:10)",
+  )
+  assert_eq(both.evaluate(jv("{\"n\":\"x\"}")).mismatched[0].got, "string")
+  // A constraint does not make a non-integer an integer.
+  assert_eq(
+    schema_or_any("integer(minimum:0)").accepts(Json::number(1.5)),
+    false,
+  )
+}
+
+///|
+test "a string constraint measures code units and a character class" {
+  let len = schema_or_any("{!name:string(minLength:1,maxLength:3)}")
+  assert_eq(
+    len.evaluate(jv("{\"name\":\"\"}")).mismatched[0].expected,
+    "string with length >= 1",
+  )
+  assert_eq(len.evaluate(jv("{\"name\":\"\"}")).ok, false)
+  assert_eq(len.evaluate(jv("{\"name\":\"abc\"}")).ok, true)
+  assert_eq(len.evaluate(jv("{\"name\":\"abcd\"}")).ok, false)
+  assert_eq(
+    len.evaluate(jv("{\"name\":\"abcd\"}")).mismatched[0].expected,
+    "string with length <= 3",
+  )
+  // An emoji is one character and two code units, which is the unit the rest of
+  // the library counts in (BR-20).
+  assert_eq(len.evaluate(jv("{\"name\":\"x😀\"}")).ok, true)
+  assert_eq(len.evaluate(jv("{\"name\":\"😀😀\"}")).ok, false)
+  // A character class: every code unit of the value must be in the set.
+  let cls = schema_or_any("{!code:string(pattern:[A-Za-z0-9_])}")
+  assert_eq(cls.evaluate(jv("{\"code\":\"AZ_9\"}")).ok, true)
+  assert_eq(cls.evaluate(jv("{\"code\":\"a-b\"}")).ok, false)
+  assert_eq(
+    cls.evaluate(jv("{\"code\":\"a-b\"}")).mismatched[0].expected,
+    "string of characters in [A-Za-z0-9_]",
+  )
+  // The empty string has no character outside the class.
+  assert_eq(cls.evaluate(jv("{\"code\":\"\"}")).ok, true)
+  // These are literal characters inside a class, not regex operators.
+  assert_eq(schema_or_any("string(pattern:[.+*])").accepts(jv("\"+.*\"")), true)
+  assert_eq(schema_or_any("string(pattern:[.+*])").accepts(jv("\"a\"")), false)
+  // Negation, and the `-` at either end staying a literal.
+  assert_eq(schema_or_any("string(pattern:[^ab])").accepts(jv("\"c\"")), true)
+  assert_eq(schema_or_any("string(pattern:[^ab])").accepts(jv("\"a\"")), false)
+  assert_eq(schema_or_any("string(pattern:[-a])").accepts(jv("\"-\"")), true)
+  assert_eq(schema_or_any("string(pattern:[a-])").accepts(jv("\"-\"")), true)
+  // Shorthands.
+  assert_eq(schema_or_any("string(pattern:[\\d])").accepts(jv("\"42\"")), true)
+  assert_eq(schema_or_any("string(pattern:[\\d])").accepts(jv("\"4a\"")), false)
+  assert_eq(schema_or_any("string(pattern:[\\w])").accepts(jv("\"a_9\"")), true)
+  assert_eq(schema_or_any("string(pattern:[\\s])").accepts(jv("\" \t\"")), true)
+  assert_eq(schema_or_any("string(pattern:[\\n])").accepts(jv("\"\\n\"")), true)
+  assert_eq(schema_or_any("string(pattern:[\\S])").accepts(jv("\"\\S\"")), true)
+}
+
+///|
+test "enum admits exactly its literals" {
+  let s = schema_or_any("{!kind:string(enum:[\"low\",\"high\"])}")
+  assert_eq(s.evaluate(jv("{\"kind\":\"low\"}")).ok, true)
+  assert_eq(s.evaluate(jv("{\"kind\":\"high\"}")).ok, true)
+  assert_eq(s.evaluate(jv("{\"kind\":\"medium\"}")).ok, false)
+  assert_eq(
+    s.evaluate(jv("{\"kind\":\"medium\"}")).mismatched[0].expected,
+    "one of [\"low\",\"high\"]",
+  )
+  assert_eq(s.evaluate(jv("{\"kind\":\"medium\"}")).mismatched[0].got, "string")
+  // Kind and list are both required.
+  // The declaration checked against a bare value is the scalar one.
+  assert_eq(
+    schema_or_any("string(enum:[\"low\",\"high\"])").accepts(jv("\"low\"")),
+    true,
+  )
+  assert_eq(
+    schema_or_any("string(enum:[\"low\",\"high\"])").accepts(jv("1")),
+    false,
+  )
+  let n = schema_or_any("{!n:integer(enum:[1,2,3])}")
+  assert_eq(n.evaluate(jv("{\"n\":2}")).ok, true)
+  assert_eq(n.evaluate(jv("{\"n\":4}")).ok, false)
+  assert_eq(
+    n.evaluate(jv("{\"n\":4}")).mismatched[0].expected,
+    "one of [1,2,3]",
+  )
+  assert_eq(n.evaluate(jv("{\"n\":2.5}")).ok, false)
+  // 2 and 2.0 are the same JSON number, on the scalar declaration.
+  assert_eq(
+    schema_or_any("integer(enum:[1,2,3])").accepts(Json::number(2.0)),
+    true,
+  )
+  assert_eq(
+    schema_or_any("integer(enum:[1,2,3])").accepts(Json::number(4.0)),
+    false,
+  )
+  // `enum` is allowed on any kind, and only literals the kind can hold.
+  assert_eq(
+    schema_or_any("any(enum:[null,true,1,\"a\"])").accepts(Json::null()),
+    true,
+  )
+  assert_eq(
+    schema_or_any("any(enum:[null,true,1,\"a\"])").accepts(jv("false")),
+    false,
+  )
+  assert_eq(schema_or_any("null(enum:[null])").accepts(Json::null()), true)
+}
+
+///|
+test "a constrained scalar root is checked, a bare kind root is not" {
+  // A bare kind at the root declares no members, and `evaluate` walks members:
+  // this is 0.6.x behaviour and it does not change.
+  assert_eq(schema_or_any("integer").evaluate(Json::string("x")).ok, true)
+  assert_eq(schema_or_any("integer").accepts(Json::string("x")), false)
+  // A constraint is a claim about the value, so it is checked at the root.
+  let s = schema_or_any("integer(minimum:0)")
+  assert_eq(s.evaluate(Json::number(-1.0)).ok, false)
+  assert_eq(s.evaluate(Json::number(-1.0)).mismatched[0].path, "<root>")
+  assert_eq(
+    s.evaluate(Json::number(-1.0)).mismatched[0].expected,
+    "integer >= 0",
+  )
+  assert_eq(s.evaluate(Json::number(-1.0)).mismatched[0].got, "number")
+  assert_eq(s.evaluate(Json::number(0.0)).ok, true)
+  assert_eq(s.evaluate(Json::string("x")).ok, false)
+  assert_eq(
+    s.evaluate(Json::string("x")).mismatched[0].expected,
+    "integer(minimum:0)",
+  )
+  assert_eq(
+    schema_or_any("string(enum:[\"a\"])").evaluate(jv("\"b\"")).ok,
+    false,
+  )
+}
+
+///|
+test "constraints are checked where the declaration nests" {
+  let s = schema_or_any(
+    "{!items:[integer(minimum:0)],!meta:{?tags:[string(maxLength:2)]}}",
+  )
+  assert_eq(
+    s.accepts(jv("{\"items\":[0,1],\"meta\":{\"tags\":[\"ab\"]}}")),
+    true,
+  )
+  let bad = s.evaluate(jv("{\"items\":[1,-2],\"meta\":{\"tags\":[\"abc\"]}}"))
+  assert_eq(bad.ok, false)
+  assert_eq(bad.mismatched.length(), 2)
+  assert_eq(bad.mismatched[0].path, "items.1")
+  assert_eq(bad.mismatched[0].expected, "integer >= 0")
+  assert_eq(bad.mismatched[1].path, "meta.tags.0")
+  assert_eq(bad.mismatched[1].expected, "string with length <= 2")
+  // A required member that satisfies its constraints counts as satisfied.
+  assert_eq(s.evaluate(jv("{\"items\":[2],\"meta\":{}}")).satisfied, 2)
+  // An absent optional member is not a mismatch.
+  assert_eq(s.evaluate(jv("{\"items\":[2],\"meta\":{}}")).ok, true)
+}
+
+///|
+test "a constraint the kind cannot carry is E070, not a rule that never fires" {
+  assert_eq(parse_code("integer(maxLength:3)"), "E070")
+  assert_true(
+    parse_error("integer(maxLength:3)").contains(
+      "`maxLength` applies to `string`, not to `integer`, at offset 8",
+    ),
+    msg=parse_error("integer(maxLength:3)"),
+  )
+  assert_true(
+    parse_error("integer(pattern:[a-z])").contains(
+      "`pattern` applies to `string`, not to `integer`",
+    ),
+    msg=parse_error("integer(pattern:[a-z])"),
+  )
+  assert_true(
+    parse_error("string(minimum:0)").contains(
+      "`minimum` applies to `number` and `integer`, not to `string`",
+    ),
+    msg=parse_error("string(minimum:0)"),
+  )
+  assert_true(
+    parse_error("boolean(minimum:0)").contains("not to `boolean`"),
+    msg=parse_error("boolean(minimum:0)"),
+  )
+}
+
+///|
+test "the constraint value itself is checked, with its offset" {
+  // A number is expected and something else arrived.
+  assert_true(
+    parse_error("integer(minimum:abc)").contains(
+      "`minimum` expects a number at offset 16",
+    ),
+    msg=parse_error("integer(minimum:abc)"),
+  )
+  // `+1` is not a JSON number, so the token is named rather than coerced.
+  assert_true(
+    parse_error("integer(minimum:+1)").contains(
+      "`minimum` expects a number at offset 16: `+1`",
+    ),
+    msg=parse_error("integer(minimum:+1)"),
+  )
+  // Lengths are non-negative integers.
+  assert_true(
+    parse_error("string(minLength:-1)").contains(
+      "`minLength` expects a non-negative integer at offset 17",
+    ),
+    msg=parse_error("string(minLength:-1)"),
+  )
+  assert_true(
+    parse_error("string(maxLength:1.5)").contains(
+      "`maxLength` expects a non-negative integer",
+    ),
+    msg=parse_error("string(maxLength:1.5)"),
+  )
+  // An unknown name is named, with the vocabulary.
+  assert_true(
+    parse_error("integer(nope:1)").contains(
+      "unknown constraint `nope` at offset 8",
+    ),
+    msg=parse_error("integer(nope:1)"),
+  )
+  assert_true(
+    parse_error("integer(nope:1)").contains(
+      "minimum, exclusiveMinimum, maximum, exclusiveMaximum",
+    ),
+    msg=parse_error("integer(nope:1)"),
+  )
+  // A missing `:` is named.
+  assert_true(
+    parse_error("integer(minimum 0)").contains(
+      "constraint `minimum` has no `:` at offset 8",
+    ),
+    msg=parse_error("integer(minimum 0)"),
+  )
+}
+
+///|
+test "pattern is a character class, not a regular expression" {
+  // A quantifier, an alternation and an anchor are all rejected at the offset
+  // they appear, so no declaration can mean something a regex engine would.
+  assert_true(
+    parse_error("string(pattern:[a-z]+)").contains(
+      "unexpected `+` in a constraint list at offset 20",
+    ),
+    msg=parse_error("string(pattern:[a-z]+)"),
+  )
+  assert_true(
+    parse_error("string(pattern:[a-z]*)").contains(
+      "unexpected `*` in a constraint list",
+    ),
+    msg=parse_error("string(pattern:[a-z]*)"),
+  )
+  assert_true(
+    parse_error("string(pattern:^(a|b)$)").contains(
+      "`pattern` accepts a character class `[...]` and nothing else, at offset 15",
+    ),
+    msg=parse_error("string(pattern:^(a|b)$)"),
+  )
+  assert_true(
+    parse_error("string(pattern:a-z)").contains(
+      "`pattern` accepts a character class `[...]` and nothing else",
+    ),
+    msg=parse_error("string(pattern:a-z)"),
+  )
+  // Malformed classes are named at the class.
+  assert_true(
+    parse_error("string(pattern:[])").contains(
+      "an empty character class matches nothing, at offset 15",
+    ),
+    msg=parse_error("string(pattern:[])"),
+  )
+  assert_true(
+    parse_error("string(pattern:[^])").contains(
+      "`[^]` negates an empty character class, at offset 15",
+    ),
+    msg=parse_error("string(pattern:[^])"),
+  )
+  assert_true(
+    parse_error("string(pattern:[z-a])").contains(
+      "the character class range at offset 15 is inverted",
+    ),
+    msg=parse_error("string(pattern:[z-a])"),
+  )
+  assert_true(
+    parse_error("string(pattern:[\\q])").contains(
+      "`\\q` is not a character class escape at offset 15",
+    ),
+    msg=parse_error("string(pattern:[\\q])"),
+  )
+  assert_true(
+    parse_error("string(pattern:[\\d-z])").contains(
+      "a character class range cannot start at an escape",
+    ),
+    msg=parse_error("string(pattern:[\\d-z])"),
+  )
+  assert_true(
+    parse_error("string(pattern:[a-z)").contains(
+      "the character class of `pattern` is never closed at offset 15",
+    ),
+    msg=parse_error("string(pattern:[a-z)"),
+  )
+  // A `]` that does not close the whole declaration is an error, not a member.
+  assert_eq(parse_code("{!a:string(pattern:[a-z])}"), "ok")
+}
+
+///|
+test "enum is a JSON literal list, and only literals it can hold" {
+  assert_true(
+    parse_error("integer(enum:[])").contains(
+      "`enum` needs at least one value at offset 13",
+    ),
+    msg=parse_error("integer(enum:[])"),
+  )
+  assert_true(
+    parse_error("integer(enum:[[]])").contains(
+      "`enum` admits only scalar literals at offset 13",
+    ),
+    msg=parse_error("integer(enum:[[]])"),
+  )
+  assert_true(
+    parse_error("string(enum:[1,2])").contains(
+      "`enum` value 1 is not a string, at offset 12",
+    ),
+    msg=parse_error("string(enum:[1,2])"),
+  )
+  assert_true(
+    parse_error("integer(enum:[1,2.5])").contains(
+      "`enum` value 2.5 is not a integer, at offset 13",
+    ),
+    msg=parse_error("integer(enum:[1,2.5])"),
+  )
+  assert_true(
+    parse_error("integer(enum:[1,2").contains(
+      "the array of `enum` is never closed at offset 13",
+    ),
+    msg=parse_error("integer(enum:[1,2"),
+  )
+  // Escapes in an enum literal are JSON escapes.
+  let s = schema_or_any("string(enum:[\"a\\\"b\"])")
+  assert_eq(s.accepts(jv("\"a\\\"b\"")), true)
+  assert_eq(s.stringify(), "string(enum:[\"a\\\"b\"])")
+}
+
+///|
+test "every declaration that parsed before 0.7.0 still parses the same" {
+  // The old corpus, unchanged, one stringify away from its own canonical form.
+  for
+    text in [
+      "any", "null", "boolean", "integer", "number", "string", "{!a:integer,?b:[string]}",
+      "{a:string; b:integer}", "{!list:[{!x:number}],!map:{?k:string}}",
+    ] {
+    let s = schema_or_any(text)
+    assert_true(s.stringify() != "any" || text == "any", msg=text)
+    assert_eq(parse_code(s.stringify()), "ok")
+    assert_eq(schema_or_any(s.stringify()).stringify(), s.stringify())
+  }
+  // A space after the kind is a space between members, as it always was, so a
+  // constraint list has to be attached to the kind.
+  assert_eq(
+    schema_or_any("{a:integer b:string}").stringify(),
+    "{!a:integer,!b:string}",
+  )
+  assert_eq(parse_code("{a:integer (minimum:0)}"), "E070")
 }

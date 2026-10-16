@@ -102,6 +102,28 @@ fn sr_watch(text : String, schema : Schema, chunk : Int32) -> SemanticWatcher? {
 }
 
 ///|
+/// `sr_watch` with explicit options.
+fn sr_watch_opts(
+  text : String,
+  schema : Schema,
+  chunk : Int32,
+  options : Options,
+) -> SemanticWatcher? {
+  let w = SemanticWatcher::new(schema, options~) catch { _ => return None }
+  let mut i = 0
+  while i < text.length() {
+    let to = if i + chunk > text.length() { text.length() } else { i + chunk }
+    w.feed(text[i:to].to_owned()) catch {
+      _ => return None
+    }
+    i = to
+    let _ = w.drain_events()
+  }
+  let _ = w.finish() catch { _ => return None }
+  Some(w)
+}
+
+///|
 /// How many events have kind `kind`.
 fn sr_count(events : Array[SrEvent], kind : String) -> Int32 {
   let mut n = 0
@@ -156,17 +178,30 @@ fn sr_event_permille(events : Array[ReadinessEventAt], kind : String) -> Int32 {
 }
 
 ///|
-/// Permille of the last settle event (`field_ready` / `field_invalid`), or
-/// `-1` when only `finish()` settled a path.
+/// Permille of the last settle event (`field_ready` / `field_invalid` /
+/// `field_rejected`), or `-1` when only `finish()` settled a path.
 fn sr_last_settle(events : Array[ReadinessEventAt]) -> Int32 {
   let mut last = -1
   for e in events {
     match e.event {
-      FieldReady(_) | FieldInvalid(_, _) => last = e.permille
+      FieldReady(_) | FieldInvalid(_, _) | FieldRejected(_, _, _) =>
+        last = e.permille
       _ => ()
     }
   }
   last
+}
+
+///|
+/// The `(expected, got)` of the first `field_rejected` event, or `None`.
+fn sr_rejected(events : Array[SrEvent]) -> (String, String)? {
+  for e in events {
+    match e.event {
+      FieldRejected(_, want, got) => return Some((want, got))
+      _ => ()
+    }
+  }
+  None
 }
 
 // ---------------------------------------------------------------------------
@@ -523,20 +558,27 @@ test "the watcher follows only the paths it can decide itself" {
   }
   assert_eq(w.concluded(), true)
   assert_eq(w.verdict().ok, true)
-  // A delta stream cannot retract a container it already announced, so the one
-  // option combination a watcher cannot work with is refused up front.
-  let code = try {
-    ignore(
-      SemanticWatcher::new(s, options={
-        ..Options::default(),
-        duplicate_keys: KeepFirst,
-      }),
-    )
-    "no error"
-  } catch {
-    e => e.code()
+  // `duplicate_keys KeepFirst` is a documented composition, not a refusal
+  // (Q-36): the measurement runs under `KeepLast` because a delta stream cannot
+  // carry a value that was dropped, and the caller's own verdict is theirs to
+  // take from `parse` under the options they asked for.
+  let keep_first : Options = {
+    ..Options::default(),
+    duplicate_keys: KeepFirst,
   }
-  assert_eq(code, "E050")
+  let w2 = SemanticWatcher::new(s, options=keep_first) catch {
+    _ => return assert_true(false, msg="KeepFirst must not be refused")
+  }
+  w2.feed("{\"a\":1,\"c\":{\"d\":2}}") catch {
+    _ => return assert_true(false, msg="feed failed")
+  }
+  let _ = w2.drain_events()
+  ignore(w2.finish()) catch {
+    _ => ()
+  }
+  // No duplicate arrived, so the two policies agree and nothing is in conflict.
+  assert_eq(w2.conflict(), false)
+  assert_eq(w2.verdict().ok, true)
 }
 
 ///|
@@ -719,23 +761,72 @@ test "the event stream has a JSON form with escaped paths" {
 // ---------------------------------------------------------------------------
 
 ///|
-test "the watcher keeps working when the delta stream cannot be used" {
-  // `duplicate_keys KeepFirst` needs a value the delta stream cannot express,
-  // so `semantic_readiness` falls back to the 0.5.0 sampling implementation
-  // instead of raising. The result is the same kind of measurement.
+test "KeepFirst is a documented composition: numbers from the stream, verdict from the policy" {
+  // The 0.5.0 sampling implementation is gone (Q-36). `KeepFirst` now means:
+  // the three numbers come from the watcher, which measures under `KeepLast`
+  // because a delta stream cannot carry a value that was dropped; the verdict
+  // comes from `parse` under the options the caller asked for. A duplicate
+  // whose two values have different kinds is the case where the two differ.
   let s = sr_schema("{!a:integer}")
   let keep_first : Options = {
     ..Options::default(),
     duplicate_keys: KeepFirst,
   }
-  let r = semantic_readiness("{\"a\":1,\"a\":2}", s, step=1, options=keep_first) catch {
-    _ => return assert_true(false, msg="sampled readiness failed")
+  let doc = "{\"a\":1,\"a\":\"x\"}"
+  let r = semantic_readiness(doc, s, step=1, options=keep_first) catch {
+    _ => return assert_true(false, msg="readiness failed")
   }
-  // `KeepFirst` keeps the first value, so the document satisfies the skeleton.
+  // `KeepFirst` keeps the first value, which is an integer: the caller's verdict
+  // is the `KeepFirst` truth.
   assert_eq(r.verdict.ok, true)
-  assert_true(r.settled_permille > 0, msg=r.settled_permille.to_string())
-  assert_true(r.settled_permille <= 1000, msg=r.settled_permille.to_string())
   assert_eq(r.verdict.satisfied, 1)
+  // The path is final when `1` ends (7 code units of 15), which is the same
+  // offset the sampling loop reported, so `settled` does not move.
+  assert_eq(r.settled_permille, permille(7, doc.length()))
+  assert_eq(r.settled_permille, 466)
+  // `syntax_permille` is the moment the value tree stopped changing, and under
+  // the measurement policy the second value does touch it: this is the one
+  // number the composition moves, and only for a repeated name.
+  assert_eq(r.syntax_permille, permille(14, doc.length()))
+  // The same document under `KeepLast` disagrees about the verdict and agrees
+  // about when the path was final, which is the split the composition documents.
+  let keep_last = semantic_readiness(doc, s, step=1) catch {
+    _ => return assert_true(false, msg="readiness failed")
+  }
+  assert_eq(keep_last.verdict.ok, false)
+  assert_eq(keep_last.settled_permille, r.settled_permille)
+  // Byte by byte, the watcher announces the first value (which is the one
+  // `KeepFirst` keeps) and concludes `RootReady` on it. It cannot retract that
+  // when the duplicate arrives, so the duplicate is reported as a conflict
+  // instead: an early conclusion is a lower bound, never a wrong event.
+  let events = watch_readiness(doc, s, chunk=1, options=keep_first) catch {
+    _ => return assert_true(false, msg="watch_readiness failed")
+  }
+  assert_eq(
+    sr_names_of(events.map(fn(e) { e.event })),
+    "field_ready:a,root_ready:",
+  )
+  let w = match sr_watch_opts(doc, s, 1, keep_first) {
+    Some(x) => x
+    None => return assert_true(false, msg="watcher did not build")
+  }
+  assert_eq(w.conflict(), true)
+  // The watcher's own verdict is the `KeepLast` one, as documented; the caller
+  // who asked for `KeepFirst` takes theirs from `parse`, which is what
+  // `semantic_readiness` does above.
+  assert_eq(w.verdict().ok, false)
+  // A document without duplicates is unaffected: the two policies agree.
+  let clean = "{\"a\":1}"
+  let c1 = semantic_readiness(clean, s, step=1, options=keep_first) catch {
+    _ => return assert_true(false, msg="readiness failed")
+  }
+  let c2 = semantic_readiness(clean, s, step=1) catch {
+    _ => return assert_true(false, msg="readiness failed")
+  }
+  assert_eq(c1.verdict.ok, c2.verdict.ok)
+  assert_eq(c1.settled_permille, c2.settled_permille)
+  assert_eq(c1.syntax_permille, c2.syntax_permille)
+  assert_eq(c1.schema_permille, c2.schema_permille)
 }
 
 ///|
@@ -802,4 +893,170 @@ test "the one-shot helpers pick their own step and decide at the end" {
   // error; `@@@` is the smallest example.
   let bad = decided_at_permille("@@@", s) catch { _ => -2 }
   assert_eq(bad, -2)
+}
+
+// ---------------------------------------------------------------------------
+// 0.7.0 — a value-level declaration is enforced when the value is final.
+//
+// A kind is decided by the shape of a value; a constraint is decided by the
+// value itself. Both are decided on the delta that makes the value final, so a
+// refusal is published at the offset where the model stopped being able to fix
+// it — which is the whole point of refusing a number before the document ends.
+// ---------------------------------------------------------------------------
+
+///|
+test "a value the constraint refuses is refused the moment it is final" {
+  // The product story with a value-level answer: `-1` is out of range the
+  // moment it is final, and the 200 code units behind it are never paid for.
+  let text = "{\"limit\":-1,\"note\":\"" + "x".repeat(200) + "\"}"
+  let s = sr_schema("{!limit:integer(minimum:0)}")
+  let evs = match sr_feed_one_by_one(text, s) {
+    Some(e) => e
+    None => return assert_true(false, msg="byte-wise stream failed")
+  }
+  assert_eq(sr_names(evs), "field_rejected:limit,root_invalid:")
+  // The value is final when its delimiter arrives, not at the end of the
+  // document: 12 code units of 216 here.
+  let off = sr_at(evs, "field_rejected")
+  assert_eq(off, 12)
+  assert_eq(sr_root_offset(evs), 12)
+  assert_true(off * 2 < text.length(), msg="refused after half the document")
+  // The refusal names the constraint, not the kind it shares.
+  assert_eq(sr_rejected(evs), Some(("integer >= 0", "number")))
+  assert_eq(evs[0].event.is_verdict(), true)
+  // The same moment as a fraction, from the one-shot helpers.
+  let decided = decided_at_permille(text, s, chunk=1) catch {
+    _ => return assert_true(false, msg="decided_at_permille failed")
+  }
+  assert_eq(decided, 12 * 1000 / text.length())
+  let r = semantic_readiness(text, s, step=1) catch {
+    _ => return assert_true(false, msg="semantic_readiness failed")
+  }
+  assert_eq(r.verdict.ok, false)
+  // `settled_permille` is the fraction at which every followed path was final,
+  // and the refusal is exactly that moment: the value settled *and* was refused
+  // on the same delta.
+  assert_eq(r.settled_permille, decided)
+  // `schema_permille` answers "may I execute" and never fires on a document
+  // that is invalid; that meaning does not change.
+  assert_eq(r.schema_permille, 1000)
+}
+
+///|
+test "a wrong kind under a constraint still reports the whole declaration" {
+  // A kind mismatch is not a constraint violation, and the payload says which
+  // declaration was not met rather than pretending the value was in range.
+  let s = sr_schema("{!limit:integer(minimum:0)}")
+  let evs = match sr_feed_one_by_one("{\"limit\":\"ten\"}", s) {
+    Some(e) => e
+    None => return assert_true(false, msg="byte-wise stream failed")
+  }
+  assert_eq(sr_names(evs), "field_invalid:limit,root_invalid:")
+  let payload = match evs[0].event {
+    FieldInvalid(p, e) => p + "|" + e
+    _ => "not a field_invalid"
+  }
+  assert_eq(payload, "limit|integer(minimum:0)")
+}
+
+///|
+test "string constraints are refused on the closing quote" {
+  // `maxLength` is decided when the string ends, so the tail behind it is not
+  // paid for; and the message names the length rather than the kind.
+  let text = "{\"code\":\"ABCD\",\"pad\":\"" + "z".repeat(150) + "\"}"
+  let s = sr_schema("{!code:string(maxLength:3)}")
+  let evs = match sr_feed_one_by_one(text, s) {
+    Some(e) => e
+    None => return assert_true(false, msg="byte-wise stream failed")
+  }
+  assert_eq(sr_names(evs), "field_rejected:code,root_invalid:")
+  assert_eq(sr_rejected(evs), Some(("string with length <= 3", "string")))
+  // `"ABCD"` ends at code unit 14 (the closing quote of the value).
+  assert_eq(sr_at(evs, "field_rejected"), 14)
+  // `enum` and `pattern` refuse the same way.
+  let e = sr_schema("{!kind:string(enum:[\"low\",\"high\"])}")
+  let ev = match sr_feed_one_by_one("{\"kind\":\"nope\",\"t\":1}", e) {
+    Some(x) => x
+    None => return assert_true(false, msg="byte-wise stream failed")
+  }
+  assert_eq(sr_rejected(ev), Some(("one of [\"low\",\"high\"]", "string")))
+  let pt = sr_schema("{!code:string(pattern:[A-Z])}")
+  let pv = match sr_feed_one_by_one("{\"code\":\"ab\",\"t\":1}", pt) {
+    Some(x) => x
+    None => return assert_true(false, msg="byte-wise stream failed")
+  }
+  assert_eq(sr_rejected(pv), Some(("string of characters in [A-Z]", "string")))
+}
+
+///|
+test "a value that satisfies its constraint is ready, not refused" {
+  let s = sr_schema("{!limit:integer(minimum:0),!name:string(maxLength:4)}")
+  let evs = match sr_feed_one_by_one("{\"limit\":5,\"name\":\"abcd\"}", s) {
+    Some(e) => e
+    None => return assert_true(false, msg="byte-wise stream failed")
+  }
+  assert_eq(sr_names(evs), "field_ready:limit,field_ready:name,root_ready:")
+  let w = match sr_watch("{\"limit\":5,\"name\":\"abcd\"}", s, 1) {
+    Some(x) => x
+    None => return assert_true(false, msg="watcher did not build")
+  }
+  assert_eq(w.concluded(), true)
+  assert_eq(w.all_settled(), true)
+  assert_eq(w.ready_count(), 2)
+  assert_eq(w.verdict().ok, true)
+}
+
+///|
+test "the three readiness numbers do not move because constraints exist" {
+  // The 0.7.0 rule: constraints add refusals, they do not redefine the numbers.
+  // A document that satisfies the constrained declaration is measured exactly
+  // as the same document against the bare kind.
+  let text = "{\"limit\":5,\"note\":\"" + "x".repeat(120) + "\"}"
+  for step in [1, 7, 64] {
+    let bare = semantic_readiness(text, sr_schema("{!limit:integer}"), step~) catch {
+      _ => return assert_true(false, msg="semantic_readiness failed")
+    }
+    let constrained = semantic_readiness(
+      text,
+      sr_schema("{!limit:integer(minimum:0)}"),
+      step~,
+    ) catch {
+      _ => return assert_true(false, msg="semantic_readiness failed")
+    }
+    assert_eq(constrained.syntax_permille, bare.syntax_permille)
+    assert_eq(constrained.settled_permille, bare.settled_permille)
+    assert_eq(constrained.schema_permille, bare.schema_permille)
+    assert_eq(constrained.verdict.ok, bare.verdict.ok)
+  }
+  // A constraint violated by the last member is decided at the end, which is
+  // where it was decided before constraints existed.
+  let late = semantic_readiness(
+    "{\"note\":\"" + "x".repeat(120) + "\",\"limit\":-1}",
+    sr_schema("{!note:string,!limit:integer(minimum:0)}"),
+    step=1,
+  ) catch {
+    _ => return assert_true(false, msg="semantic_readiness failed")
+  }
+  assert_eq(late.verdict.ok, false)
+  assert_eq(late.settled_permille, 1000)
+}
+
+///|
+test "field_rejected has a JSON form like every other event" {
+  let s = sr_schema("{!n:number(exclusiveMinimum:1.5)}")
+  let evs = match sr_feed_one_by_one("{\"n\":1}", s) {
+    Some(e) => e
+    None => return assert_true(false, msg="byte-wise stream failed")
+  }
+  assert_eq(
+    evs[0].event.to_json(),
+    "{\"kind\":\"field_rejected\",\"path\":\"n\",\"expected\":\"number > 1.5\",\"got\":\"number\"}",
+  )
+  // The value 1 is an integer, and `number` admits it: the constraint is what
+  // refuses it, and the number is spelled the way JSON spells it.
+  assert_eq(evs[0].event.kind(), "field_rejected")
+  assert_eq(
+    evs[1].event.to_json(),
+    "{\"kind\":\"root_invalid\",\"path\":\"\",\"offset\":7}",
+  )
 }

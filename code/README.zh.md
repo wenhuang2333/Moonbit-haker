@@ -5,10 +5,10 @@
 | | |
 | --- | --- |
 | 模块 | `zhanshishan/jsonmend` |
-| 版本 | 0.5.0 |
+| 版本 | 0.7.0 |
 | 许可证 | Apache-2.0 |
 | 首选后端 | `wasm`（同时支持 `native` 与 `js`） |
-| 预编译产物 | [Release `v0.5.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.5.0)——Linux CLI、wasm 探针、浏览器包、`SHA256SUMS` |
+| 预编译产物 | [Release `v0.6.1`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.6.1)——Linux CLI、wasm 探针、浏览器包、`SHA256SUMS` |
 | 发行渠道 | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
 
 ## 特性
@@ -343,7 +343,7 @@ jsonmend llm [选项] [文件]
 | `--batch` | 逐行读 `{"id","input"}`，逐行输出 `{"id","rc","exactness","codes","value","text"}`。 |
 | `llm` 子命令 | `jsonmend llm [--provider anthropic\|openai] [--sse] [--follow] [文件]`：把事件流喂给 provider 适配器。 |
 | `-h`、`--help` | 显示帮助。 |
-| `--version` | 显示版本（`jsonmend 0.5.0`）。 |
+| `--version` | 显示版本（`jsonmend 0.7.0`）。 |
 | `--policy NAME` | 安全档位：`permissive`、`interactive`、`execution`、`agent` 或 `strict`（见 `SafetyPolicy`）。 |
 | `--schema DECL` | 骨架声明，如 `{!query:string,!limit:integer}`；`explain` 会额外打印语法就绪与骨架就绪两层数字。 |
 | `--json` | 与 `explain` 同用：输出机器可读的 JSON 计划，而不是文本块。 |
@@ -489,9 +489,10 @@ moon run bench --target js --release
 
 ## 路线图
 
-- ~~发布到 mooncakes.io~~：`zhanshishan/jsonmend` 0.3.0 / 0.4.0 / **0.5.0** 已发布（0.5.0 的 `moon publish` 退出码 0）。
-- ~~给浏览器演示页加一个播放「模型流」的标签页~~：`static/demo/live.html` 已落地（四个真实场景逐帧重放，含重试面板）。
+- ~~发布到 mooncakes.io~~：`zhanshishan/jsonmend` 0.3.0 … **0.6.1** 已发布（每个版本的 `moon publish` 退出码均为 0）；0.7.0 是当前开发版本（见 `moon.mod`）。
+- ~~给浏览器演示页加一个播放「模型流」的标签页~~：`static/demo/live.html` 已落地（四个真实场景逐帧重放，含重试面板），线上地址 <https://wenhuang2333.github.io/Moonbit-haker/live.html>。
 - ~~把就绪曲线扩展到「调用方真正需要的字段」~~：`Schema` + `semantic_readiness` 已落地（语法/骨架两层分数）。
+- ~~给骨架加约束~~：`minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern`（字符类子集，不是正则）已在 0.7.0 落地。
 - **`--schema` 的约束语言**：目前只有类型，没有 `minimum` / `enum` / `maxLength` 之类的约束；下一步可以加一层「声明即校验」。
 - **把 `semantic_readiness` 做成增量**：现在是全量重放（32.7× `repair`），用 `FieldTracker` 的增量路径可以做到只在新成员定稿时计算。
 - 让增量流变便宜：把操作编码进可复用缓冲、共享路径前缀，目标从 1.40–1.46 倍降到 ≤1.11 倍。

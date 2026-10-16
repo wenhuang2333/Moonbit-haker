@@ -1,0 +1,83 @@
+# Per-file coverage exemptions for code/tests/coverage.sh (Q-37).
+#
+# One line per accepted uncovered line of a core file:
+#     <file>\t<line>\t<source text of that line, trimmed>
+#
+# The ratchet: this list may only shrink. A core line that is uncovered and
+# not recorded here fails the gate (it used to be covered), a recorded line
+# that is covered now fails it too (delete the entry), and
+# `coverage.sh --update-exemptions` refuses to write a larger list unless
+# COVERAGE_FORCE_EXEMPTIONS=1. The line number is a hint: matching is done on
+# the source text, so inserting code above an entry does not invalidate it.
+plan.mbt	450	syntactic = true
+plan.mbt	518	sb.write_string(", ")
+plan.mbt	532	sb.write_string(", ")
+plan.mbt	637	if opts.skip_prose && refused_no_json(e) && is_valid_json(input) {
+plan.mbt	646	let again : Options = { ..opts, skip_prose: false, }
+plan.mbt	648	retried = Some(analyze_once(input, again, step, schema))
+plan.mbt	650	e2 => retried = Some(plan_of_error(e2, input))
+plan.mbt	654	Some(p) => p
+plan.mbt	665	match e {
+plan.mbt	666	NoJsonFound(_) => true
+plan.mbt	667	_ => false
+plan.mbt	758	sb.write_string("  schema = ")
+plan.mbt	759	sb.write_string(self.schema_satisfied.to_string())
+plan.mbt	760	sb.write_string("/")
+plan.mbt	761	sb.write_string(self.schema_total.to_string())
+plan.mbt	762	if self.schema_missing.length() > 0 {
+plan.mbt	763	sb.write_string(" (missing ")
+plan.mbt	764	for i = 0; i < self.schema_missing.length(); i = i + 1 {
+plan.mbt	765	if i > 0 {
+plan.mbt	766	sb.write_string(", ")
+plan.mbt	768	sb.write_string(self.schema_missing[i])
+plan.mbt	770	sb.write_string(")")
+plan.mbt	772	sb.write_string("\n")
+plan.mbt	894	sb.write_string(",")
+schema.mbt	1015	raise SchemaError(
+schema.mbt	1017	p.i.to_string(),
+schema.mbt	1025	raise SchemaError(
+schema.mbt	1027	open.to_string(),
+schema.mbt	1033	raise SchemaError(
+schema.mbt	1034	" schema: `enum` expects a JSON array at offset " + open.to_string(),
+schema.mbt	1178	raise SchemaError(
+schema.mbt	1180	open.to_string(),
+schema.mbt	1215	raise SchemaError(
+schema.mbt	1217	open.to_string(),
+schema.mbt	135	} => true
+schema.mbt	1498	path
+schema.mbt	1532	path
+schema.mbt	1697	None => 0
+schema.mbt	1705	_ => return -1
+schema.mbt	1710	None => ()
+schema.mbt	1773	None => 0
+schema.mbt	1801	1000
+schema.mbt	1809	1000
+schema.mbt	236	0x74 => if u == 0x09 { hit = true } // \t
+schema.mbt	237	0x72 => if u == 0x0D { hit = true } // \r
+schema.mbt	238	0x5C | 0x5D | 0x2D | 0x5E => if u == e { hit = true } // \\ \] \- \^
+schema.mbt	239	_ => ()
+schema.mbt	413	inner.name()
+schema.mbt	457	Arr(_) | Obj(_) => inner.stringify()
+schema.mbt	460	inner.stringify()
+schema.mbt	478	return true
+schema.mbt	726	base
+schema.mbt	744	raise SchemaError(" `(` of the constraint list is never closed")
+schema.mbt	747	p.i = p.i + 1
+schema.mbt	766	raise SchemaError(" `(` of the constraint list is never closed")
+schema.mbt	804	raise SchemaError(
+schema.mbt	805	" schema: expected a constraint name at offset " + p.i.to_string(),
+schema.mbt	815	0x0A => "\\n"
+schema.mbt	816	0x09 => "\\t"
+schema.mbt	817	0x0D => "\\r"
+schema.mbt	949	raise SchemaError(
+schema.mbt	953	at.to_string() +
+stream_readiness.mbt	326	Index(i) => i.to_string()
+stream_readiness.mbt	380	return out
+stream_readiness.mbt	385	if idx >= 0 && s.length() > 0 && s.at(0).to_int() != 0x30 {
+stream_readiness.mbt	386	out.push(Index(idx))
+stream_readiness.mbt	399	(Index(x), Index(y)) => x == y
+stream_readiness.mbt	400	_ => false
+stream_readiness.mbt	429	None => false
+stream_readiness.mbt	475	Index(i) => i.to_string()
+stream_readiness.mbt	589	return Some((p, "missing"))
+stream_readiness.mbt	738	self.syntax_at = self.bytes

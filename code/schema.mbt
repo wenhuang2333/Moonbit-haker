@@ -18,21 +18,50 @@
 //
 //   any | null | boolean | number | integer | string
 //   { member* }        member := ("!" key | "?" key) ":" schema (";" | ",")?
+//   [ schema ]
+//   kind ( constraints )?      constraints := constraint ("," | ";")*
 //
 // A member is required by default: `!` is written for the reader, not for the
 // parser. `Schema::stringify` always writes the marker back, so the text form
 // has one canonical spelling and a round trip is exact.
-//   [ schema ]
 //
 // The text form exists so that a demo, a test and a CLI flag can all use the
 // same declaration without a JSON Schema implementation to parse it. It is a
-// skeleton, not a contract: `integer` checks the value is a whole number,
-// `string` checks it is a string, and nothing checks a range, a length or a
-// format, because a streaming library that started checking those would be a
-// validator with worse error messages.
+// skeleton, not a contract, and it is still not a JSON Schema implementation.
+//
+// Since 0.7.0 a kind may carry *value* constraints, because a streaming caller
+// that refuses `{"limit":-1}` the moment `-1` is final saves the rest of the
+// stream and the shape check alone could not do that:
+//
+//   integer(minimum:1)                     number(exclusiveMaximum:1.5)
+//   string(maxLength:64,minLength:1)       any(enum:["low","high"])
+//   [string(pattern:[a-zA-Z0-9_])]
+//
+// The names are JSON Schema's (`minimum`, `exclusiveMinimum`, `maximum`,
+// `exclusiveMaximum`, `minLength`, `maxLength`, `enum`), the spelling is the
+// declaration language's own (`key:value`, separated by `,` or `;`), and the
+// set of constraints each kind accepts is enforced at parse time: `maxLength`
+// on an `integer` is an `E070`, not a rule that silently never fires. `enum`
+// takes a JSON literal array and is allowed on any kind. The one deliberate
+// restriction is `pattern`: it is a *character-class subset*, not a regular
+// expression. `pattern:[...]` accepts a value whose every character is in the
+// class, and any other regular-expression syntax (`*`, `+`, `?`, `|`, `.`,
+// anchors, groups, alternation) is an `E070` rather than a silently different
+// meaning. There is no regex engine behind this file and there is no plan to
+// add one.
+//
+// Backward compatibility: a declaration that parsed before 0.7.0 parses to the
+// same schema, `stringify()` still writes it the same way, and `accepts` /
+// `evaluate` on it do exactly what they did. A constraint is only visible when
+// one was written.
 
 ///|
-/// The kinds a skeleton declaration can name (FR-36).
+/// The kinds a skeleton declaration can name (FR-36), plus a scalar kind with
+/// value constraints written after it (0.7.0).
+///
+/// `parse` never builds `Constrained` with an empty constraint list, so a
+/// declaration without constraints is the plain kind and matches exactly the
+/// schema 0.6.x produced.
 pub(all) enum Schema {
   Any
   Null
@@ -42,6 +71,7 @@ pub(all) enum Schema {
   Str
   Arr(Schema)
   Obj(Array[SchemaMember])
+  Constrained(Schema, Constraints)
 }
 
 ///|
@@ -51,6 +81,293 @@ pub(all) struct SchemaMember {
   /// A member that is not required does not hold up readiness.
   required : Bool
   schema : Schema
+}
+
+///|
+/// Value constraints attached to a declared kind (0.7.0).
+///
+/// Every field is optional and `None` means "declared nothing", so an empty
+/// `Constraints` is exactly the absence of constraints. The type is public so
+/// that a caller can build a declaration in MoonBit as well as in text; the
+/// text form and this struct carry the same information.
+pub(all) struct Constraints {
+  mut minimum : Double?
+  mut exclusive_minimum : Double?
+  mut maximum : Double?
+  mut exclusive_maximum : Double?
+  mut min_length : Int32?
+  mut max_length : Int32?
+  /// The exact values `enum` admits, in declaration order.
+  mut enum_values : Array[Json]?
+  /// The character class of `pattern`, exactly as written between the brackets
+  /// (`a-z0-9_`), including a leading `^` for a negated class.
+  mut pattern : String?
+}
+
+///|
+/// A constraint list with nothing declared.
+pub fn Constraints::none() -> Constraints {
+  {
+    minimum: None,
+    exclusive_minimum: None,
+    maximum: None,
+    exclusive_maximum: None,
+    min_length: None,
+    max_length: None,
+    enum_values: None,
+    pattern: None,
+  }
+}
+
+///|
+/// Whether nothing is constrained.
+fn Constraints::is_empty(self : Constraints) -> Bool {
+  match self {
+    {
+      minimum: None,
+      exclusive_minimum: None,
+      maximum: None,
+      exclusive_maximum: None,
+      min_length: None,
+      max_length: None,
+      enum_values: None,
+      pattern: None,
+    } => true
+    _ => false
+  }
+}
+
+///|
+/// Canonical text of a constraint number, so that `minimum:0` round trips as
+/// `minimum:0` rather than `minimum:0.0`.
+fn constraint_number_text(d : Double) -> String {
+  Json::number(d).stringify()
+}
+
+///|
+/// Canonical text of the constraint list, in a fixed order, as it is written
+/// between the parentheses. `Constraints::none().text() == ""`.
+fn Constraints::text(self : Constraints) -> String {
+  let parts : Array[String] = []
+  match self.minimum {
+    Some(d) => parts.push("minimum:" + constraint_number_text(d))
+    None => ()
+  }
+  match self.exclusive_minimum {
+    Some(d) => parts.push("exclusiveMinimum:" + constraint_number_text(d))
+    None => ()
+  }
+  match self.maximum {
+    Some(d) => parts.push("maximum:" + constraint_number_text(d))
+    None => ()
+  }
+  match self.exclusive_maximum {
+    Some(d) => parts.push("exclusiveMaximum:" + constraint_number_text(d))
+    None => ()
+  }
+  match self.min_length {
+    Some(n) => parts.push("minLength:" + n.to_string())
+    None => ()
+  }
+  match self.max_length {
+    Some(n) => parts.push("maxLength:" + n.to_string())
+    None => ()
+  }
+  match self.enum_values {
+    Some(vs) => parts.push("enum:" + enum_literals_text(vs))
+    None => ()
+  }
+  match self.pattern {
+    Some(cls) => parts.push("pattern:[" + cls + "]")
+    None => ()
+  }
+  parts.join(",")
+}
+
+///|
+/// Canonical text of an `enum` list.
+fn enum_literals_text(vs : Array[Json]) -> String {
+  let parts : Array[String] = []
+  for v in vs {
+    parts.push(v.stringify())
+  }
+  "[" + parts.join(",") + "]"
+}
+
+///|
+/// Whether code unit `u` belongs to the character class `inner`.
+///
+/// The class language is intentionally not a regular expression: a set of
+/// literals and ranges, a leading `^` to negate it, and the six common
+/// shorthands. Every code unit of the *value* is tested against the set; there
+/// is nothing to concatenate and nothing to quantify.
+fn class_unit_in(inner : String, u : Int32) -> Bool {
+  let n = inner.length()
+  let mut i = 0
+  let mut negated = false
+  if n > 0 && inner.at(0).to_int() == 0x5E {
+    negated = true
+    i = 1
+  }
+  let mut hit = false
+  while i < n {
+    let c = inner.at(i).to_int()
+    if c == 0x5C && i + 1 < n {
+      let e = inner.at(i + 1).to_int()
+      match e {
+        0x64 => if u >= 0x30 && u <= 0x39 { hit = true } // \d
+        0x77 =>
+          if (u >= 0x30 && u <= 0x39) ||
+            (u >= 0x41 && u <= 0x5A) ||
+            (u >= 0x61 && u <= 0x7A) ||
+            u == 0x5F {
+            hit = true
+          } // \w
+        0x73 =>
+          if u == 0x20 ||
+            u == 0x09 ||
+            u == 0x0A ||
+            u == 0x0D ||
+            u == 0x0B ||
+            u == 0x0C {
+            hit = true
+          } // \s
+        0x6E => if u == 0x0A { hit = true } // \n
+        0x74 => if u == 0x09 { hit = true } // \t
+        0x72 => if u == 0x0D { hit = true } // \r
+        0x5C | 0x5D | 0x2D | 0x5E => if u == e { hit = true } // \\ \] \- \^
+        _ => ()
+      }
+      i = i + 2
+      continue
+    }
+    // `a-z`: a `-` that has a character on both sides is a range, and the
+    // character before it was already allowed to match on its own, so only the
+    // upper end is new.
+    if c == 0x2D && i > 0 && i + 1 < n {
+      let lo = inner.at(i - 1).to_int()
+      let hi = inner.at(i + 1).to_int()
+      if u >= lo && u <= hi {
+        hit = true
+      }
+      i = i + 2
+      continue
+    }
+    if u == c {
+      hit = true
+    }
+    i = i + 1
+  }
+  if negated {
+    !hit
+  } else {
+    hit
+  }
+}
+
+///|
+/// Whether every code unit of `s` is in the class `inner`. The empty string is
+/// in every class by vacuity; use `minLength` for "at least one".
+fn class_accepts(inner : String, s : String) -> Bool {
+  for k = 0; k < s.length(); k = k + 1 {
+    if !class_unit_in(inner, s.at(k).to_int()) {
+      return false
+    }
+  }
+  true
+}
+
+///|
+/// The first declared constraint `v` violates, as the phrase `evaluate` and the
+/// watcher report it, or `None` when `v` satisfies all of them.
+///
+/// `base` is the kind the constraint is attached to (`integer`, `string`, …)
+/// so that the phrase reads the way a caller would write it. Only the value
+/// matters: whether the kind matches is the caller's check.
+fn Constraints::violation(
+  self : Constraints,
+  base : String,
+  v : Json,
+) -> String? {
+  let d = match v {
+    Json::Number(x, ..) => Some(x)
+    _ => None
+  }
+  match d {
+    Some(x) => {
+      match self.minimum {
+        Some(m) =>
+          if x < m {
+            return Some(base + " >= " + constraint_number_text(m))
+          }
+        None => ()
+      }
+      match self.exclusive_minimum {
+        Some(m) =>
+          if x <= m {
+            return Some(base + " > " + constraint_number_text(m))
+          }
+        None => ()
+      }
+      match self.maximum {
+        Some(m) =>
+          if x > m {
+            return Some(base + " <= " + constraint_number_text(m))
+          }
+        None => ()
+      }
+      match self.exclusive_maximum {
+        Some(m) =>
+          if x >= m {
+            return Some(base + " < " + constraint_number_text(m))
+          }
+        None => ()
+      }
+    }
+    None => ()
+  }
+  match v {
+    Json::String(s) => {
+      match self.min_length {
+        Some(n) =>
+          if s.length() < n {
+            return Some("string with length >= " + n.to_string())
+          }
+        None => ()
+      }
+      match self.max_length {
+        Some(n) =>
+          if s.length() > n {
+            return Some("string with length <= " + n.to_string())
+          }
+        None => ()
+      }
+      match self.pattern {
+        Some(cls) =>
+          if !class_accepts(cls, s) {
+            return Some("string of characters in [" + cls + "]")
+          }
+        None => ()
+      }
+    }
+    _ => ()
+  }
+  match self.enum_values {
+    Some(vs) => {
+      let mut hit = false
+      for e in vs {
+        if json_equal(e, v) {
+          hit = true
+          break
+        }
+      }
+      if !hit {
+        return Some("one of " + enum_literals_text(vs))
+      }
+    }
+    None => ()
+  }
+  None
 }
 
 ///|
@@ -69,7 +386,9 @@ pub impl Eq for SchemaMember with fn equal(
 pub extend SchemaMember with Eq::{not_equal, equal}
 
 ///|
-/// Stable name of a kind, as it is written in the text form.
+/// Stable name of a kind, as it is written in the text form. Constraints are
+/// not part of the kind, so a constrained `integer` is still named `integer`;
+/// see `Schema::expectation` for the declaration as it was written.
 pub fn Schema::name(self : Schema) -> String {
   match self {
     Any => "any"
@@ -80,6 +399,22 @@ pub fn Schema::name(self : Schema) -> String {
     Str => "string"
     Arr(_) => "array"
     Obj(_) => "object"
+    Constrained(inner, _) => inner.name()
+  }
+}
+
+///|
+/// The declaration as a caller would have written it: the kind alone when
+/// nothing is constrained, `integer(minimum:0)` when something is.
+pub fn Schema::expectation(self : Schema) -> String {
+  match self {
+    Constrained(inner, c) =>
+      if c.is_empty() {
+        inner.name()
+      } else {
+        inner.name() + "(" + c.text() + ")"
+      }
+    _ => self.name()
   }
 }
 
@@ -114,6 +449,19 @@ pub fn Schema::stringify(self : Schema) -> String {
       sb.write_char('}')
       sb.to_string()
     }
+    // A container carries no constraint anywhere the text form can express one:
+    // the parser accepts a constraint list only after a scalar kind, so writing
+    // one back would produce text that does not parse.
+    Constrained(inner, c) =>
+      match inner {
+        Arr(_) | Obj(_) => inner.stringify()
+        _ =>
+          if c.is_empty() {
+            inner.stringify()
+          } else {
+            inner.stringify() + "(" + c.text() + ")"
+          }
+      }
     _ => self.name()
   }
 }
@@ -322,28 +670,28 @@ fn sp_schema(p : SchemaParser) -> Schema raise MendError {
     raise SchemaError(" expected a type or `{`, found a quoted string")
   } else if sp_at(p, "any") {
     p.i = p.i + 3
-    Any
+    sp_wrap_constraints(p, Any)
   } else if sp_at(p, "null") {
     p.i = p.i + 4
-    Null
+    sp_wrap_constraints(p, Null)
   } else if sp_at(p, "boolean") {
     p.i = p.i + 7
-    Bool
+    sp_wrap_constraints(p, Bool)
   } else if sp_at(p, "bool") {
     p.i = p.i + 4
-    Bool
+    sp_wrap_constraints(p, Bool)
   } else if sp_at(p, "integer") {
     p.i = p.i + 7
-    Int
+    sp_wrap_constraints(p, Int)
   } else if sp_at(p, "int") {
     p.i = p.i + 3
-    Int
+    sp_wrap_constraints(p, Int)
   } else if sp_at(p, "number") {
     p.i = p.i + 6
-    Num
+    sp_wrap_constraints(p, Num)
   } else if sp_at(p, "string") {
     p.i = p.i + 6
-    Str
+    sp_wrap_constraints(p, Str)
   } else {
     raise SchemaError(
       "schema: unknown type at offset " +
@@ -351,6 +699,537 @@ fn sp_schema(p : SchemaParser) -> Schema raise MendError {
       ": " +
       p.text[p.i:].to_owned(),
     )
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The constraint list (0.7.0).
+//
+// It is written immediately after a scalar kind — `integer(minimum:0)` — and
+// not after a space, because a space is already how the language separates a
+// schema from the next member (`{a:integer b:string}` has two members). Only
+// the `(` is treated as attached, so every declaration that parsed before this
+// existed still parses the same way.
+// ---------------------------------------------------------------------------
+
+///|
+/// The constraint list of a kind, or the kind itself when there is none.
+fn sp_wrap_constraints(
+  p : SchemaParser,
+  base : Schema,
+) -> Schema raise MendError {
+  if p.i >= p.text.length() || p.text.at(p.i).to_int() != 0x28 {
+    return base
+  }
+  let c = sp_constraints(p, base)
+  if c.is_empty() {
+    base
+  } else {
+    Constrained(base, c)
+  }
+}
+
+///|
+/// Parse `(name:value, ...)`. `p.i` is at the `(`.
+fn sp_constraints(
+  p : SchemaParser,
+  base : Schema,
+) -> Constraints raise MendError {
+  let n = p.text.length()
+  p.i = p.i + 1
+  let out = Constraints::none()
+  while true {
+    sp_skip_ws(p)
+    if p.i >= n {
+      raise SchemaError(" `(` of the constraint list is never closed")
+    }
+    if p.text.at(p.i).to_int() == 0x29 {
+      p.i = p.i + 1
+      break
+    }
+    let name_at = p.i
+    let name = sp_constraint_name(p)
+    sp_skip_ws(p)
+    if p.i >= n || p.text.at(p.i).to_int() != 0x3A {
+      raise SchemaError(
+        " schema: constraint `" +
+        name +
+        "` has no `:` at offset " +
+        name_at.to_string(),
+      )
+    }
+    p.i = p.i + 1
+    sp_skip_ws(p)
+    sp_constraint_value(p, name, base, name_at, out)
+    sp_skip_ws(p)
+    if p.i >= n {
+      raise SchemaError(" `(` of the constraint list is never closed")
+    }
+    let d = p.text.at(p.i).to_int()
+    if d == 0x2C || d == 0x3B {
+      p.i = p.i + 1
+    } else if d == 0x29 {
+      p.i = p.i + 1
+      break
+    } else {
+      raise SchemaError(
+        " schema: unexpected `" +
+        sp_char_text(p.text.at(p.i)) +
+        "` in a constraint list at offset " +
+        p.i.to_string() +
+        "; expected `,`, `;` or `)`",
+      )
+    }
+  }
+  out
+}
+
+///|
+/// One constraint name: ASCII letters, matched case-insensitively against the
+/// eight names the language has.
+fn sp_constraint_name(p : SchemaParser) -> String raise MendError {
+  let n = p.text.length()
+  let sb = StringBuilder()
+  while p.i < n {
+    let c = p.text.at(p.i).to_int()
+    if (c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A) {
+      sb.write_char(Int32::unsafe_to_char(c))
+      p.i = p.i + 1
+    } else {
+      break
+    }
+  }
+  let name = sb.to_string()
+  if name == "" {
+    raise SchemaError(
+      " schema: expected a constraint name at offset " + p.i.to_string(),
+    )
+  }
+  name
+}
+
+///|
+/// One character of input as it appears in a diagnostic.
+fn sp_char_text(u : UInt16) -> String {
+  match u.to_int() {
+    0x0A => "\\n"
+    0x09 => "\\t"
+    0x0D => "\\r"
+    _ => Int32::unsafe_to_char(u.to_int()).to_string()
+  }
+}
+
+///|
+/// Whether two ASCII names are equal ignoring case.
+fn name_eq_ci(a : String, b : String) -> Bool {
+  if a.length() != b.length() {
+    return false
+  }
+  for i = 0; i < a.length(); i = i + 1 {
+    let x = a.at(i).to_int()
+    let y = b.at(i).to_int()
+    let fx = if x >= 0x41 && x <= 0x5A { x | 0x20 } else { x }
+    let fy = if y >= 0x41 && y <= 0x5A { y | 0x20 } else { y }
+    if fx != fy {
+      return false
+    }
+  }
+  true
+}
+
+///|
+/// Parse and check the value of one constraint, writing it into `out`.
+fn sp_constraint_value(
+  p : SchemaParser,
+  name : String,
+  base : Schema,
+  name_at : Int32,
+  out : Constraints,
+) -> Unit raise MendError {
+  let kind = base.name()
+  if name_eq_ci(name, "minimum") ||
+    name_eq_ci(name, "exclusiveMinimum") ||
+    name_eq_ci(name, "maximum") ||
+    name_eq_ci(name, "exclusiveMaximum") {
+    if kind != "number" && kind != "integer" {
+      raise SchemaError(
+        " schema: `" +
+        name +
+        "` applies to `number` and `integer`, not to `" +
+        kind +
+        "`, at offset " +
+        name_at.to_string(),
+      )
+    }
+    let d = sp_constraint_number(p, name)
+    if name_eq_ci(name, "minimum") {
+      out.minimum = Some(d)
+    } else if name_eq_ci(name, "exclusiveMinimum") {
+      out.exclusive_minimum = Some(d)
+    } else if name_eq_ci(name, "maximum") {
+      out.maximum = Some(d)
+    } else {
+      out.exclusive_maximum = Some(d)
+    }
+    return
+  }
+  if name_eq_ci(name, "minLength") || name_eq_ci(name, "maxLength") {
+    if kind != "string" {
+      raise SchemaError(
+        " schema: `" +
+        name +
+        "` applies to `string`, not to `" +
+        kind +
+        "`, at offset " +
+        name_at.to_string(),
+      )
+    }
+    let len = sp_constraint_length(p, name)
+    if name_eq_ci(name, "minLength") {
+      out.min_length = Some(len)
+    } else {
+      out.max_length = Some(len)
+    }
+    return
+  }
+  if name_eq_ci(name, "enum") {
+    out.enum_values = Some(sp_constraint_enum(p, base))
+    return
+  }
+  if name_eq_ci(name, "pattern") {
+    if kind != "string" {
+      raise SchemaError(
+        " schema: `pattern` applies to `string`, not to `" +
+        kind +
+        "`, at offset " +
+        name_at.to_string(),
+      )
+    }
+    out.pattern = Some(sp_constraint_class(p))
+    return
+  }
+  raise SchemaError(
+    " schema: unknown constraint `" +
+    name +
+    "` at offset " +
+    name_at.to_string() +
+    "; the language has minimum, exclusiveMinimum, maximum, exclusiveMaximum, minLength, maxLength, enum and pattern",
+  )
+}
+
+///|
+/// The token of a numeric constraint, parsed as JSON so that the accepted
+/// spellings are exactly JSON's (`1`, `-1`, `1.5`, `1e3`) and nothing else.
+fn sp_constraint_number(
+  p : SchemaParser,
+  name : String,
+) -> Double raise MendError {
+  let at = p.i
+  let tok = sp_constraint_token(p)
+  if tok == "" {
+    raise SchemaError(
+      " schema: `" + name + "` expects a number at offset " + at.to_string(),
+    )
+  }
+  let parsed = @json.parse(tok) catch {
+    _ =>
+      raise SchemaError(
+        " schema: `" +
+        name +
+        "` expects a number at offset " +
+        at.to_string() +
+        ": `" +
+        tok +
+        "`",
+      )
+  }
+  match parsed {
+    Json::Number(d, ..) => d
+    _ =>
+      raise SchemaError(
+        " schema: `" +
+        name +
+        "` expects a number at offset " +
+        at.to_string() +
+        ": `" +
+        tok +
+        "`",
+      )
+  }
+}
+
+///|
+/// A run of characters that can appear in a number.
+fn sp_constraint_token(p : SchemaParser) -> String {
+  let n = p.text.length()
+  let sb = StringBuilder()
+  while p.i < n {
+    let c = p.text.at(p.i).to_int()
+    if (c >= 0x30 && c <= 0x39) ||
+      c == 0x2D ||
+      c == 0x2B ||
+      c == 0x2E ||
+      c == 0x65 ||
+      c == 0x45 {
+      sb.write_char(Int32::unsafe_to_char(c))
+      p.i = p.i + 1
+    } else {
+      break
+    }
+  }
+  sb.to_string()
+}
+
+///|
+/// A length constraint: a non-negative integer, so that `minLength:-1` and
+/// `maxLength:1.5` are `E070` rather than a rule that never fires.
+fn sp_constraint_length(
+  p : SchemaParser,
+  name : String,
+) -> Int32 raise MendError {
+  let at = p.i
+  let d = sp_constraint_number(p, name)
+  if !(d >= 0.0) || d > 2147483647.0 || d != d.to_int().to_double() {
+    raise SchemaError(
+      " schema: `" +
+      name +
+      "` expects a non-negative integer at offset " +
+      at.to_string() +
+      ": `" +
+      constraint_number_text(d) +
+      "`",
+    )
+  }
+  d.to_int()
+}
+
+///|
+/// An `enum` value: a JSON array of scalars, so that the spelling, the escapes
+/// and the number forms are JSON's and not a new dialect.
+fn sp_constraint_enum(
+  p : SchemaParser,
+  base : Schema,
+) -> Array[Json] raise MendError {
+  let n = p.text.length()
+  if p.i >= n || p.text.at(p.i).to_int() != 0x5B {
+    raise SchemaError(
+      " schema: `enum` expects a JSON array of literals at offset " +
+      p.i.to_string(),
+    )
+  }
+  let open = p.i
+  let close = sp_scan_brackets(p, open)
+  let slice = p.text[open:close].to_owned()
+  let parsed = @json.parse(slice) catch {
+    _ =>
+      raise SchemaError(
+        " schema: `enum` is not a valid JSON array at offset " +
+        open.to_string(),
+      )
+  }
+  let items = match parsed {
+    Json::Array(a) => a
+    _ =>
+      raise SchemaError(
+        " schema: `enum` expects a JSON array at offset " + open.to_string(),
+      )
+  }
+  if items.length() == 0 {
+    raise SchemaError(
+      " schema: `enum` needs at least one value at offset " + open.to_string(),
+    )
+  }
+  for v in items {
+    match v {
+      Json::Null
+      | Json::True
+      | Json::False
+      | Json::Number(_, ..)
+      | Json::String(_) => ()
+      _ =>
+        raise SchemaError(
+          " schema: `enum` admits only scalar literals at offset " +
+          open.to_string(),
+        )
+    }
+    // A literal the declared kind can never hold would be a rule that silently
+    // never fires, which is the failure mode this parser exists to prevent.
+    if !kind_accepts(base, v) {
+      raise SchemaError(
+        " schema: `enum` value " +
+        v.stringify() +
+        " is not a " +
+        base.name() +
+        ", at offset " +
+        open.to_string(),
+      )
+    }
+  }
+  p.i = close
+  items
+}
+
+///|
+/// Index just after the bracket run that starts at `start`: a JSON array (or
+/// any bracketed text) balanced across strings and escapes.
+fn sp_scan_brackets(p : SchemaParser, start : Int32) -> Int32 raise MendError {
+  let n = p.text.length()
+  let mut i = start
+  let mut depth = 0
+  while i < n {
+    let c = p.text.at(i).to_int()
+    if c == 0x22 {
+      i = i + 1
+      while i < n {
+        let q = p.text.at(i).to_int()
+        if q == 0x5C {
+          i = i + 2
+          continue
+        }
+        if q == 0x22 {
+          i = i + 1
+          break
+        }
+        i = i + 1
+      }
+      continue
+    }
+    if c == 0x5B || c == 0x7B {
+      depth = depth + 1
+    } else if c == 0x5D || c == 0x7D {
+      depth = depth - 1
+      if depth <= 0 {
+        return i + 1
+      }
+    }
+    i = i + 1
+  }
+  raise SchemaError(
+    " schema: the array of `enum` is never closed at offset " +
+    start.to_string(),
+  )
+}
+
+///|
+/// A `pattern` value: one character class, `[...]`, and nothing else.
+fn sp_constraint_class(p : SchemaParser) -> String raise MendError {
+  let n = p.text.length()
+  if p.i >= n || p.text.at(p.i).to_int() != 0x5B {
+    raise SchemaError(
+      " schema: `pattern` accepts a character class `[...]` and nothing else, at offset " +
+      p.i.to_string(),
+    )
+  }
+  let open = p.i
+  p.i = p.i + 1
+  let sb = StringBuilder()
+  while p.i < n && p.text.at(p.i).to_int() != 0x5D {
+    let c = p.text.at(p.i).to_int()
+    if c == 0x5C && p.i + 1 < n {
+      sb.write_char(Int32::unsafe_to_char(c))
+      sb.write_char(Int32::unsafe_to_char(p.text.at(p.i + 1).to_int()))
+      p.i = p.i + 2
+      continue
+    }
+    sb.write_char(Int32::unsafe_to_char(c))
+    p.i = p.i + 1
+  }
+  if p.i >= n {
+    raise SchemaError(
+      " schema: the character class of `pattern` is never closed at offset " +
+      open.to_string(),
+    )
+  }
+  p.i = p.i + 1
+  let inner = sb.to_string()
+  guard_class(inner, open)
+  inner
+}
+
+///|
+/// Reject anything a character class cannot mean, at parse time and with the
+/// offset of the class: an empty class, an escape that is not one of the eight,
+/// a range that starts or ends at an escape, and an inverted range. Everything
+/// else (including `.`, `*` and `+` inside the brackets) is a literal character,
+/// which is the whole point of "a character class, not a regular expression".
+fn guard_class(inner : String, open : Int32) -> Unit raise MendError {
+  let n = inner.length()
+  let mut i = 0
+  let mut prev_escape = false
+  if n == 0 {
+    raise SchemaError(
+      " schema: an empty character class matches nothing, at offset " +
+      open.to_string(),
+    )
+  }
+  if inner.at(0).to_int() == 0x5E {
+    i = 1
+    if i >= n {
+      raise SchemaError(
+        " schema: `[^]` negates an empty character class, at offset " +
+        open.to_string(),
+      )
+    }
+  }
+  while i < n {
+    let c = inner.at(i).to_int()
+    if c == 0x5C {
+      if i + 1 >= n {
+        raise SchemaError(
+          " schema: `\\` ends the character class of `pattern` at offset " +
+          open.to_string(),
+        )
+      }
+      let e = inner.at(i + 1).to_int()
+      if !(e == 0x5C ||
+        e == 0x5D ||
+        e == 0x2D ||
+        e == 0x5E ||
+        e == 0x6E ||
+        e == 0x74 ||
+        e == 0x72 ||
+        e == 0x64 ||
+        e == 0x77 ||
+        e == 0x73) {
+        raise SchemaError(
+          " schema: `\\" +
+          Int32::unsafe_to_char(e).to_string() +
+          "` is not a character class escape at offset " +
+          open.to_string() +
+          "; the language has \\\\ \\] \\- \\^ \\n \\t \\r \\d \\w \\s",
+        )
+      }
+      prev_escape = true
+      i = i + 2
+      continue
+    }
+    if c == 0x2D && i > 0 && i + 1 < n {
+      if prev_escape {
+        raise SchemaError(
+          " schema: a character class range cannot start at an escape, at offset " +
+          open.to_string(),
+        )
+      }
+      let hi = inner.at(i + 1).to_int()
+      if hi == 0x5C {
+        raise SchemaError(
+          " schema: a character class range cannot end at an escape, at offset " +
+          open.to_string(),
+        )
+      }
+      if inner.at(i - 1).to_int() > hi {
+        raise SchemaError(
+          " schema: the character class range at offset " +
+          open.to_string() +
+          " is inverted",
+        )
+      }
+      prev_escape = false
+      i = i + 2
+      continue
+    }
+    prev_escape = false
+    i = i + 1
   }
 }
 
@@ -423,7 +1302,12 @@ pub fn Schema::parse(text : String) -> Schema raise MendError {
 // ---------------------------------------------------------------------------
 
 ///|
-/// One declared member whose value does not have the declared kind (FR-36).
+/// One declared member whose value does not satisfy its declaration (FR-36).
+///
+/// `expected` is the violated constraint when there is exactly one to name
+/// (`integer >= 0`, `string with length <= 64`, `one of ["low","high"]`,
+/// `string of characters in [a-z]`) and the whole declaration otherwise
+/// (`integer(minimum:0)`).
 pub(all) struct SchemaMismatch {
   path : String
   expected : String
@@ -437,11 +1321,13 @@ pub(all) struct SchemaVerdict {
   /// A member of an `any` or `array` node is not walked: the skeleton says
   /// nothing about it.
   total : Int32
-  /// Required members that are present and hold a value of the declared kind.
+  /// Required members that are present and satisfy the declared kind and the
+  /// declared constraints.
   satisfied : Int32
   /// Required members that are absent, as dotted paths.
   missing : Array[String]
-  /// Present members that hold a value of the wrong kind.
+  /// Present members that hold a value of the wrong kind or violate a declared
+  /// constraint.
   mismatched : Array[SchemaMismatch]
   /// Whether every required member is satisfied. Optional members are checked
   /// for kind when present and never counted as missing.
@@ -461,9 +1347,9 @@ fn is_integer(v : Json) -> Bool {
 }
 
 ///|
-/// Whether `v` has the declared kind (FR-36).
-pub fn Schema::accepts(self : Schema, v : Json) -> Bool {
-  match (self, v) {
+/// Whether `v` has the declared kind (FR-36), ignoring constraints.
+fn kind_accepts(schema : Schema, v : Json) -> Bool {
+  match (schema, v) {
     (Any, _) => true
     (Null, Json::Null) => true
     (Bool, Json::True) | (Bool, Json::False) => true
@@ -473,6 +1359,51 @@ pub fn Schema::accepts(self : Schema, v : Json) -> Bool {
     (Arr(_), Json::Array(_)) => true
     (Obj(_), Json::Object(_)) => true
     _ => false
+  }
+}
+
+///|
+/// Whether `v` has the declared kind **and** satisfies the declared value
+/// constraints (FR-36, 0.7.0). A declaration with no constraints accepts
+/// exactly what it accepted in 0.6.x.
+pub fn Schema::accepts(self : Schema, v : Json) -> Bool {
+  match self {
+    Constrained(inner, c) => {
+      if !kind_accepts(inner, v) {
+        return false
+      }
+      match c.violation(inner.name(), v) {
+        None => true
+        Some(_) => false
+      }
+    }
+    _ => kind_accepts(self, v)
+  }
+}
+
+///|
+/// The constraint `v` violates, when the kind is right. `None` means either
+/// "no constraint was violated" or "the kind itself is wrong"; the caller
+/// reports the whole declaration in the second case.
+fn Schema::constraint_problem(self : Schema, v : Json) -> String? {
+  match self {
+    Constrained(inner, c) =>
+      if kind_accepts(inner, v) {
+        c.violation(inner.name(), v)
+      } else {
+        None
+      }
+    _ => None
+  }
+}
+
+///|
+/// The `expected` string of a mismatch: the violated constraint when there is
+/// exactly one to name, the whole declaration otherwise.
+fn mismatch_expected(schema : Schema, v : Json) -> String {
+  match schema.constraint_problem(v) {
+    Some(e) => e
+    None => schema.expectation()
   }
 }
 
@@ -489,6 +1420,14 @@ fn join_path(base : String, step : String) -> String {
 ///|
 /// Walk `value` against `schema` (FR-36). `path` is the dotted prefix of the
 /// node, empty at the root.
+///
+/// `evaluate` walks *declared members*: a root that declares no members has
+/// none to walk, which is why a bare kind at the root (`integer`, `string`) is
+/// only answered by `accepts` and not by a mismatch. A constrained kind is the
+/// exception, and deliberately so: a constraint is an explicit claim about the
+/// value, and a claim that is silently dropped is worse than no claim, so a
+/// constrained scalar at the root is checked here (`integer(minimum:0)` against
+/// `-1` reports `integer >= 0` as `expected`).
 pub fn Schema::evaluate(self : Schema, value : Json) -> SchemaVerdict {
   let total : Array[Int32] = [0]
   let satisfied : Array[Int32] = [0]
@@ -546,7 +1485,7 @@ fn walk_schema(
             } else {
               mismatched.push({
                 path: here,
-                expected: m.schema.name(),
+                expected: mismatch_expected(m.schema, child),
                 got: kind_of(child),
               })
             }
@@ -580,7 +1519,7 @@ fn walk_schema(
             } else {
               mismatched.push({
                 path: here,
-                expected: inner.name(),
+                expected: mismatch_expected(inner, items[i]),
                 got: kind_of(items[i]),
               })
             }
@@ -595,6 +1534,14 @@ fn walk_schema(
             expected: "array",
             got: kind_of(value),
           })
+      }
+    Constrained(_, _) =>
+      if path == "" && !schema.accepts(value) {
+        mismatched.push({
+          path: "<root>",
+          expected: mismatch_expected(schema, value),
+          got: kind_of(value),
+        })
       }
     _ => ()
   }
@@ -777,6 +1724,37 @@ pub fn syntax_readiness_permille(input : String, step? : Int32) -> Int32 {
 /// fraction of the input — but it no longer rebuilds the value tree a thousand
 /// times, and `settled_permille` is new: the moment the answer became final
 /// even when the answer is no.
+///
+/// ## `duplicate_keys KeepFirst` (Q-36)
+///
+/// There is one implementation, not two. Before 0.7.0 this function had a second
+/// one — the 0.5.0 sampling loop — reachable only through `KeepFirst`, because
+/// the watcher's delta stream cannot carry a value that `KeepFirst` dropped. The
+/// second implementation measured the same quantity by a different mechanism, so
+/// its numbers were the *same kind* of number and not the same number, and it
+/// was the last caller of the sampling loop.
+///
+/// It is gone. What happens now is a **composition**, and the split is stated
+/// here because the two halves are answered from different places:
+///
+///   * the three permille numbers come from the watcher, which measures under
+///     `duplicate_keys: KeepLast` (see `SemanticWatcher`): when the value at
+///     each followed path stopped changing, and when the skeleton was
+///     satisfied. On a document with a repeated name whose two values differ,
+///     `settled_permille` is the first time every followed path was final — the
+///     *first* value's offset, the same number the sampling loop reported — and
+///     `syntax_permille` is measured on a tree the second value also touched, so
+///     it can be *later* than before; never earlier, and only on documents with
+///     duplicate names. `schema_permille` follows `settled` and the verdict;
+///   * the `verdict` comes from `parse(input, options=opts)`, i.e. from the
+///     caller's own duplicate-key policy. Under `KeepFirst` the first value is
+///     the real one, so `verdict` is the `KeepFirst` truth even though the
+///     watcher observed the last value. This is what keeps the two from
+///     disagreeing silently: the numbers are a property of the *input*, the
+///     verdict is a property of the *policy*.
+///
+/// `RepairPlan` and the analysis path are unaffected: they take their verdict
+/// from `parse` under the requested options, as they always did.
 pub fn semantic_readiness(
   input : String,
   schema : Schema,
@@ -786,12 +1764,6 @@ pub fn semantic_readiness(
   let opts = match options {
     Some(o) => o
     None => Options::default()
-  }
-  if opts.duplicate_keys is KeepFirst {
-    // The delta stream cannot represent a value it had to ignore, and
-    // `Options::validate` refuses the pair, so this one option value keeps the
-    // sampling implementation. It is the only caller of it.
-    return semantic_readiness_sampled(input, schema, step?, options?)
   }
   let n = input.length()
   let st = auto_step(
@@ -814,7 +1786,14 @@ pub fn semantic_readiness(
   let fin = w.finish()
   let required = schema.required_paths()
   let none_required = required.length() == 0
-  let verdict = schema.evaluate(fin.value)
+  // The verdict is the caller's: the watcher measured under `KeepLast`, so when
+  // `KeepFirst` was asked for, the truth is what `parse` under those options
+  // produces (Q-36).
+  let verdict = if opts.duplicate_keys is KeepFirst {
+    schema.evaluate(parse(input, options=opts).value)
+  } else {
+    schema.evaluate(fin.value)
+  }
   let syntax = if w.syntax_at() < 0 { 1000 } else { permille(w.syntax_at(), n) }
   let settled = if none_required {
     0
@@ -838,104 +1817,6 @@ pub fn semantic_readiness(
     syntax_permille: syntax,
     schema_permille: schema_perm,
     settled_permille: settled,
-    step: st,
-    verdict,
-  }
-}
-
-///|
-/// The 0.5.0 sampling implementation, kept for `duplicate_keys KeepFirst`
-/// (FR-36). `O(n / step)` partial parses, each followed by a path lookup per
-/// required member.
-fn semantic_readiness_sampled(
-  input : String,
-  schema : Schema,
-  step? : Int32,
-  options? : Options,
-) -> SemanticReadiness raise MendError {
-  let n = input.length()
-  let fin = parse(input, options?)
-  let verdict = schema.evaluate(fin.value)
-  let st = auto_step(
-    n,
-    match step {
-      Some(v) => v
-      None => 0
-    },
-  )
-  let parser = PartialParser::new(options?)
-  let required = schema.required_paths()
-  let mut syntax = 1000
-  let mut schema_perm = 1000
-  let mut syntax_seen = false
-  // A skeleton that requires nothing is satisfied at the start; the value is
-  // still reported as 0 so that "no work outstanding" is distinguishable from
-  // "not before the end" (1000).
-  let mut schema_seen = required.length() == 0
-  if schema_seen {
-    schema_perm = 0
-  }
-  // The same moment without the "and the skeleton is satisfied" condition, so
-  // that a decidable-and-invalid document still reports when it was decided
-  // (FR-39).
-  let mut settled_seen = required.length() == 0
-  let mut settled_perm = if settled_seen { 0 } else { 1000 }
-  let mut i = 0
-  while i < n {
-    let next = if i + st > n { n } else { i + st }
-    parser.feed(input[i:next].to_owned())
-    i = next
-    let p = permille(i, n)
-    let snap = parser.snapshot()
-    if !syntax_seen {
-      match snap.value {
-        Some(v) =>
-          if json_equal(v, fin.value) {
-            syntax = p
-            syntax_seen = true
-          }
-        None => ()
-      }
-    }
-    if !settled_seen || (!schema_seen && verdict.ok) {
-      // "Every required member is already final": for each declared required
-      // path, the value the snapshot holds there must be the value it ends up
-      // with. Nothing else is required — not the end of the document, and not
-      // the members the caller did not ask for.
-      match snap.value {
-        Some(v) => {
-          let mut all = true
-          for path in required {
-            let now = lookup_path(v, path)
-            let finv = lookup_path(fin.value, path)
-            let same = match (now, finv) {
-              (Some(x), Some(y)) => json_equal(x, y)
-              _ => false
-            }
-            if !same {
-              all = false
-              break
-            }
-          }
-          if all {
-            if !settled_seen {
-              settled_perm = p
-              settled_seen = true
-            }
-            if !schema_seen && verdict.ok {
-              schema_perm = p
-              schema_seen = true
-            }
-          }
-        }
-        None => ()
-      }
-    }
-  }
-  {
-    syntax_permille: syntax,
-    schema_permille: schema_perm,
-    settled_permille: settled_perm,
     step: st,
     verdict,
   }

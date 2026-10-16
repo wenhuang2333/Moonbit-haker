@@ -38,7 +38,7 @@ bash code/tests/bench.sh size     # 只量产物体积
 
 | 新行 | 测的是什么 |
 | --- | --- |
-| `semantic_readiness sampled (0.5.0)` | 0.5.0 的实现。它仍在 `schema.mbt` 里，可由 `duplicate_keys: KeepFirst` 的回退路径触达，因此改动前后的差距可以在**同一次运行里**量出来，而不是引用上一份报告的数字 |
+| ~~`semantic_readiness sampled (0.5.0)`~~ | 0.6.0 的对照行，**0.7.0 已删除**（Q-36：采样实现不再存在，`KeepFirst` 改为有文档的组合语义）。0.5.0 的数字只存在于 git 历史里：`git show cce9ba6:code/docs/BENCHMARK.md`（或 `git log -S 'semantic_readiness sampled (0.5.0)' -- code/docs/BENCHMARK.md` 找到那一版）。 |
 | `field_readiness` | FR-29 曲线（20 份扁平记录语料），多两列 µs/KiB |
 | `watcher chunk 64` | 真正的流式路径：每份文档一个 `SemanticWatcher`，64 码元分块，每块 drain 一次事件 |
 | `decided` | `decided_at_permille`：在输入的百分之几处答案已经定了 |
@@ -161,9 +161,9 @@ moon run bench --target native --release   # 看 readiness 两行
 
 - **改善约 9.4 – 11.6×**（1 794 µs/KiB → 155 – 191 µs/KiB），来源是去掉了
   「约一千次 partial parse + snapshot」：现在是一次解析、每步一次增量开销，
-  曲线是**增量流的副产物**而不是重放。旧实现在 0.6.0 里仍可通过
-  `duplicate_keys: KeepFirst` 回退路径触达，`bench_gate` 的
-  `semantic_readiness sampled (0.5.0)` 行就是把两者放在同一次运行里对比。
+  曲线是**增量流的副产物**而不是重放。0.6.0 的 `bench_gate` 里有一行
+  `semantic_readiness sampled (0.5.0)` 把两者放在同一次运行里对比；**0.7.0 删除了那一行
+  和它对应的实现**（Q-36），所以这份对照现在只在 git 历史里（`git show cce9ba6:code/docs/BENCHMARK.md`）。
 - 这份成本仍偏向**测量工具**：`readiness` 子命令用于评估与配图，热路径上用
   `SemanticWatcher` / `FieldTracker`（每块 drain 一次，不取文档分数）。
 - 十分位曲线在这份语料上接近对角线，说明「第 k 个成员在第 k/10 处定稿」——
@@ -187,7 +187,6 @@ analyze	20 calls, 99515 bytes	1.4 ms	72.46 us/call	1.00x repair	65.5 MB/s
 analyze for_agent	20 calls, 99515 bytes	2.0 ms	101.00 us/call	1.39x repair	47.0 MB/s
 analyze +schema	20 calls, 99515 bytes	2.0 ms	100.00 us/call	1.38x repair	47.5 MB/s
 semantic_readiness	20 calls, 99515 bytes	4.0 ms	202.00 us/call	2.79x repair	23.5 MB/s
-semantic_readiness sampled (0.5.0)	20 calls, 99515 bytes	44.7 ms	2233.33 us/call	30.82x repair	2.1 MB/s
 field_readiness	20 calls, 99515 bytes	5.4 ms	271.05 us/call	3.74x repair	55.78 us/KiB	17.5 MB/s
 watcher chunk 64	20 calls, 99515 bytes	2.4 ms	119.05 us/call	1.64x repair	39.9 MB/s
 decided	20 calls, 99515 bytes	3.8 ms	188.89 us/call	2.61x repair	25.1 MB/s
@@ -203,10 +202,14 @@ decided	20 calls, 99515 bytes	3.8 ms	188.89 us/call	2.61x repair	25.1 MB/s
 | `analyze` + `Options::for_agent()` | 98.0 – 113.3 µs | 1.20 – 1.59× | 41.9 – 50.7 MB/s | 1.33 – 1.36× |
 | `analyze` + `for_agent` + 骨架 | 94.3 – 122.0 µs | 1.21 – 1.71× | 38.9 – 51.7 MB/s | 1.38 – 1.45× |
 | `semantic_readiness`（0.6.0，增量驱动） | **191 – 248 µs** | **2.42 – 3.47×** | 19.2 – 24.0 MB/s | **2 283 – 2 300 µs = 32.7 – 34.3×** |
-| `semantic_readiness sampled`（0.5.0 实现） | 2 150 – 3 150 µs | 30.8 – 44.1× | 1.5 – 2.2 MB/s | 同上 |
 | `field_readiness`（FR-29 曲线） | 266 – 333 µs（54.7 – 68.6 µs/KiB） | 3.67 – 4.67× | 14.2 – 17.9 MB/s | 不适用（当时只有 `readiness` 行） |
 | `watcher chunk 64`（流式路径） | **114 – 143 µs** | **1.64 – 2.00×** | 33.2 – 41.8 MB/s | 不适用 |
 | `decided`（`decided_at_permille`） | 179 – 243 µs | 2.54 – 3.40× | 19.5 – 26.6 MB/s | 不适用 |
+
+0.7.0 删除 `sampled` 行后的复测（同机同轮，`moon run bench --target native --release`，
+单位 µs/call / 相对 `repair`）：`semantic_readiness` 192.31 = **2.81×**、
+`field_readiness` 255.00 = 3.72×（52.48 µs/KiB）、`watcher chunk 64` 113.64 = 1.66×、
+`decided` 182.14 = 2.66×。删除的是**对照行**，不是测量：其余各行与 0.6.0 的区间一致。
 
 读法：
 
@@ -219,9 +222,10 @@ decided	20 calls, 99515 bytes	3.8 ms	188.89 us/call	2.61x repair	25.1 MB/s
 - **0.5.0 的 33 倍变成了 2.4 – 3.5 倍**（约 **10.6 – 12.7×** 改善）。旧实现按 1‰ 步长
   重放解析器、每次取快照并沿 `required_paths` 逐条查路径；0.6.0 只喂一遍文档、
   每步 drain 一次增量，两个分数由 watcher 记下的偏移换算（FR-39）。
-  同一次运行内两者之比（5 次）：2 233/202 = 11.1×、2 267/204 = 11.1×、3 150/248 = 12.7×、
-  2 150/202 = 10.6×、2 367/191 = 12.4×。
-  这个比值比绝对时间稳，因为分子分母同时受机器抖动影响。
+  0.6.0 报告里的同轮比值（2 233/202 = 11.1×、2 267/204 = 11.1×、3 150/248 = 12.7×、
+  2 150/202 = 10.6×、2 367/191 = 12.4×）来自那一版的 `bench_gate` 对照行；
+  **0.7.0 起这条对照行没有了**（采样实现被删除，Q-36），跨版本比较改为引用 0.5.0 报告值，
+  见上方指针。比值比绝对时间稳，因为分子分母同时受机器抖动影响。
   `semantic_readiness` 现在**是**可以放进热路径的诊断，而不再是只能离线跑的测量。
 - **`watcher chunk 64` 才是流式 API 的真实单价**（1.64 – 2.00× `repair`）：它不需要
   把「什么时候」折算成文档百分比，每 64 码元 feed 一次并 drain 一次（约 78 次/文档）。
@@ -230,8 +234,8 @@ decided	20 calls, 99515 bytes	3.8 ms	188.89 us/call	2.61x repair	25.1 MB/s
   这不是缺点：百分比是审计要的，事件流是运行时用的事件。
 - 复现：`moon build bench --target native --release && ./_build/native/release/build/bench/bench.exe`，
   看 `repair` / `analyze` / `analyze for_agent` / `analyze +schema` /
-  `semantic_readiness` / `semantic_readiness sampled (0.5.0)` / `field_readiness` /
-  `watcher chunk 64` / `decided` 九行。
+  `semantic_readiness` / `field_readiness` / `watcher chunk 64` / `decided` 八行
+  （0.6.0 的第九行 `semantic_readiness sampled (0.5.0)` 已在 0.7.0 删除）。
 
 ## 判定
 
@@ -246,7 +250,7 @@ decided	20 calls, 99515 bytes	3.8 ms	188.89 us/call	2.61x repair	25.1 MB/s
 | NFR-PERF-04 内存 | 分模式报告，见「内存指标的重新定义」一节；**统一的「≤ 4 × 输入」阈值已撤销** | `repair` / `analyze` 报峰值 RSS（建树，无阈值）；流式路径报峰值工作集。0.5.0 自比 18–38 × 输入、横向对照 Node 10.6 × / Python 14.3 × / JSONMend 13.7 × | 已按模式重新定义；**text-only ≤ 4 ×、no-tree ≤ 2 × 两条目标属于 0.7，0.6.0 不声称达标** |
 | NFR-SIZE-01 产物体积 | wasm-gc release ≤ 150 KB（未压缩） | 103 784 B（101.4 KiB）（`bench/probe`） | 达标 |
 | NFR-PERF-08 安全层开销（0.5.0 新增，无阈值） | 报告 `analyze` 相对 `repair` 的倍数 | `analyze` 0.95 – 1.03×；`+for_agent` 1.20 – 1.59×；`+schema` 1.21 – 1.71×（与前者之差在噪声内） | 已实测（计划与骨架几乎免费） |
-| NFR-PERF-09 增量就绪（0.6.0 新增，无阈值） | 报告增量就绪相对 `repair` 的倍数，以及它相对 0.5.0 实现的改善 | `semantic_readiness` **191 – 248 µs = 2.42 – 3.47×**（0.5.0 实现同机同轮 2 150 – 3 150 µs = 30.82 – 44.10×，同轮比值 **10.6 – 12.7×**）；`field_readiness` 266 – 333 µs = 3.67 – 4.67×（54.7 – 68.6 µs/KiB）；`watcher`（64 码元分块）114 – 143 µs = **1.64 – 2.00×**；`decided` 179 – 243 µs = 2.54 – 3.40× | 已实测 |
+| NFR-PERF-09 增量就绪（0.6.0 新增，无阈值） | 报告增量就绪相对 `repair` 的倍数，以及它相对 0.5.0 实现的改善 | `semantic_readiness` **191 – 248 µs = 2.42 – 3.47×**（0.5.0 报告值 2 150 – 3 150 µs = 30.82 – 44.10×；0.7.0 起不再同轮对照，见 `docs/BENCHMARK.md` 的 git 历史指针）；`field_readiness` 266 – 333 µs = 3.67 – 4.67×（54.7 – 68.6 µs/KiB）；`watcher`（64 码元分块）114 – 143 µs = **1.64 – 2.00×**；`decided` 179 – 243 µs = 2.54 – 3.40× | 已实测 |
 
 ### JS 后端的线性度问题（未达标项）
 

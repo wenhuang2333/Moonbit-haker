@@ -26,36 +26,93 @@
 
 ## 规则总览
 
-| 规则 | 名称 | 级别 | 触发条件 |
-| --- | --- | --- | --- |
-| R001 | StripFence | Info | `strip_fence=true` 且文档前导或根值之后出现三个反引号围栏行 |
-| R002 | StripComment | Info | 字符串外出现 `//` 行注释或 `/* */` 块注释 |
-| R003 | NormalizeQuote | Info | 字符串用单引号或弯引号作界定符；或前瞻判定候选结束引号为内容 |
-| R004 | QuoteBareWord | Info | 裸词既非字面量（前缀）也非数字形态，出现在键位置或容器内的值位置 |
-| R005 | RemoveExtraComma | Info | 尾逗号、前导逗号或连续逗号 |
-| R006 | InsertComma | Info | 容器内两个值/键之间缺少逗号 |
-| R007 | InsertColon | Info | 对象中键之后缺少冒号 |
-| R008 | FillNull | Warning | 对象中有键无值即遇到闭合符、逗号或输入结束；或无合法前缀的数字形态 token |
-| R009 | CloseContainer | Warning | 输入结束时仍有未闭合的数组或对象 |
-| R010 | CloseString | Warning | 输入结束时字符串仍未闭合 |
-| R011 | FixNumber | Warning | 数字形态 token 的规范化结果与原文不同（去 `+`、去前导零、补零、去尾点、去残缺指数） |
-| R012 | ConvertLiteral | Warning | 字面量前缀补全、Python/JS 写法，或 `NaN`/`Infinity` 按 `non_finite` 转换 |
-| R013 | EscapeControl | Info | 字符串内出现未转义的控制字符（码元 < 0x20） |
-| R014 | FixEscape | Warning | 非法转义、残缺 `\u` 序列，或未配对的代理码元 |
-| R015 | MismatchedCloser | Info | 数组遇到 `}`，或对象遇到 `]` |
-| R016 | DropUnexpected | Warning | 当前状态无法识别的内容、非注释的 `/`、以及 `multi_root=KeepFirst` 时根值之后的内容 |
-| R017 | DropExtraCloser | Info | 根值结束后、栈空时出现多余的 `}` 或 `]` |
-| R018 | MergeDuplicateKey | 见下 | 对象中同一个键被赋值两次；两次取值结构相等时为 Info，否则 Warning。这是**重复键规范化**（合法 JSON 的语义歧义），不是修复非法 JSON |
-| R019 | ConcatStrings | Info | 相邻字符串用 `+` 拼接（BR-21） |
-| R020 | DropEllipsis | Warning | 独立的 `...` 裸词占位符 |
-| R021 | SkipProse | Info | `skip_prose=true` 且第一个 `{` 或 `[` 之前存在非空白文字 |
-| R022 | NormalizeLiteral | Info | 字面量**只是 ASCII 大小写变体**（`True`、`FALSE`、`nUll`）：判据是 `ascii_lower(text) == canon`。`None`、`NULL`→`null` 这类**换词**不走这条规则，走 R012 `ConvertLiteral`（Warning，因为补全的是另一个词） |
+| 规则 | 名称 | 级别 | 触发条件 | 能在合法 JSON 上触发 |
+| --- | --- | --- | --- | --- |
+| R001 | StripFence | Info | `strip_fence=true` 且文档前导或根值之后出现三个反引号围栏行 | 否 |
+| R002 | StripComment | Info | 字符串外出现 `//` 行注释或 `/* */` 块注释 | 否 |
+| R003 | NormalizeQuote | Info | 字符串用单引号或弯引号作界定符；或前瞻判定候选结束引号为内容 | 否 |
+| R004 | QuoteBareWord | Info | 裸词既非字面量（前缀）也非数字形态，出现在键位置或容器内的值位置 | 否 |
+| R005 | RemoveExtraComma | Info | 尾逗号、前导逗号或连续逗号 | 否 |
+| R006 | InsertComma | Info | 容器内两个值/键之间缺少逗号 | 否 |
+| R007 | InsertColon | Info | 对象中键之后缺少冒号 | 否 |
+| R008 | FillNull | Warning | 对象中有键无值即遇到闭合符、逗号或输入结束；或无合法前缀的数字形态 token | 否 |
+| R009 | CloseContainer | Warning | 输入结束时仍有未闭合的数组或对象 | 否 |
+| R010 | CloseString | Warning | 输入结束时字符串仍未闭合 | 否 |
+| R011 | FixNumber | Warning | 数字形态 token 的规范化结果与原文不同（去 `+`、去前导零、补零、去尾点、去残缺指数） | 否 |
+| R012 | ConvertLiteral | Warning | 字面量前缀补全、Python/JS 写法，或 `NaN`/`Infinity` 按 `non_finite` 转换 | 否 |
+| R013 | EscapeControl | Info | 字符串内出现未转义的控制字符（码元 < 0x20） | 否 |
+| R014 | FixEscape | Warning | 非法转义、残缺 `\u` 序列，或未配对的代理码元 | **是**（†） |
+| R015 | MismatchedCloser | Info | 数组遇到 `}`，或对象遇到 `]` | 否 |
+| R016 | DropUnexpected | Warning | 当前状态无法识别的内容、非注释的 `/`、以及 `multi_root=KeepFirst` 时根值之后的内容 | 否 |
+| R017 | DropExtraCloser | Info | 根值结束后、栈空时出现多余的 `}` 或 `]` | 否 |
+| R018 | MergeDuplicateKey | 见下 | 对象中同一个键被赋值两次；两次取值结构相等时为 Info，否则 Warning。这是**重复键规范化**（合法 JSON 的语义歧义），不是修复非法 JSON | **是** |
+| R019 | ConcatStrings | Info | 相邻字符串用 `+` 拼接（BR-21） | 否 |
+| R020 | DropEllipsis | Warning | 独立的 `...` 裸词占位符 | 否 |
+| R021 | SkipProse | Info | `skip_prose=true` 且第一个 `{` 或 `[` 之前存在非空白文字 | 否 |
+| R022 | NormalizeLiteral | Info | 字面量**只是 ASCII 大小写变体**（`True`、`FALSE`、`nUll`）：判据是 `ascii_lower(text) == canon`。`None`、`NULL`→`null` 这类**换词**不走这条规则，走 R012 `ConvertLiteral`（Warning，因为补全的是另一个词） | 否 |
+
+† **R014 的边界，就在这一行下面写清楚**：`{"a":"\ud800"}`（孤立高位代理转义）是
+**合法 JSON**——`json.loads` 与 `JSON.parse` 都接受它——而 JSONMend 因为要把它替换成
+U+FFFD，会登记 R014 并让 `RepairPlan::valid_json` 变成 `false`。也就是说
+**`valid_json` 不是「严格解析器接受这个输入」**，而是「这次不需要规范化」；
+两者在 R014 的代理分支上分叉。语料里的这类文件是 `i_string_1st_surrogate_but_2nd_missing.json`
+与 `i_string_incomplete_surrogates_escape_valid.json`（共 11 个 `i_*` 文件、13 条 R014 记录，`y_*` 里一个都没有），
+`code/tests/eval/run_independent.py` 的「Hard criterion」一节把这条**具名残留**打印出来，
+而不是留在脚注里。详见下面「能在合法 JSON 上触发」一节的第二条。
 
 “级别”一列取自 `RepairCode::severity()`（0.3.0 起 R015/R017/R021 已按此表降为 Info）。
 三个调用点会传入**显式级别**覆盖默认值，除此之外 `severity()` 是唯一来源：
 R003 的前瞻分支（Warning）、R004 的值位置（Warning）、R018 的相等判断（Info↔Warning）。
 级别是**精确度标签**（`Exactness`）的唯一依据：任一 Warning 记录即 `Lossy`，
 只有 Info 记录即 `Cosmetic`，无记录即 `Exact`。详见 [RULES 末节](#级别与精确度标签)。
+
+### “能在合法 JSON 上触发”一列
+
+“合法 JSON”指的是**与 `code/tests/eval/run_independent.py` 同一个严格判据**：`json.loads`
+在字节流上成功（`NaN`/`Infinity` 经 `parse_constant` 拒绝），并以 Node `JSON.parse` 交叉
+校验。这正是该评估里 `y_*` 文件族的含义，也就是 `run_independent.py` 那条硬性判据
+（合法文件上只允许 `R018`）所指的对象。一列的值都以 `code/engine_flow.mbt` 的登记点为
+依据，而**不是**以“语料里没见过”为依据：
+
+- **R018**（`MergeDuplicateKey`，`engine_flow.mbt` 的 `assign`：`map.contains(k)` 分支）：
+  RFC 8259 允许重复名，所以带重复键的对象是合法 JSON，而默认策略仍会合并并登记。严格判据
+  之所以接受它，是因为丢弃是**语义规范化**而不是语法修复。
+- **R014**（`FixEscape`）**也是“是”**，这一列在 0.7.0 之前的那份说明里说的是“只有 R018 是”，
+  那是错的。R014 有两条分支：非法转义/残缺 `\u`（`\q`、`\x`、截断的 `\u12`）确实是非法
+  JSON；但**未配对的代理码元**（`"\ud800"`、`"\udc00"`，或一个高位代理后面直接跟别的
+  东西）在 RFC 8259 与两个判据里都是**合法**的——`json.loads` 和 `JSON.parse` 都接受它，
+  返回一个含孤立代理的字符串。JSONMend 把孤立代理替换为 U+FFFD（`push_code_point(0xFFFD)`）
+  并登记 R014（Warning）。`code/tests/eval/third_party/jsontestsuite` 里这样的文件都归在
+  `i_*` 族（11 个文件、13 条记录，例如 `i_string_1st_surrogate_but_2nd_missing.json`），`y_*` 族里
+  一个都没有，所以 `run_independent.py` 的硬性判据（只作用于 `y_*`）仍然是绿的。
+  复现命令：`python3 test/probe_valid_json_rules.py`（第 1 遍列出 13 个语料文件，
+  第 2 遍的 `lone high/low surrogate escape` 两个手写样例）。
+- 其余 20 条**否**：每条的前置条件都是严格判据会拒绝的输入——未闭合的容器/字符串
+  （R009、R010）、缺失分隔符（R006、R007）、多余逗号（R005）、非 JSON 引号（R003）、
+  围栏/注释/说明文字（R001、R002、R021）、裸词与省略号（R004、R020）、字面量大小写变体
+  （R022）或补全（R012）、数字写法（R011）、未转义控制字符（R013）、闭合符不匹配或多余
+  （R015、R017）、语法上无法安置的内容（R016）、`+` 拼接（R019）——以及 R014 的
+  *非法转义* 分支。
+
+### `FieldInvalid` 与 `FieldRejected`：两个「这个字段不对」的区别
+
+0.7.0 起流式裁定（`ReadinessEvent`）把两件事分开，读者最容易在这里混淆：
+
+- `FieldInvalid(path, decl)`：值已定稿，但**类型不对**（wrong kind）——值与声明根本不是一类。
+  payload 是**整条声明**（`integer(minimum:0)`），因为要报的是「这里本该是个整数」。
+- `FieldRejected(path, expected, got)`：值已定稿，类型正确，但**约束不满足**（constraint violated）
+  ——`expected` 是**被违反的那一条约束**（`integer >= 0`、`string with length <= 3`、
+  `one of ["low","high"]`、`string of characters in [A-Z]`），`got` 是值的类型。
+
+两者都是裁决（`is_verdict()` 为真），都在**值定稿的那个 delta** 上发出，并同时产生同一偏移的
+`RootInvalid`；`settled_permille` / `decided_at_permille` 反映的就是这个偏移。
+
+这一列有一个直接后果，值得写下来而不是藏起来：`RepairPlan::valid_json`
+（`code/plan.mbt`，定义为“没有修复记录，或全部是 R018”）在含孤立代理的文档上会报 `false`，
+而严格判据说该输入合法。也就是说 `valid_json` 的判据是“**这次需要规范化吗**”，
+不是“输入合法吗”，两者在 R014 的代理分支上分叉。判据的适用范围（`y_*`）正是因此写在
+`run_independent.py` 里：把硬性判据从 `y_*` 扩大到严格判据接受的**全部**文件，
+就会把 R014 也判成误修，而那是一个被有意保留的语义选择，不是缺陷。
 
 ## 规则详情
 
@@ -265,6 +322,15 @@ R003 的前瞻分支（Warning）、R004 的值位置（Warning）、R018 的相
 - 触发条件：三种情形之一。其一，`\` 后跟非法转义字符（如 `\q`、`\'`）；其二，`\u` 之后不足四位十六进制就遇到非十六进制字符或输入结束；其三，出现未配对的代理码元，无论是原文中的孤立码元还是 `\uXXXX` 转义产生的孤立码元。
 - 行为：非法转义去掉反斜杠、保留后续字符；残缺 `\u` 序列整体丢弃；孤立代理码元替换为 U+FFFD。记录位置为转义的反斜杠（孤立转义码元同样取反斜杠），原文中的孤立码元取该码元本身。合法的 `\u00e9`、`\/` 会被重新编码为规范写法但不记录。
 - 金样例：G-081、G-082、G-083、G-084、G-085、G-220、G-221、G-222、G-224、G-225。
+- **能在合法 JSON 上触发（是：R014 是第二条这样的规则，见「†」脚注）**：第三种情形
+  （未配对的代理码元）在 RFC 8259 下是**合法**的，两个严格判据也都接受：
+  `{"a":"\ud800"}` 会被 `json.loads` 与 `JSON.parse` 接受，返回一个含孤立代理的字符串；
+  JSONMend 把它替换为 U+FFFD 并登记 R014（Warning），于是 `RepairPlan::valid_json` 为 `false`。
+  即 `valid_json` 的判据是「这次需要规范化吗」，不是「严格解析器接受这个输入吗」。
+  反例语料：11 个 `i_*` 文件（13 条 R014 记录；`i_string_1st_surrogate_but_2nd_missing.json`、
+  `i_string_incomplete_surrogates_escape_valid.json` …），`y_*` 族里没有；
+  复现：`python3 test/probe_valid_json_rules.py`。前两种情形（非法转义、残缺 `\u`）
+  不是合法 JSON。
 
 ```text
 输入：["\u12g"]
@@ -446,6 +512,26 @@ jsonmend: E010 StrictViolation at 1:10 (offset 9): R018 MergeDuplicateKey: exact
 输出：[true,false,null]
 记录：R022@1, R022@6, R022@12
 ```
+
+## 新增一条规则时的检查清单（0.7.0 起）
+
+新增、拆分或改变一条规则时，下面每一项都要**在同一个改动里**处理，任一项缺失都视为改动不完整：
+
+1. **动作映射**：`plan_action` 是全函数，新规则必须同时给出 `RuleSet` → `PlanOp::action`
+   的映射，否则 `plan_action` 的总性测试会失败（见文件开头与 `docs/ONEPAGE.md`）。
+2. **级别**：在 `RepairCode::severity()` 里给出默认级别；若某个调用点要用显式级别覆盖，
+   必须在《规则总览》的“级别”说明里点名。
+3. **本文档**：《规则总览》表新增一行（含“能在合法 JSON 上触发”一列）＋
+   《规则详情》一节（名称/级别/消息/触发条件/行为/金样例）＋ 一段可直接运行的金样例。
+4. **“能在合法 JSON 上触发”一列必须给出代码依据**：指向 `code/engine_flow.mbt` 里的
+   登记点，并说明该前置条件是否被严格判据接受；不能只写“语料里没见过”。
+5. **跑一遍反例探针**：`python3 test/probe_valid_json_rules.py`。若新规则能在严格判据
+   接受的输入上触发，则必须同时修改 `code/tests/eval/run_independent.py` 的
+   `Y_ALLOWED_RULE_CODES`，并在本文档里说明这是**有意的语义规范化**还是**误修**；
+   若 `Y_ALLOWED_RULE_CODES` 变了，第 3 步的那一列也要同步改。
+6. **位置**：记录位置遵守 BR-20（插入类指向插入点，删除/改写类指向被处理文本的第一个字符）。
+7. **四个后端**：`moon test --target all` 绿（wasm / wasm-gc / js / native），
+   `moon check --deny-warn` 与 `moon fmt --check` 干净。
 
 ## 已知不一致
 

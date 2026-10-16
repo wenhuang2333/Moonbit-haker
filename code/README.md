@@ -5,10 +5,10 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 | | |
 | --- | --- |
 | Module | `zhanshishan/jsonmend` |
-| Version | 0.5.0 |
+| Version | 0.7.0 |
 | License | Apache-2.0 |
 | Preferred target | `wasm` (also builds for `native` and `js`) |
-| Prebuilt binaries | [Release `v0.5.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.5.0) — Linux CLI, wasm probe, browser bundle, `SHA256SUMS` |
+| Prebuilt binaries | [Release `v0.6.1`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.6.1) — Linux CLI, wasm probe, browser bundle, `SHA256SUMS` |
 | Registry | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
 
 ## Features
@@ -336,7 +336,7 @@ Flags and their meanings:
 | `--batch` | Read `{"id","input"}` objects line by line and write one result object per line. |
 | `llm` (subcommand) | Feed a provider event stream through the adapter: `jsonmend llm [--provider anthropic\|openai] [--sse] [--follow] [file]`. |
 | `-h`, `--help` | Show help. |
-| `--version` | Show the version (`jsonmend 0.5.0`). |
+| `--version` | Show the version (`jsonmend 0.7.0`). |
 | `--policy NAME` | Safety profile: `permissive`, `interactive`, `execution`, `agent` or `strict`. |
 | `--schema DECL` | Skeleton declaration such as `{!query:string,!limit:integer}`; with `explain` it also prints the syntax-ready and schema-ready fractions. |
 | `--json` | With `explain`: the machine-readable plan instead of the text block. |
@@ -476,10 +476,10 @@ separately from the process. The full method, tables and decision records are in
 
 ## Roadmap
 
-- ~~Publish on mooncakes.io~~: `zhanshishan/jsonmend` 0.3.0, 0.4.0 and **0.5.0** are published (`moon publish` exited 0 for 0.5.0).
-- ~~A browser tab that plays a model stream~~: `static/demo/live.html`.
+- ~~Publish on mooncakes.io~~: `zhanshishan/jsonmend` 0.3.0 … **0.6.1** are published (`moon publish` exited 0 for every one); 0.7.0 is the current development version (`moon.mod`).
+- ~~A browser tab that plays a model stream~~: `static/demo/live.html`, also published at <https://wenhuang2333.github.io/Moonbit-haker/live.html>.
 - ~~Readiness for the members the caller actually needs~~: `Schema` + `semantic_readiness`.
-- **Constraints in the declaration**: the skeleton language names types only, not `minimum` / `enum` / `maxLength`.
+- ~~Constraints in the declaration~~: `minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern` (a character-class subset, not a regex) landed in 0.7.0.
 - **Make `semantic_readiness` incremental**: today it replays the document (32.7× `repair`); the delta-driven `FieldTracker` path could compute the same numbers as members settle.
 - Make the delta stream cheap: encode operations into a reusable buffer and share path prefixes, targeting ≤ 1.11 × the baseline instead of 1.40–1.46 × (lower priority now that the scenario benchmark shows it is off the critical path).
 - ~~The `FR-16` event interface~~: done as the `feed_with` thin wrapper.

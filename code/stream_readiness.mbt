@@ -43,7 +43,10 @@
 //   * *settled* — the member's last value is known. A fact about the input,
 //     independent of any declaration, and the moment a caller can stop reading
 //     if it has all the members it asked for;
-//   * *valid* — that value has the kind the skeleton declares.
+//   * *valid* — that value has the kind the skeleton declares;
+//   * *acceptable* — that value also satisfies the declared value constraints
+//     (`integer(minimum:0)`, `string(maxLength:64)`, `enum`, `pattern`, …;
+//     0.7.0).
 //
 // `semantic_readiness` only fires when the whole document happens to satisfy the
 // skeleton, so a document that is decidable-and-invalid gets
@@ -53,6 +56,28 @@
 // refusal became final, which is the `"limit":"ten"` case of the product story —
 // an argument that can be rejected while the rest of the stream is still
 // arriving, and a generation that can be cancelled instead of paid for.
+//
+// 0.7.0 extends the same mechanism from the *kind* of a value to its *value*.
+// A constraint is checked on the delta that makes the value final, so
+// `{"limit":-1, "tail":"…"}` against `{!limit:integer(minimum:0)}` is refused at
+// the digit `1`, not at the closing brace:
+//
+//   * the refusal is published as `FieldRejected` (path, expected, got) — a
+//     verdict, so a caller that only reads verdicts sees it, and a caller that
+//     wants to tell "wrong kind" from "wrong value" sees which one it was;
+//   * `RootInvalid(offset)` is published at the same offset as before, so
+//     `decided_at_permille` returns the fraction of the input at which the
+//     refusal became final;
+//   * `settled_permille` is the same number it always was — the fraction at
+//     which every followed path was final — and it is now reachable *because*
+//     of the refusal, since a rejected value settles at its own last delta.
+//
+// The contract, in one sentence: **the three readiness numbers keep their
+// meaning (when the input stopped changing, when every declared member was
+// final, when the skeleton was satisfied), and every refusal that a constraint
+// makes possible is already known when the value is final.** No existing number
+// is redefined, and no existing event changes meaning; `FieldRejected` is an
+// addition.
 
 ///|
 /// What the watcher learned while the document was arriving (FR-39).
@@ -61,6 +86,14 @@ pub(all) enum ReadinessEvent {
   FieldReady(String)
   /// The value at this path is final and does not have the declared kind.
   FieldInvalid(String, String)
+  /// The value at this path is final and has the declared kind, but violates a
+  /// declared value constraint (0.7.0). The three strings are the offending
+  /// path, the constraint as it was written (`integer >= 0`,
+  /// `string with length <= 64`, `one of ["low","high"]`,
+  /// `string of characters in [a-z]`), and the kind of the value that arrived.
+  /// The value is refused at the delta that made it final, so this event is
+  /// always emitted together with a `RootInvalid` at the same offset.
+  FieldRejected(String, String, String)
   /// The value at this path is final and has the declared kind, but a member
   /// the skeleton requires deeper is absent or of the wrong kind. The two
   /// strings are the offending path and the kind it was declared with.
@@ -79,6 +112,7 @@ pub fn ReadinessEvent::kind(self : ReadinessEvent) -> String {
   match self {
     FieldReady(_) => "field_ready"
     FieldInvalid(_, _) => "field_invalid"
+    FieldRejected(_, _, _) => "field_rejected"
     FieldIncomplete(_, _) => "field_incomplete"
     RootReady => "root_ready"
     RootInvalid(_) => "root_invalid"
@@ -91,6 +125,7 @@ pub fn ReadinessEvent::path(self : ReadinessEvent) -> String {
   match self {
     FieldReady(p) => p
     FieldInvalid(p, _) => p
+    FieldRejected(p, _, _) => p
     FieldIncomplete(p, _) => p
     RootReady => ""
     RootInvalid(_) => ""
@@ -101,7 +136,11 @@ pub fn ReadinessEvent::path(self : ReadinessEvent) -> String {
 /// Whether the event is a verdict rather than a progress note.
 pub fn ReadinessEvent::is_verdict(self : ReadinessEvent) -> Bool {
   match self {
-    FieldReady(_) | FieldInvalid(_, _) | RootReady | RootInvalid(_) => true
+    FieldReady(_)
+    | FieldInvalid(_, _)
+    | FieldRejected(_, _, _)
+    | RootReady
+    | RootInvalid(_) => true
     FieldIncomplete(_, _) => false
   }
 }
@@ -119,6 +158,16 @@ pub fn ReadinessEvent::to_json(self : ReadinessEvent) -> String {
       json_escape(p) +
       "\",\"expected\":\"" +
       json_escape(e) +
+      "\"}"
+    FieldRejected(p, e, got) =>
+      "{" +
+      k +
+      ",\"path\":\"" +
+      json_escape(p) +
+      "\",\"expected\":\"" +
+      json_escape(e) +
+      "\",\"got\":\"" +
+      json_escape(got) +
       "\"}"
     FieldIncomplete(p, e) =>
       "{" +
@@ -157,9 +206,10 @@ pub fn readiness_events_json(events : Array[ReadinessEvent]) -> String {
 /// One declared path the watcher follows.
 priv struct WatchedPath {
   path : String
-  /// The kind declared at this path, as a name.
+  /// The declaration as it was written: `integer` for a bare kind,
+  /// `integer(minimum:0)` when constraints were declared (0.7.0).
   expect : String
-  /// The kind declared at this path.
+  /// The declared kind and its constraints.
   decl : Schema
   /// The path, split once, so that matching a delta allocates nothing.
   segs : Array[PathSegment]
@@ -171,8 +221,44 @@ priv struct WatchedPath {
 ///
 /// The watcher owns its own `PartialParser` and forces `collect_deltas` on, so
 /// the caller does not have to know that the mechanism is the delta stream.
-/// `duplicate_keys KeepFirst` is refused (E050): a delta stream cannot retract
-/// a value it already announced, and this type reads the stream.
+///
+/// ## Duplicate keys: a documented composition, not a refusal (0.7.0, Q-36)
+///
+/// `duplicate_keys KeepFirst` is rewritten to `KeepLast` **for the measurement**
+/// and nothing else changes. The reason is structural: the watcher reads the
+/// delta stream, and a delta stream cannot represent a value that was dropped —
+/// `KeepFirst` drops the later value of a repeated name, but its container was
+/// already announced, so there is no delta to carry the drop. Before 0.7.0 this
+/// pair was refused with `E050`.
+///
+/// What that means, stated plainly:
+///
+///   * *which duplicate wins*: observations are made under `KeepLast`, so a
+///     value that was dropped is never invented. Which value a followed path is
+///     judged against is the value the tree holds **when the delta is drained**,
+///     and that is the whole subtlety: fed incrementally (the normal case, and
+///     what the batch helpers do) the first value of a repeated name is judged
+///     as soon as it is final, and the later duplicate arrives as `conflict()`
+///     rather than as a retraction; fed as one chunk, every delta is drained
+///     after the tree is complete, so the path is judged against the last value.
+///     `verdict()` after `finish()` is the `KeepLast` verdict either way, i.e.
+///     `Schema::evaluate(parse(input).value)` under the rewritten options. A
+///     caller who asked for `KeepFirst` must take the verdict from
+///     `parse(input, options=requested)` instead; `schema.mbt`'s
+///     `semantic_readiness` does that, which is why its `verdict` is the
+///     `KeepFirst` truth while its three numbers come from this stream.
+///   * *when the watcher may still conclude early*: the first value of a
+///     repeated name is announced as soon as it is final, so an early
+///     `RootReady` can be published on a document that only satisfies the
+///     skeleton under `KeepFirst`. A later value of the same name does not
+///     retract it: the watcher sets `conflict()` and stops concluding, because
+///     an event that was already emitted cannot be taken back. That early
+///     `RootReady` is *true* under `KeepFirst` and provisional under `KeepLast`;
+///     `conflict()` is how the caller learns which case they are in.
+///   * *what does not change*: the type never emits a wrong event; a duplicate
+///     whose second value differs from the first is visible as `conflict()`,
+///     and callers who need "no duplicates at all" want `AsError` (which the
+///     parser raises on), not a readiness measurement.
 pub struct SemanticWatcher {
   priv parser : PartialParser
   priv schema : Schema
@@ -209,7 +295,18 @@ pub fn SemanticWatcher::new(
     Some(o) => o
     None => Options::default()
   }
-  let opts : Options = { ..base, collect_deltas: true, }
+  // `KeepFirst` drops a value whose container was already announced, which the
+  // delta stream cannot express, so the measurement is taken under `KeepLast`
+  // (Q-36: a composition, documented on the type). The caller's verdict is
+  // theirs to take from `parse(input, options=…)`; `semantic_readiness` does.
+  let opts : Options = {
+    ..base,
+    collect_deltas: true,
+    duplicate_keys: match base.duplicate_keys {
+      KeepFirst => KeepLast
+      other => other
+    },
+  }
   opts.validate()
   let parser = PartialParser::new(options=opts)
   let watched : Array[WatchedPath] = []
@@ -237,7 +334,7 @@ pub fn SemanticWatcher::new(
       }
     }
     at.push(watched.length())
-    watched.push({ path: p, expect: decl.name(), decl, segs, })
+    watched.push({ path: p, expect: decl.expectation(), decl, segs, })
     settled.push(false)
   }
   {
@@ -450,6 +547,11 @@ fn is_prefix(prefix : Array[PathSegment], segs : Array[PathSegment]) -> Bool {
 
 ///|
 /// Record that a path is final and emit its event.
+///
+/// This is also where a value-level declaration is enforced: `accepts` folds in
+/// the declared constraints (0.7.0), so an out-of-range number is refused on
+/// the delta that makes it final, and the refusal is named precisely — the
+/// violated constraint rather than the kind it happens to share.
 fn SemanticWatcher::settle(self : SemanticWatcher, i : Int32) -> Unit {
   self.settled[i] = true
   self.settled_count = self.settled_count + 1
@@ -462,7 +564,14 @@ fn SemanticWatcher::settle(self : SemanticWatcher, i : Int32) -> Unit {
     }
     return
   }
-  self.events.push(FieldInvalid(self.watched[i].path, self.watched[i].expect))
+  match decl.constraint_problem(v) {
+    Some(e) =>
+      self.events.push(FieldRejected(self.watched[i].path, e, kind_of(v)))
+    None =>
+      self.events.push(
+        FieldInvalid(self.watched[i].path, self.watched[i].expect),
+      )
+  }
   self.conclude_invalid()
 }
 

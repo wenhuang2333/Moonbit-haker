@@ -19,7 +19,8 @@ For every file in `test_parsing/` the harness answers three questions:
      (Python) and `jsonrepair` (Node)?
   3. on the `y_*` files, which are *valid JSON*, does JSONMend report a repair
      record? A valid document must need zero repairs, so every record there is a
-     false repair.
+     false repair. Only `R018` may fire there, and that is a **gate**, not a
+     measurement: see below.
 
     python3 code/tests/eval/run_independent.py [--cli PATH]
 
@@ -27,9 +28,20 @@ The report is written to `code/docs/EVAL_INDEPENDENT.md`. The run is offline and
 deterministic: files are processed in sorted order, both oracles are pinned local
 installs, and the generation stamp honours `SOURCE_DATE_EPOCH`.
 
-Exit status is 0 whenever the report was produced: this corpus has no
-pre-registered pass criterion, it measures. `--strict` exits 1 when a `y_*` file
-gets a repair record, the one verdict here that is unambiguously wrong.
+Exit status is 0 whenever the report was produced *and the `y_*` gate held*:
+this corpus has no other pre-registered pass criterion, it measures. The one
+hard criterion (0.7.0, unconditional — it does not need `--strict`, because CI
+runs this harness without that flag) is:
+
+    a rule firing on a valid `y_*` document must be `R018` and nothing else.
+
+`R018 MergeDuplicateKey` is the single rule a valid document can legitimately
+reach: RFC 8259 allows duplicate names, so the document is valid and JSONMend's
+default policy still merges the duplicate and records what it dropped. Every
+other rule encodes a *syntax* decision, so a document that a strict parser
+accepts can never legitimately reach one: that would be a false repair, and the
+harness exits 1 naming every offending file. `--strict` additionally fails on the
+`R018` records themselves.
 """
 
 from __future__ import annotations
@@ -66,6 +78,15 @@ UPSTREAM_LICENSE = "MIT License, Copyright (c) 2016 Nicolas Seriot"
 RECORD = re.compile(r"^(R\d+)\s+(\d+):(\d+)\s+(.*)$", re.M)
 ERROR_CODE = re.compile(r"\b(E\d{3})\b")
 EXACTNESS = re.compile(r"exactness (\w+)")
+
+# The rules allowed to fire on a document the strict oracle calls valid.
+# `R018 MergeDuplicateKey` is the whole list: RFC 8259 permits duplicate names,
+# so such a document is valid and the default policy still merges it and records
+# the drop. Every other rule repairs *syntax*, and a strict parser accepted the
+# input, so one of them firing is a false repair. Keep this set in step with
+# `code/docs/RULES.md`, where the "can fire on valid JSON" column states it per
+# rule, and with `test/probe_valid_json_rules.py`, which finds counterexamples.
+Y_ALLOWED_RULE_CODES = frozenset({"R018"})
 
 FAMILIES = [
     ("y_", "valid JSON: every strict parser must accept these"),
@@ -478,6 +499,32 @@ def main() -> int:
     # ---- headline: false repairs on valid JSON ------------------------------
     offenders = [r for r in y_rows if r["records"]]
     total_records = sum(len(r["records"]) for r in offenders)
+    # The one hard criterion of this harness (0.7.0): a rule that fires on a
+    # `y_*` document may only be `R018`. `R018` merges a duplicate name, which
+    # RFC 8259 permits, so the input stays valid JSON; every other rule encodes a
+    # syntax decision and a strict parser already accepted the input, so firing
+    # one is a false repair. This is checked unconditionally, because CI runs
+    # this harness without `--strict`.
+    y_rule_codes = Counter(rec["code"] for r in y_rows for rec in r["records"])
+    y_rule_violations = [
+        r
+        for r in y_rows
+        if any(rec["code"] not in Y_ALLOWED_RULE_CODES for rec in r["records"])
+    ]
+    # The boundary of the criterion above, measured instead of footnoted: a
+    # file that the *strict* oracle accepts and that fires a non-`R018` rule.
+    # `R014` reaches a valid document through its unpaired-surrogate branch
+    # (`"\ud800"` is accepted by both oracles and JSONMend replaces the lone
+    # surrogate with U+FFFD), so `RepairPlan::valid_json` is "needs no
+    # normalisation", not "a strict parser accepts this input". The `i_*`
+    # family is where those files live; the `y_*` gate is unaffected.
+    y_residual = [
+        r
+        for r in rows
+        if r["strict_py"]
+        and not r["file"].startswith("y_")
+        and any(rec["code"] not in Y_ALLOWED_RULE_CODES for rec in r["records"])
+    ]
     y_broken = [r for r in y_rows if r["verdict"]["jsonmend"] != "accept"]
     for r in y_rows:
         r["gate"] = run_jsonmend_extra(
@@ -710,6 +757,86 @@ def main() -> int:
                 "Record codes: %s."
                 % ", ".join("`%s` x%d" % (k, v) for k, v in sorted(codes.items()))
             )
+        add("")
+    add("### Hard criterion: which rules may fire on valid JSON (`y_*`)")
+    add("")
+    add(
+        "This is a **gate**, not a measurement, and it is checked on every run: it does not"
+    )
+    add("need `--strict`, because CI runs this harness without that flag.")
+    add("")
+    add("| | |")
+    add("| --- | --- |")
+    add(
+        "| allowed on a valid (`y_*`) document | %s |"
+        % (", ".join("`%s`" % c for c in sorted(Y_ALLOWED_RULE_CODES)) or NA)
+    )
+    add(
+        "| rules actually seen on `y_*` | %s |"
+        % (", ".join("`%s` x%d" % (k, v) for k, v in sorted(y_rule_codes.items())) or NA)
+    )
+    add("| verdict | %s |" % ("**PASS**" if not y_rule_violations else "**FAIL**"))
+    add("")
+    if y_residual:
+        codes_res = Counter(
+            rec["code"] for r in y_residual for rec in r["records"] if rec["code"] not in Y_ALLOWED_RULE_CODES
+        )
+        add("**Named residual (not a failure, and not hidden):** %d file(s) outside `y_*` are" % len(y_residual))
+        add(
+            "accepted by the strict oracle *and* fire a rule outside `%s` — %s. This is the"
+            % (
+                ", ".join(sorted(Y_ALLOWED_RULE_CODES)),
+                ", ".join("`%s` x%d" % (k, v) for k, v in sorted(codes_res.items())),
+            )
+        )
+        add(
+            "measured counterexample that keeps the criterion scoped to `y_*`: `R014` replaces a"
+        )
+        add(
+            "lone surrogate (`\"\\ud800\"`, accepted by `json.loads` and `JSON.parse`) with"
+        )
+        add(
+            "U+FFFD, so `RepairPlan::valid_json` is false for a document a strict parser accepts."
+        )
+        add("The first two, named so the boundary is checkable without reading the rule table:")
+        add("")
+        for r in y_residual[:2]:
+            add(
+                "- `%s` — `%s`"
+                % (r["file"], ", ".join(sorted({rec["code"] for rec in r["records"] if rec["code"] not in Y_ALLOWED_RULE_CODES})))
+            )
+        add("")
+    if not y_rule_violations:
+        add(
+            "Every record on a valid document is `R018 MergeDuplicateKey`, the one rule that"
+        )
+        add(
+            "can legitimately reach a valid input: RFC 8259 permits duplicate names, so the"
+        )
+        add(
+            "document is valid and JSONMend's default policy still merges the duplicate and"
+        )
+        add("records what it dropped. The document-level reason is in the section above.")
+    else:
+        add(
+            "**%d valid document(s) fired a rule outside `%s`.** A document the strict oracle"
+            % (len(y_rule_violations), ", ".join(sorted(Y_ALLOWED_RULE_CODES)))
+        )
+        add(
+            "accepts needs no syntax repair, so each of these is a false repair reported by a"
+        )
+        add("rule that claims to fix syntax:")
+        add("")
+        add("| file | rule | record |")
+        add("| --- | --- | --- |")
+        for r in y_rule_violations:
+            for rec in r["records"]:
+                if rec["code"] in Y_ALLOWED_RULE_CODES:
+                    continue
+                add(
+                    "| `%s` | `%s` | `%s %d:%d %s` |"
+                    % (r["file"], rec["code"], rec["code"], rec["line"], rec["col"], rec["message"])
+                )
         add("")
     if y_broken:
         add("`y_*` files where JSONMend did **not** return a valid value at all (worse than a")
@@ -996,6 +1123,36 @@ def main() -> int:
         )
     )
     print("report: %s" % args.out)
+    if y_rule_violations:
+        print(
+            "HARD FAILURE: %d valid (y_*) file(s) fired a rule outside {%s}:"
+            % (len(y_rule_violations), ", ".join(sorted(Y_ALLOWED_RULE_CODES)))
+        )
+        for r in y_rule_violations:
+            for rec in r["records"]:
+                if rec["code"] not in Y_ALLOWED_RULE_CODES:
+                    print("  %s: %s %d:%d %s" % (r["file"], rec["code"], rec["line"], rec["col"], rec["message"]))
+        print(
+            "a document the strict oracle accepts must need no syntax repair; see "
+            "code/docs/RULES.md (the \"can fire on valid JSON\" column)"
+        )
+        return 1
+    if y_residual:
+        res_codes = Counter(
+            rec["code"]
+            for r in y_residual
+            for rec in r["records"]
+            if rec["code"] not in Y_ALLOWED_RULE_CODES
+        )
+        print(
+            "named residual: %d strict-accepted non-y_ file(s) fire %s (e.g. %s) — "
+            "RepairPlan::valid_json means \"needs normalising\", not \"input is valid\""
+            % (
+                len(y_residual),
+                ", ".join("%s x%d" % (k, v) for k, v in sorted(res_codes.items())),
+                ", ".join(r["file"] for r in y_residual[:2]),
+            )
+        )
     if args.strict and offenders:
         print("--strict: %d valid file(s) got a repair record" % len(offenders))
         return 1

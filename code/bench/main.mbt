@@ -588,10 +588,12 @@ fn run_watcher(doc : String, schema : @mend.Schema, chunk : Int32) -> Unit {
 ///   re-reading of the document (two extra columns: µs/KiB);
 /// * `watcher` — the live path: one watcher per document, 64 code unit chunks,
 ///   one drain per chunk;
-/// * `decided` — `decided_at_permille` over the corpus;
-/// * `semantic_readiness sampled (0.5.0)` — the pre-0.6.0 implementation, still
-///   reachable through the `duplicate_keys: KeepFirst` fallback, kept as the
-///   auditable baseline for the rows above.
+/// * `decided` — `decided_at_permille` over the corpus.
+///
+/// The pre-0.6.0 sampling row is gone in 0.7.0 (Q-36): that implementation no
+/// longer exists, so there is nothing to measure against on one machine. Its
+/// figures are in `docs/BENCHMARK.md`, which points at the commit that
+/// produced them.
 fn bench_gate() -> Unit {
   let docs : Array[String] = []
   let mut bytes = 0
@@ -637,23 +639,6 @@ fn bench_gate() -> Unit {
       }
     }
   })
-  // The 0.5.0 implementation, kept in `schema.mbt` for `duplicate_keys:
-  // KeepFirst`: it re-reads the document once per sample point. Measuring it
-  // here is what makes the 0.6.0 improvement auditable on one machine instead of
-  // against a number copied from the previous report.
-  let sampled = median5(() => {
-    let opts : @mend.Options = {
-      ..@mend.Options::default(),
-      duplicate_keys: @mend.KeepFirst,
-    }
-    for doc in docs {
-      try {
-        let _ = @mend.semantic_readiness(doc, schema, options=opts)
-      } catch {
-        _ => ()
-      }
-    }
-  })
   let curve = median5(() => {
     for doc in docs {
       ignore(@mend.field_readiness(doc)) catch {
@@ -679,7 +664,6 @@ fn bench_gate() -> Unit {
     ("analyze for_agent", gated, ""),
     ("analyze +schema", checked, ""),
     ("semantic_readiness", ready, ""),
-    ("semantic_readiness sampled (0.5.0)", sampled, ""),
     (
       "field_readiness",
       curve,
