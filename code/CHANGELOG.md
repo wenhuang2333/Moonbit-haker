@@ -34,6 +34,9 @@
   （UTF-16 码元，与 `Position.offset` 同单位——同一个库里不引入字节/码元两套位置口径）。
   该值与分块方式无关，因此批量就绪 API 不再需要按 `step` 采样约 1000 次来近似时间轴。
   `at` 在 `delta_wbtest.mbt` 里被逐分块验证恒等且 `0 <= at <= 输入长度`。
+  delta 目前只有内存 API（`drain_deltas` / `on_delta(&Delta)`），库和 CLI 都没有
+  delta 的 JSON 序列化通道，因此这次字段新增不需要同步改任何 `to_json`；
+  `Delta::pointer()` 的输出格式也未变。
 - 版本推进到 `0.7.0`（`code/moon.mod`、`--version`）。
 
 ### 已知边界（诚实记录，未修）
