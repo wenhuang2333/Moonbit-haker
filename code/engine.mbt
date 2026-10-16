@@ -119,6 +119,17 @@ priv struct Engine {
   mut snap_cache_stamp : Int32
   mut prose_start : Position
   mut prose_skipped : Int32
+  /// Code units fed while the document is still in the prelude, so that a
+  /// prelude which was skipped as prose can be retried as JSON at `finish`.
+  /// Bounded by `max_prose_buffer`.
+  prose_buf : Array[UInt16]
+  /// Set when the skipped prelude outgrew `max_prose_buffer`: the retry is then
+  /// impossible and the document is refused as it was before.
+  mut prose_overflow : Bool
+  /// True while `finish_engine` is running. Deltas produced then describe the
+  /// state at the end of the input, so their `at` is the total length rather
+  /// than the offset of the code unit being processed plus one.
+  mut finishing : Bool
   mut saw_content : Bool
   mut nojson_pos : Position
   mut epilogue_reported : Bool
@@ -283,6 +294,9 @@ fn Engine::make(opts : Options) -> Engine {
     snap_cache_stamp: -1,
     prose_start: start,
     prose_skipped: 0,
+    prose_buf: [],
+    prose_overflow: false,
+    finishing: false,
     saw_content: false,
     nojson_pos: start,
     epilogue_reported: false,
@@ -446,6 +460,16 @@ fn Engine::push_run(
 fn Engine::step(self : Engine, u : UInt16) -> Unit raise MendError {
   if self.pos.offset >= self.opts.max_input_len {
     raise SizeLimit(self.opts.max_input_len, self.pos.offset)
+  }
+  // Keep what the prelude sees. `step` is the single funnel for both `feed_str`
+  // and `feed_bytes`, so the buffer is the same however the caller split the
+  // input — which is what makes the `finish` retry chunk-invariant.
+  if self.phase is PPrelude {
+    if self.prose_buf.length() < self.opts.max_prose_buffer {
+      self.prose_buf.push(u)
+    } else {
+      self.prose_overflow = true
+    }
   }
   let p = self.pos
   match self.tok {

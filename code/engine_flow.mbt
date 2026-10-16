@@ -1370,7 +1370,56 @@ fn Engine::unwind_top(self : Engine) -> Bool raise MendError {
 
 ///|
 /// Finish the document: flush the token, close open containers, produce text.
+
+///|
+/// Retry a prelude that was skipped as prose, now as JSON.
+///
+/// `skip_prose` only recognises `{` or `[`, so a document whose root is a
+/// scalar (`true`, `null`, `42`, `"a"`) is indistinguishable from prose while
+/// it is being read and reaches `finish` with nothing parsed. The prelude
+/// buffer holds what was skipped, so replaying it with `skip_prose` off
+/// recovers the value. The buffer starts at offset 0 and the retry happens in
+/// `finish`, which is chunk-invariant, so the replay reproduces the one-shot
+/// positions exactly instead of approximating them.
+///
+/// The retry is accepted only when it is *clean*: no repair record at all.
+/// Without that guard `hello world` would be repaired into `"hello"` and a
+/// document JSONMend refuses today would start being accepted — a behaviour
+/// change nobody asked for. `None` means "nothing changed, refuse as before".
+fn Engine::retry_prelude(self : Engine) -> FinalResult? {
+  if !self.opts.skip_prose ||
+    self.prose_overflow ||
+    !self.saw_content ||
+    self.prose_buf.length() == 0 {
+    return None
+  }
+  let retry = Engine::make({ ..self.opts, skip_prose: false, })
+  try {
+    for u in self.prose_buf {
+      retry.step(u)
+    }
+    let result = retry.finish_engine()
+    if result.repairs.length() == 0 {
+      // The retry is a second engine, so its delta stream has to be adopted or
+      // the caller would hold a value with no deltas describing it — and the
+      // contract that replaying the deltas reproduces the value would be false
+      // for exactly the documents this retry exists to recover. The prelude
+      // emits no delta of its own, so appending cannot interleave two streams.
+      for d in retry.deltas {
+        self.deltas.push(d)
+      }
+      Some(result)
+    } else {
+      None
+    }
+  } catch {
+    _ => None
+  }
+}
+
+///|
 fn Engine::finish_engine(self : Engine) -> FinalResult raise MendError {
+  self.finishing = true
   match self.phase {
     PFinished | PFailed =>
       raise InvalidState("finish called on a finished parser")
@@ -1412,13 +1461,20 @@ fn Engine::finish_engine(self : Engine) -> FinalResult raise MendError {
         ambiguous: self.ambiguous,
       }
     }
-    None => {
-      self.phase = PFailed
-      if !self.saw_content && !unwound {
-        raise EmptyInput
+    None =>
+      match self.retry_prelude() {
+        Some(result) => {
+          self.phase = PFinished
+          result
+        }
+        None => {
+          self.phase = PFailed
+          if !self.saw_content && !unwound {
+            raise EmptyInput
+          }
+          raise NoJsonFound(self.nojson_pos.offset)
+        }
       }
-      raise NoJsonFound(self.nojson_pos.offset)
-    }
   }
 }
 

@@ -123,6 +123,31 @@ pub(all) struct Delta {
   op : DeltaOp
   value : Json?
   text : String
+  /// How much input had been consumed when this delta was produced, counted in
+  /// UTF-16 code units — the same unit as `Position.offset`, so there is only
+  /// one notion of position in the library.
+  ///
+  /// It is the offset of the code unit whose processing produced the delta,
+  /// plus one; a delta produced at `finish` (a container the input never
+  /// closed) reports the total length. The value is therefore independent of
+  /// how the caller split the stream into chunks: feeding `"{\"a\":1}"` whole
+  /// and one code unit at a time produces the same `at` for every delta.
+  ///
+  /// A caller that needs to know *when* it could have acted reads this instead
+  /// of the number of code units it has fed so far, which is a different
+  /// number and depends on the chunking.
+  ///
+  /// **`AppendText` is the exception, and it is a real one.** Text is flushed
+  /// by `drain_deltas`, not while the string is scanned, because a long string
+  /// otherwise costs one path computation per code unit (see `delta.mbt`). So
+  /// for an `AppendText` delta `at` records where the parser stood when the
+  /// caller drained — the *drain* point, not the text's position — and the
+  /// count and timing of `AppendText` deltas depend on how the caller split the
+  /// stream. `Set` and `Close` are produced while the triggering code unit is
+  /// processed and are chunk-invariant. A caller building a timeline must use
+  /// the structural deltas; reading `at` off `AppendText` and expecting it to
+  /// be stable is a mistake this comment exists to prevent.
+  at : Int32
 }
 
 ///|

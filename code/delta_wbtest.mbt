@@ -329,3 +329,76 @@ test "FR-16: the byte input callback matches the string input callback" {
   assert_true(via_bytes.contains("set /a/1"), msg=via_bytes.join(","))
   assert_true(via_bytes.contains("set /b"), msg=via_bytes.join(","))
 }
+
+// ---------------------------------------------------------------------------
+// Q-35 (FR-41): every delta carries the consumed count it was produced at.
+// ---------------------------------------------------------------------------
+
+///|
+/// The `(op, pointer, at)` triples of the structural deltas of a document fed
+/// in chunks of `k` code units (`k = 0` means one chunk). `AppendText` is left
+/// out for the reason given on `Delta.at`.
+/// units (`k = 0` means one chunk). Also checks that no delta claims to have
+/// been produced past the end of the input, which is where the `at` value is
+/// still an `Int32` and does not need converting back from text.
+fn dj_at_seq(doc : String, k : Int32) -> String raise {
+  let opts : Options = { ..Options::default(), collect_deltas: true, }
+  let p = PartialParser::new(options=opts)
+  let out : Array[String] = []
+  let take = fn(ds : Array[Delta]) raise {
+    for d in ds {
+      assert_true(
+        d.at >= 0 && d.at <= doc.length(),
+        msg="at out of range: " + d.at.to_string() + " for " + doc,
+      )
+      // `AppendText` is flushed at drain time, so its count and its `at`
+      // belong to the caller's chunking, not to the input: the structural
+      // deltas are the ones whose position is a property of the document.
+      if !(d.op is AppendText) {
+        out.push(d.op.name() + " " + d.pointer() + "@" + d.at.to_string())
+      }
+    }
+  }
+  if k <= 0 {
+    p.feed(doc)
+    take(p.drain_deltas())
+  } else {
+    let mut i = 0
+    while i < doc.length() {
+      let j = i + k
+      let end = if j < doc.length() { j } else { doc.length() }
+      p.feed(slice_units(doc, i, end))
+      take(p.drain_deltas())
+      i = end
+    }
+  }
+  ignore(p.finish())
+  take(p.drain_deltas())
+  out.join(",")
+}
+
+///|
+/// The consumed count is a property of the input, not of the chunking, and it
+/// never exceeds the number of code units fed. Before Q-35 the only number a
+/// caller had was "how much have I fed so far", which changes with the chunk
+/// size and is why batch readiness had to sample a thousand times.
+test "delta consumed offset is chunk invariant" {
+  // Only the structural deltas: `AppendText` is drained, not produced, so its
+  // position is the caller's business rather than the document's.
+  for
+    doc in [
+      "{\"a\":1,\"b\":[1,2,{\"c\":\"xy\"}]}", "{\"q\":\"MoonBit\"}", "{\"a\":{}}",
+      "{\"a\":1", "[1,2,3]", "{", "42",
+    ] {
+    let want = dj_at_seq(doc, 0)
+    for k in [1, 2, 3, 5, 8] {
+      let got = dj_at_seq(doc, k)
+      if got != want {
+        println("doc: " + doc + " k=" + k.to_string())
+        println("want: " + want)
+        println("got:  " + got)
+        assert_eq(got, want)
+      }
+    }
+  }
+}

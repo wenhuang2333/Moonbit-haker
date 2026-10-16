@@ -27,7 +27,12 @@ fn Engine::push_delta(
   value : Json?,
   text : String,
 ) -> Unit {
-  self.deltas.push({ path, op, value, text, })
+  // `step` advances `pos` after the token handler runs, so inside a handler
+  // `pos.offset` is the offset of the code unit being processed: one code unit
+  // has been consumed once that unit is done. At `finish` everything is
+  // consumed already and `pos.offset` is the total length.
+  let at = if self.finishing { self.pos.offset } else { self.pos.offset + 1 }
+  self.deltas.push({ path, op, value, text, at, })
 }
 
 ///|

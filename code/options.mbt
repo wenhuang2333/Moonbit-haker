@@ -196,6 +196,13 @@ pub(all) struct Options {
   max_depth : Int32
   max_input_len : Int32
   max_token_len : Int32
+  /// How much skipped prelude is kept so that `finish` can retry it as JSON.
+  /// `skip_prose` only recognises `{` or `[`, so a scalar root looks exactly
+  /// like prose while it is being read; keeping the text is what lets the
+  /// retry recover it. Beyond this bound the skipped text is dropped and the
+  /// document is refused as before, which keeps the memory cost of a
+  /// pathological input bounded.
+  max_prose_buffer : Int32
   duplicate_keys : DuplicateKeys
   incomplete_number : IncompleteNumber
   pending_key : PendingKey
@@ -229,6 +236,7 @@ pub fn Options::default() -> Options {
     max_depth: 512,
     max_input_len: 67108864,
     max_token_len: 16777216,
+    max_prose_buffer: 65536,
     duplicate_keys: KeepLast,
     incomplete_number: Drop,
     pending_key: OmitKey,
@@ -333,6 +341,9 @@ pub fn Options::validate(self : Options) -> Unit raise MendError {
   }
   if self.max_token_len <= 0 {
     raise InvalidOption("max_token_len must be a positive integer")
+  }
+  if self.max_prose_buffer <= 0 {
+    raise InvalidOption("max_prose_buffer must be a positive integer")
   }
   if self.indent < 0 {
     raise InvalidOption("indent must not be negative")

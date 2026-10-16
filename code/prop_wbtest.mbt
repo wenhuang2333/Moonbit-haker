@@ -640,6 +640,117 @@ test "TC-P-03 chunk invariance" {
 }
 
 // ---------------------------------------------------------------------------
+// TC-P-09: `skip_prose` recovers a scalar root, under every chunking.
+// ---------------------------------------------------------------------------
+
+///|
+/// Valid documents whose root is a scalar, in the shapes a model emits: a bare
+/// literal, one padded with whitespace, and strings including a surrogate pair.
+fn tc_scalar_root_docs() -> Array[String] {
+  [
+    "true", "false", "null", "0", "-1", "42", "-1.5e10", "3.14", "\"ok\"", "\"\"",
+    "\"MoonBit\"", "  true  ", "\ntrue\n", "\"🎯\"", "\"a🎯b\"",
+  ]
+}
+
+///|
+/// Text that is *not* one JSON document, however much JSON it contains. These
+/// must stay refused: the retry is accepted only when replaying the skipped
+/// prelude is clean, and a repair record means it was not clean. Where the
+/// prose ends and the value begins is not decidable, so `The answer is 42` is
+/// refused here exactly as the one-shot `repair` path has always refused it.
+/// A fenced scalar is refused by the fence path itself, with `skip_prose` off
+/// as well, so it is not a `skip_prose` question at all.
+fn tc_scalar_root_refusals() -> Array[String] {
+  [
+    "hello world", "maybe later", "The answer is 42", "Verdict: true", "答案：正确\nfalse",
+    "前缀 🎯 null", "返回值为 \"MoonBit\" 。", "```json\ntrue\n```", "Here you go:\n```json\ntrue\n```",
+  ]
+}
+
+///|
+/// TC-P-09. A valid scalar-root document must survive `skip_prose` in one
+/// piece and in every chunking, and the chunked run must be byte-identical to
+/// the one-shot run — the retry happens in `finish`, which is itself
+/// chunk-invariant, so any chunking dependence here would be a bug in the
+/// retry rather than an acceptable difference.
+test "TC-P-09 skip_prose recovers a scalar root under every chunking" {
+  let opts : Options = { ..Options::default(), skip_prose: true, }
+  for doc in tc_scalar_root_docs() {
+    let one = attempt(doc, opts)
+    if one.err != "" {
+      println("doc: " + doc)
+      assert_eq(one.err, "")
+    }
+    // The value is the document itself. Prose in front is dropped, so the
+    // check is on the value, not on the text.
+    let fix = Options::default()
+    let want = attempt(doc, fix)
+    if one.text != want.text {
+      println("doc:  " + doc)
+      assert_eq(one.text, want.text)
+    }
+    // Every split point, plus a few rolling widths, must agree.
+    let units : Array[String] = []
+    for i = 0; i < doc.length(); i = i + 1 {
+      units.push(slice_units(doc, i, i + 1))
+    }
+    tc_expect_chunks(
+      doc,
+      "per unit",
+      run_stream(units, opts),
+      one.text + " | " + one.recs + " | " + one.err,
+    )
+    for k in [1, 2, 3, 5, 8, 13] {
+      let chunks : Array[String] = []
+      let mut i = 0
+      while i < doc.length() {
+        let j = i + k
+        chunks.push(
+          slice_units(doc, i, if j < doc.length() { j } else { doc.length() }),
+        )
+        i = j
+      }
+      let got = run_stream(chunks, opts)
+      if got.text != one.text || got.err != one.err {
+        println("doc: " + doc)
+        println("split " + k.to_string())
+      }
+      tc_expect_chunks(
+        doc,
+        "split " + k.to_string(),
+        got,
+        one.text + " | " + one.recs + " | " + one.err,
+      )
+    }
+  }
+}
+
+///|
+/// TC-P-09 (b). Refusing prose is the behaviour that must not change: the
+/// retry is only accepted when it is clean, so text that is not JSON is still
+/// refused, and refusing it does not depend on the chunking either.
+test "TC-P-09 skip_prose still refuses what is not JSON" {
+  let opts : Options = { ..Options::default(), skip_prose: true, }
+  for doc in tc_scalar_root_refusals() {
+    let one = attempt(doc, opts)
+    assert_true(one.err != "", msg="prose was accepted: " + doc)
+    let units : Array[String] = []
+    for i = 0; i < doc.length(); i = i + 1 {
+      units.push(slice_units(doc, i, i + 1))
+    }
+    let got = run_stream(units, opts)
+    // The refusal must be the same however the input was split, and it must
+    // name the same offset: the retry re-raises the original `NoJsonFound`
+    // rather than a hard-coded zero.
+    if got.err != one.err {
+      println("doc: " + doc)
+      assert_eq(got.err, one.err)
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // TC-P-04: truncated documents still complete to valid JSON.
 // ---------------------------------------------------------------------------
 
