@@ -9,6 +9,30 @@
 > [`TRACEABILITY.md`](./TRACEABILITY.md)；12 个错误码与退出码的完整表见
 > [`ERRORS.md`](./ERRORS.md)。本文件只规定这些表之间**必须成立的契约**。
 
+## SR-0　兼容性承诺（1.0.0 草案，**待你确认**）
+
+`pkg.generated.mbti` 是公开 API 的权威清单，它**已经进版本库**，并由 CI 断言与源码一致。
+因此「1.0.0 代表 API 冻结」这句话是可验证的，而不只是声明。
+
+**承诺稳定**（1.0.0 之后改动需要 major 版本）：
+
+| 面 | 承诺 |
+| --- | --- |
+| `pub` API 的签名与语义 | `pkg.generated.mbti` 里的一切；新增是 minor，删除或改签名是 major |
+| `explain --json` 的四个字段 | `valid_json` / `normalized` / `ambiguity` / `execution` 的名字与取值域 |
+| delta 契约 | `Set` / `Close` / `AppendText` 的顺序与 `pointer()` 的输出格式 |
+| 骨架语法 | 0.7.0 的语法全集；**新增**约束是 minor，**改变已有声明的含义**是 major |
+| CLI 退出码 | 0/1/2/3/4/5/70 的含义 |
+| 就绪口径的**定义** | `settled` / `syntax_at` / `schema_permille` 的含义（`Delta.at` 的单位是 UTF-16 码元） |
+
+**明确不承诺**（可以随 minor 变化，且已写进文档）：
+
+- 任何**性能数字**与内存倍数——它们随机器和版本浮动，`BENCHMARK.md` 是记录不是契约；
+- `AppendText` 的**增量粒度**与它的 `at`（它是 drain 时刻的属性，天然依赖分块）；
+- 内部文件布局、`code/` 之外的路径、CI 工作流细节；
+- `--chunk` 的分块大小对 `AppendText` 的影响。
+
+
 ---
 
 ## 1. 范围与总不变量

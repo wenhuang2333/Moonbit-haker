@@ -1,0 +1,590 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "zhanshishan/jsonmend"
+
+// Values
+pub fn advice_for(PlanOp) -> String
+
+pub fn analyze(String, options? : Options, readiness? : Int, schema? : Schema) -> RepairPlan
+
+pub fn auto_step(Int, Int) -> Int
+
+pub fn copy_json(Json) -> Json
+
+pub fn decide(Int, Exactness, Bool) -> ExecutionDecision
+
+pub fn decide_error(String) -> ExecutionDecision
+
+pub fn decided_at_permille(String, Schema, chunk? : Int, options? : Options) -> Int raise MendError
+
+pub fn early_stop_saving(Array[String], step? : Int) -> Int raise MendError
+
+pub fn exactness_of(Array[Repair]) -> Exactness
+
+pub fn field_readiness(String, step? : Int, options? : Options) -> Array[FieldReady] raise MendError
+
+pub fn has_ambiguity(Array[Repair]) -> Bool
+
+pub fn hint_context(String, Int, Int) -> (String, Int)
+
+pub fn is_valid_json(String) -> Bool
+
+pub fn kind_of(Json) -> String
+
+pub fn lookup_path(Json, String) -> Json?
+
+pub fn parse(String, options? : Options) -> ParseResult raise MendError
+
+pub fn plan_action(RepairCode) -> PlanAction
+
+pub fn readiness_deciles(Array[String], step? : Int) -> Array[Int] raise MendError
+
+pub fn readiness_events_json(Array[ReadinessEvent]) -> String
+
+pub fn readiness_median(Array[String], step? : Int) -> Int raise MendError
+
+pub fn repair(String, options? : Options) -> RepairResult raise MendError
+
+pub fn semantic_readiness(String, Schema, step? : Int, options? : Options) -> SemanticReadiness raise MendError
+
+pub fn syntax_readiness_permille(String, step? : Int) -> Int
+
+pub fn watch_readiness(String, Schema, chunk? : Int, options? : Options) -> Array[ReadinessEventAt] raise MendError
+
+// Errors
+pub(all) suberror MendError {
+  EmptyInput
+  NoJsonFound(Int)
+  StrictViolation(RepairCode, Position, String)
+  AmbiguousRepair(RepairCode, Position, Ambiguity)
+  DepthLimit(Int, Int)
+  SizeLimit(Int, Int)
+  TokenLimit(Int, Int)
+  InvalidState(String)
+  InvalidUtf8(Int)
+  InvalidOption(String)
+  InvalidEvent(String)
+  SchemaError(String)
+}
+pub fn MendError::code(Self) -> String
+pub fn MendError::retry_hint(Self, input? : String, radius? : Int) -> RetryHint?
+pub fn MendError::to_string(Self) -> String
+
+// Types and methods
+pub(all) enum Ambiguity {
+  Unambiguous
+  BareWord
+  AdjacentStrings
+  ConcatOperator
+  TrailingContent
+}
+pub fn Ambiguity::equal(Self, Self) -> Bool
+pub fn Ambiguity::is_ambiguous(Self) -> Bool
+pub fn Ambiguity::message(Self) -> String
+pub fn Ambiguity::name(Self) -> String
+pub fn Ambiguity::not_equal(Self, Self) -> Bool
+pub impl Eq for Ambiguity
+
+pub(all) enum Completeness {
+  Empty
+  Partial
+  Complete
+}
+pub fn Completeness::equal(Self, Self) -> Bool
+pub fn Completeness::not_equal(Self, Self) -> Bool
+pub impl Eq for Completeness
+
+pub(all) struct Constraints {
+  mut minimum : Double?
+  mut exclusive_minimum : Double?
+  mut maximum : Double?
+  mut exclusive_maximum : Double?
+  mut min_length : Int?
+  mut max_length : Int?
+  mut enum_values : Array[Json]?
+  mut pattern : String?
+}
+pub fn Constraints::none() -> Self
+
+pub(all) struct Delta {
+  path : Array[PathSegment]
+  op : DeltaOp
+  value : Json?
+  text : String
+  at : Int
+}
+pub fn Delta::pointer(Self) -> String
+
+pub(all) enum DeltaOp {
+  Set
+  AppendText
+  Close
+}
+pub fn DeltaOp::equal(Self, Self) -> Bool
+pub fn DeltaOp::name(Self) -> String
+pub fn DeltaOp::not_equal(Self, Self) -> Bool
+pub impl Eq for DeltaOp
+
+pub(all) enum DuplicateKeys {
+  KeepLast
+  KeepFirst
+  AsError
+}
+pub fn DuplicateKeys::equal(Self, Self) -> Bool
+pub fn DuplicateKeys::not_equal(Self, Self) -> Bool
+pub impl Eq for DuplicateKeys
+
+pub(all) enum Exactness {
+  Exact
+  Cosmetic
+  Lossy
+}
+pub fn Exactness::equal(Self, Self) -> Bool
+pub fn Exactness::name(Self) -> String
+pub fn Exactness::not_equal(Self, Self) -> Bool
+pub fn Exactness::rank(Self) -> Int
+pub fn Exactness::within(Self, Self) -> Bool
+pub impl Eq for Exactness
+
+pub(all) enum ExecutionDecision {
+  Safe
+  CosmeticRepair
+  LossyRepair
+  Ambiguous
+  Invalid
+}
+pub fn ExecutionDecision::equal(Self, Self) -> Bool
+pub fn ExecutionDecision::is_safe(Self) -> Bool
+pub fn ExecutionDecision::label(Self) -> String
+pub fn ExecutionDecision::name(Self) -> String
+pub fn ExecutionDecision::not_equal(Self, Self) -> Bool
+pub fn ExecutionDecision::rank(Self) -> Int
+pub fn ExecutionDecision::worse_of(Self, Self) -> Self
+pub impl Eq for ExecutionDecision
+
+pub(all) struct FieldReady {
+  key : String
+  permille : Int
+}
+pub fn FieldReady::equal(Self, Self) -> Bool
+pub fn FieldReady::not_equal(Self, Self) -> Bool
+pub impl Eq for FieldReady
+
+pub struct FieldTracker {
+  // private fields
+}
+pub fn FieldTracker::all_ready(Self) -> Bool
+pub fn FieldTracker::feed(Self, Delta) -> Unit
+pub fn FieldTracker::new(Array[String]) -> Self
+pub fn FieldTracker::ready(Self, String) -> Bool
+pub fn FieldTracker::ready_count(Self) -> Int
+pub fn FieldTracker::ready_keys(Self) -> Array[String]
+
+pub(all) struct FinalResult {
+  text : String
+  value : Json
+  repairs : Array[Repair]
+  completeness : Completeness
+  repairs_truncated : Bool
+  exactness : Exactness
+  ambiguous : Bool
+}
+
+pub(all) enum IncompleteNumber {
+  Drop
+  TrimToValid
+}
+pub fn IncompleteNumber::equal(Self, Self) -> Bool
+pub fn IncompleteNumber::not_equal(Self, Self) -> Bool
+pub impl Eq for IncompleteNumber
+
+pub(all) enum Mode {
+  Lenient
+  Strict
+}
+pub fn Mode::equal(Self, Self) -> Bool
+pub fn Mode::not_equal(Self, Self) -> Bool
+pub impl Eq for Mode
+
+pub(all) enum MultiRoot {
+  KeepFirst
+  AsArray
+  AsError
+}
+pub fn MultiRoot::equal(Self, Self) -> Bool
+pub fn MultiRoot::not_equal(Self, Self) -> Bool
+pub impl Eq for MultiRoot
+
+pub(all) enum NonFinite {
+  AsNull
+  AsError
+  AsString
+}
+pub fn NonFinite::equal(Self, Self) -> Bool
+pub fn NonFinite::not_equal(Self, Self) -> Bool
+pub impl Eq for NonFinite
+
+pub(all) struct Options {
+  mode : Mode
+  max_depth : Int
+  max_input_len : Int
+  max_token_len : Int
+  max_prose_buffer : Int
+  duplicate_keys : DuplicateKeys
+  incomplete_number : IncompleteNumber
+  pending_key : PendingKey
+  non_finite : NonFinite
+  strip_fence : Bool
+  collect_repairs : Bool
+  want_text : Bool
+  skip_prose : Bool
+  quote_lookahead : Bool
+  multi_root : MultiRoot
+  rules : RuleSet
+  indent : Int
+  max_repairs : Int
+  max_loss : Exactness
+  collect_deltas : Bool
+  reject_ambiguous : Bool
+}
+pub fn Options::default() -> Self
+pub fn Options::for_agent() -> Self
+pub fn Options::for_execution() -> Self
+pub fn Options::for_llm() -> Self
+pub fn Options::for_text() -> Self
+pub fn Options::lenient() -> Self
+pub fn Options::strict() -> Self
+pub fn Options::validate(Self) -> Unit raise MendError
+pub fn Options::with_policy(Self, SafetyPolicy) -> Self
+
+pub(all) struct ParseResult {
+  value : Json
+  repairs : Array[Repair]
+  completeness : Completeness
+  repairs_truncated : Bool
+  exactness : Exactness
+  ambiguous : Bool
+}
+
+pub struct PartialParser {
+  // private fields
+}
+pub fn PartialParser::analyze(Self, input? : String, schema? : Schema) -> RepairPlan
+pub fn PartialParser::drain_deltas(Self) -> Array[Delta] raise MendError
+pub fn PartialParser::feed(Self, String) -> Unit raise MendError
+pub fn PartialParser::feed_bytes(Self, Bytes) -> Unit raise MendError
+pub fn PartialParser::feed_bytes_with(Self, Bytes, (Delta) -> Unit) -> Unit raise MendError
+pub fn PartialParser::feed_with(Self, String, (Delta) -> Unit) -> Unit raise MendError
+pub fn PartialParser::finish(Self) -> FinalResult raise MendError
+pub fn PartialParser::new(options? : Options) -> Self raise MendError
+pub fn PartialParser::snapshot(Self) -> Snapshot
+pub fn PartialParser::snapshot_copy(Self) -> Snapshot
+
+pub(all) enum PathSegment {
+  Key(String)
+  Index(Int)
+}
+pub fn PathSegment::equal(Self, Self) -> Bool
+pub fn PathSegment::not_equal(Self, Self) -> Bool
+pub impl Eq for PathSegment
+
+pub(all) enum PendingKey {
+  OmitKey
+  NullKey
+}
+pub fn PendingKey::equal(Self, Self) -> Bool
+pub fn PendingKey::not_equal(Self, Self) -> Bool
+pub impl Eq for PendingKey
+
+pub(all) enum PlanAction {
+  Remove
+  Insert
+  Replace
+  Normalize
+  Merge
+  Wrap
+}
+pub fn PlanAction::equal(Self, Self) -> Bool
+pub fn PlanAction::name(Self) -> String
+pub fn PlanAction::not_equal(Self, Self) -> Bool
+pub impl Eq for PlanAction
+
+pub(all) struct PlanOp {
+  rule : String
+  name : String
+  action : PlanAction
+  position : Position
+  severity : Severity
+  ambiguity : Ambiguity
+  confidence_class : String
+  confidence : Double
+}
+pub fn PlanOp::equal(Self, Self) -> Bool
+pub fn PlanOp::information_loss(Self) -> Bool
+pub fn PlanOp::not_equal(Self, Self) -> Bool
+pub fn PlanOp::of_repair(Repair) -> Self
+pub impl Eq for PlanOp
+
+pub(all) struct Position {
+  offset : Int
+  line : Int
+  column : Int
+}
+pub fn Position::equal(Self, Self) -> Bool
+pub fn Position::not_equal(Self, Self) -> Bool
+pub impl Eq for Position
+
+pub(all) enum ReadinessEvent {
+  FieldReady(String)
+  FieldInvalid(String, String)
+  FieldRejected(String, String, String)
+  FieldIncomplete(String, String)
+  RootReady
+  RootInvalid(Int)
+}
+pub fn ReadinessEvent::is_verdict(Self) -> Bool
+pub fn ReadinessEvent::kind(Self) -> String
+pub fn ReadinessEvent::path(Self) -> String
+pub fn ReadinessEvent::to_json(Self) -> String
+
+pub(all) struct ReadinessEventAt {
+  event : ReadinessEvent
+  permille : Int
+}
+
+pub(all) struct Repair {
+  code : RepairCode
+  position : Position
+  severity : Severity
+  message : String
+  ambiguity : Ambiguity
+}
+
+pub(all) enum RepairCode {
+  StripFence
+  StripComment
+  NormalizeQuote
+  QuoteBareWord
+  RemoveExtraComma
+  InsertComma
+  InsertColon
+  FillNull
+  CloseContainer
+  CloseString
+  FixNumber
+  ConvertLiteral
+  EscapeControl
+  FixEscape
+  MismatchedCloser
+  DropUnexpected
+  DropExtraCloser
+  MergeDuplicateKey
+  ConcatStrings
+  DropEllipsis
+  SkipProse
+  NormalizeLiteral
+}
+pub fn RepairCode::code(Self) -> String
+pub fn RepairCode::equal(Self, Self) -> Bool
+pub fn RepairCode::message(Self) -> String
+pub fn RepairCode::name(Self) -> String
+pub fn RepairCode::not_equal(Self, Self) -> Bool
+pub fn RepairCode::number(Self) -> Int
+pub fn RepairCode::severity(Self) -> Severity
+pub fn RepairCode::severity_in(Self, Slot) -> Severity
+pub impl Eq for RepairCode
+
+pub(all) struct RepairPlan {
+  text : String
+  value : Json?
+  repairs : Array[PlanOp]
+  repairs_truncated : Bool
+  exactness : Exactness
+  valid_json : Bool
+  ambiguous : Bool
+  completeness : Completeness
+  decision : ExecutionDecision
+  retry_hint : RetryHint?
+  error_code : String
+  error_message : String
+  readiness_permille : Int
+  schema_total : Int
+  schema_satisfied : Int
+  schema_missing : Array[String]
+}
+pub fn RepairPlan::ambiguity_kind(Self) -> String
+pub fn RepairPlan::execution(Self) -> String
+pub fn RepairPlan::explain_text(Self, input? : String) -> String
+pub fn RepairPlan::is_executable(Self) -> Bool
+pub fn RepairPlan::normalized(Self) -> Bool
+pub fn RepairPlan::prompt(Self) -> String
+pub fn RepairPlan::suggestions(Self) -> Array[String]
+pub fn RepairPlan::summary(Self) -> String
+pub fn RepairPlan::to_json(Self) -> String
+
+pub(all) struct RepairResult {
+  text : String
+  repairs : Array[Repair]
+  completeness : Completeness
+  repairs_truncated : Bool
+  exactness : Exactness
+  ambiguous : Bool
+}
+
+pub(all) struct RetryHint {
+  error_code : String
+  repair_code : String
+  repair_name : String
+  position : Position
+  ambiguity : Ambiguity
+  reason : String
+  context : String
+  caret : Int
+}
+pub fn RetryHint::equal(Self, Self) -> Bool
+pub fn RetryHint::not_equal(Self, Self) -> Bool
+pub fn RetryHint::of_error(MendError, input? : String, radius? : Int) -> Self?
+pub fn RetryHint::to_prompt(Self) -> String
+pub fn RetryHint::to_string(Self) -> String
+pub impl Eq for RetryHint
+
+pub(all) struct RuleSet {
+  // private fields
+}
+pub fn RuleSet::all() -> Self
+pub fn RuleSet::disable(Self, RepairCode) -> Self
+pub fn RuleSet::enable(Self, RepairCode) -> Self
+pub fn RuleSet::is_enabled(Self, RepairCode) -> Bool
+pub fn RuleSet::same_as(Self, Self) -> Bool
+
+pub(all) struct SafetyPolicy {
+  profile : String
+  mode : Mode
+  max_loss : Exactness
+  reject_ambiguous : Bool
+  duplicate_keys : DuplicateKeys
+  incomplete_number : IncompleteNumber
+  pending_key : PendingKey
+  multi_root : MultiRoot
+  max_depth : Int
+  max_input_len : Int
+  rules : RuleSet
+}
+pub fn SafetyPolicy::for_agent() -> Self
+pub fn SafetyPolicy::for_execution() -> Self
+pub fn SafetyPolicy::interactive() -> Self
+pub fn SafetyPolicy::name(Self) -> String
+pub fn SafetyPolicy::of_options(Options) -> String?
+pub fn SafetyPolicy::permissive() -> Self
+pub fn SafetyPolicy::strict() -> Self
+pub fn SafetyPolicy::to_options(Self) -> Options
+
+pub(all) enum Schema {
+  Any
+  Null
+  Bool
+  Num
+  Int
+  Str
+  Arr(Schema)
+  Obj(Array[SchemaMember])
+  Constrained(Schema, Constraints)
+}
+pub fn Schema::accepts(Self, Json) -> Bool
+pub fn Schema::at_path(Self, String) -> Self?
+pub fn Schema::evaluate(Self, Json) -> SchemaVerdict
+pub fn Schema::expectation(Self) -> String
+pub fn Schema::field(Self, String) -> SchemaMember?
+pub fn Schema::member_keys(Self) -> Array[String]
+pub fn Schema::name(Self) -> String
+pub fn Schema::parse(String) -> Self raise MendError
+pub fn Schema::required_paths(Self) -> Array[String]
+pub fn Schema::stringify(Self) -> String
+
+pub(all) struct SchemaMember {
+  key : String
+  required : Bool
+  schema : Schema
+}
+pub fn SchemaMember::equal(Self, Self) -> Bool
+pub fn SchemaMember::not_equal(Self, Self) -> Bool
+pub impl Eq for SchemaMember
+
+pub(all) struct SchemaMismatch {
+  path : String
+  expected : String
+  got : String
+}
+
+pub(all) struct SchemaVerdict {
+  total : Int
+  satisfied : Int
+  missing : Array[String]
+  mismatched : Array[SchemaMismatch]
+  ok : Bool
+}
+
+pub(all) struct SemanticReadiness {
+  syntax_permille : Int
+  schema_permille : Int
+  settled_permille : Int
+  step : Int
+  verdict : SchemaVerdict
+}
+
+pub struct SemanticWatcher {
+  mut settled_count : Int
+  mut concluded : Bool
+  mut conflict : Bool
+  mut checked : Bool
+  mut events : Array[ReadinessEvent]
+  mut events_at : Array[Int]
+  mut cur_at : Int
+  mut in_finish : Bool
+  mut verdict_at : Int
+  mut bytes : Int
+  mut settled_at : Int
+  mut syntax_at : Int
+  // private fields
+}
+pub fn SemanticWatcher::all_settled(Self) -> Bool
+pub fn SemanticWatcher::bytes(Self) -> Int
+pub fn SemanticWatcher::concluded(Self) -> Bool
+pub fn SemanticWatcher::conflict(Self) -> Bool
+pub fn SemanticWatcher::drain_events(Self) -> Array[ReadinessEvent]
+pub fn SemanticWatcher::feed(Self, String) -> Unit raise MendError
+pub fn SemanticWatcher::finish(Self) -> FinalResult raise MendError
+pub fn SemanticWatcher::new(Schema, options? : Options) -> Self raise MendError
+pub fn SemanticWatcher::ready_count(Self) -> Int
+pub fn SemanticWatcher::settled_at(Self) -> Int
+pub fn SemanticWatcher::syntax_at(Self) -> Int
+pub fn SemanticWatcher::total_required(Self) -> Int
+pub fn SemanticWatcher::verdict(Self) -> SchemaVerdict
+pub fn SemanticWatcher::watched_paths(Self) -> Array[String]
+
+pub(all) enum Severity {
+  Info
+  Warning
+}
+pub fn Severity::equal(Self, Self) -> Bool
+pub fn Severity::not_equal(Self, Self) -> Bool
+pub impl Eq for Severity
+
+pub(all) enum Slot {
+  KeySlot
+  ValueSlot
+}
+pub fn Slot::equal(Self, Self) -> Bool
+pub fn Slot::not_equal(Self, Self) -> Bool
+pub impl Eq for Slot
+
+pub(all) struct Snapshot {
+  value : Json?
+  completeness : Completeness
+  open_path : Array[PathSegment]
+  exactness : Exactness
+  ambiguous : Bool
+}
+
+// Type aliases
+
+// Traits

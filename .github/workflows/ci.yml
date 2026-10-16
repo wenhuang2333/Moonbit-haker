@@ -119,6 +119,15 @@ jobs:
           bash static/demo/build.sh
           git diff --exit-code -- static/demo/jsonmend.js
 
+      - name: Public interface files are in sync
+        working-directory: code
+        run: |
+          # `pkg.generated.mbti` is the package's public API as the compiler
+          # sees it. Committing it makes every API change show up in review
+          # instead of arriving silently inside a feature diff -- which is what
+          # a 1.0 compatibility promise needs in order to mean anything.
+          moon info
+          git diff --exit-code -- '*.mbti'
       - name: Browser demo bundle smoke test
         run: node code/tests/demo_smoke.mjs
 

@@ -1,0 +1,109 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "zhanshishan/jsonmend/llm"
+
+import {
+  "zhanshishan/jsonmend",
+}
+
+// Values
+pub fn as_array(Json) -> Array[Json]?
+
+pub fn as_int(Json) -> Int?
+
+pub fn as_object(Json) -> Map[String, Json]?
+
+pub fn as_string(Json) -> String?
+
+pub fn field(Json, String) -> Json?
+
+pub fn field_int(Json, String) -> Int?
+
+pub fn field_string(Json, String) -> String?
+
+pub fn sse_data(String) -> String?
+
+pub fn stop_end(String) -> CallEnd
+
+// Errors
+
+// Types and methods
+pub(all) enum CallEnd {
+  Open
+  Complete
+  MaxTokens
+  Interrupted
+  ProviderError
+}
+pub fn CallEnd::equal(Self, Self) -> Bool
+pub fn CallEnd::is_truncated(Self) -> Bool
+pub fn CallEnd::name(Self) -> String
+pub fn CallEnd::not_equal(Self, Self) -> Bool
+pub impl Eq for CallEnd
+
+pub(all) enum Provider {
+  Anthropic
+  OpenAICompat
+}
+pub fn Provider::equal(Self, Self) -> Bool
+pub fn Provider::not_equal(Self, Self) -> Bool
+pub impl Eq for Provider
+
+pub struct SseBuffer {
+  pending : StringBuilder
+  data : Array[String]
+  mut has_data : Bool
+}
+pub fn SseBuffer::flush(Self) -> Array[String]
+pub fn SseBuffer::new() -> Self
+pub fn SseBuffer::push(Self, String) -> Array[String]
+
+pub struct TextStream {
+  provider : Provider
+  parser : @jsonmend.PartialParser
+  buf : StringBuilder
+  mut end : CallEnd
+  mut stop_reason : String
+  mut error_message : String
+  mut ignored : Int
+  mut seen_text : Bool
+}
+pub fn TextStream::end(Self) -> CallEnd
+pub fn TextStream::error(Self) -> String
+pub fn TextStream::finish(Self) -> @jsonmend.FinalResult?
+pub fn TextStream::ignored_events(Self) -> Int
+pub fn TextStream::new(Provider, options? : @jsonmend.Options) -> Self raise @jsonmend.MendError
+pub fn TextStream::push_event(Self, String) -> @jsonmend.Snapshot? raise @jsonmend.MendError
+pub fn TextStream::stop_reason(Self) -> String
+pub fn TextStream::text(Self) -> String
+
+type ToolCall
+
+pub(all) struct ToolCallView {
+  index : Int
+  id : String
+  name : String
+  snapshot : @jsonmend.Snapshot
+  exactness : @jsonmend.Exactness
+  done : Bool
+  end : CallEnd
+  stop_reason : String
+}
+
+pub struct ToolStream {
+  provider : Provider
+  options : @jsonmend.Options
+  calls : Array[ToolCall]
+  mut error_message : String
+  mut ignored : Int
+}
+pub fn ToolStream::arguments(Self, Int) -> String
+pub fn ToolStream::error(Self) -> String
+pub fn ToolStream::finish(Self) -> Array[ToolCallView] raise @jsonmend.MendError
+pub fn ToolStream::ignored_events(Self) -> Int
+pub fn ToolStream::new(Provider, options? : @jsonmend.Options) -> Self raise @jsonmend.MendError
+pub fn ToolStream::push_event(Self, String) -> Array[ToolCallView] raise @jsonmend.MendError
+pub fn ToolStream::views(Self) -> Array[ToolCallView]
+
+// Type aliases
+
+// Traits
