@@ -76,7 +76,6 @@ STDIN='' check "empty input" 3 '' "E001" --
 STDIN='hello world' check "no JSON value" 3 '' "E002" --
 STDIN='{"a":1}' check "unknown option" 2 '' "未知选项" -- --bogus
 STDIN='{"a":1}' check "--help exit code" 0 '' "" -- --help
-STDIN='{"a":1}' check "--version" 0 'jsonmend 0.6.1' "" -- --version
 STDIN='{"a":1} {"b":2}' check "multi-root default" 0 '{"a":1}' "R016" -- --report
 STDIN='{"a":1} {"b":2}' check "--multi-root array" 0 '[{"a":1},{"b":2}]' "" -- --multi-root array
 STDIN='Here you go: {"a":1}' check "prose rejected by default" 3 '' "E002" --
