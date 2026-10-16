@@ -116,6 +116,25 @@ jobs:
           (cd dist && sha256sum jsonmend-linux-x86_64 jsonmend-macos-arm64 jsonmend-probe.wasm jsonmend-demo.js > SHA256SUMS)
           cat dist/SHA256SUMS
 
+      # The release body is the section of CHANGELOG.md for this tag, not the
+      # whole file: a release note that opens with "this file records every
+      # change" and then lists six older versions is a file, not a note.
+      - name: Extract this version's changelog section
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { inside = 1; print; next }
+            inside && /^## \[/     { exit }
+            inside                 { print }
+          ' code/CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "no CHANGELOG section for $version" >&2
+            exit 1
+          fi
+          wc -l "$RUNNER_TEMP/notes.md"
+
       # `gh release create` is not idempotent, and a tag can be re-pointed at a
       # fixed commit, so replace any release that already exists for this tag.
       - name: Publish the release
@@ -127,7 +146,7 @@ jobs:
           gh release delete "$GITHUB_REF_NAME" --yes --cleanup-tag=false || true
           gh release create "$GITHUB_REF_NAME" \
             --title "JSONMend $GITHUB_REF_NAME" \
-            --notes-file code/CHANGELOG.md \
+            --notes-file "$RUNNER_TEMP/notes.md" \
             dist/jsonmend-linux-x86_64 \
             dist/jsonmend-macos-arm64 \
             dist/jsonmend-probe.wasm \
