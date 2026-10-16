@@ -521,7 +521,12 @@ fn check_schema(schema : Schema?, value : Json) -> SchemaCheck {
           }
         }
         if v.mismatched.length() > 0 {
-          sb.write_string("; wrong kind ")
+          // "mismatch", not "wrong kind": since 0.7.0 the declared kind can be
+          // right while a constraint on the value is violated, and `expected`
+          // then carries the constraint (`integer >= 0`, `one of ["low",
+          // "high"]`) rather than a kind. Calling that a wrong kind sends the
+          // reader looking for a type error that is not there.
+          sb.write_string("; mismatch ")
           for i = 0; i < v.mismatched.length(); i = i + 1 {
             if i > 0 {
               sb.write_string(", ")
