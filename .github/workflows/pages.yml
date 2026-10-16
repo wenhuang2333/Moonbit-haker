@@ -1,0 +1,59 @@
+# Publish the browser demo to GitHub Pages.
+#
+# static/demo/ is a static directory with no build step: live.html and
+# index.html drive the MoonBit-compiled jsonmend.js in the browser. The whole
+# directory is uploaded verbatim, so every relative reference (including
+# ./jsonmend.js) resolves at the published URL:
+#
+#   https://wenhuang2333.github.io/Moonbit-haker/          -> index.html
+#   https://wenhuang2333.github.io/Moonbit-haker/live.html -> the live demo
+#
+# Pages is enabled with build_type "workflow"; this file is the only source of
+# deployments. See code/docs/REPRODUCE.md for the manual equivalent.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "static/demo/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish static/demo to Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage the demo directory
+        run: |
+          mkdir -p _site
+          cp -R static/demo/. _site/
+          test -f _site/live.html
+          test -f _site/index.html
+          test -f _site/jsonmend.js
+          ls -l _site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
