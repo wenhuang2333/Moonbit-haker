@@ -231,8 +231,18 @@ fi
 if [ "$UPDATE_EXEMPTIONS" -eq 1 ]; then
   cur_n="$(wc -l <"$CUR_FILE" | tr -d ' ')"
   old_n="$(wc -l <"$OLD_FILE" | tr -d ' ')"
-  if [ "$cur_n" -gt "$old_n" ] && [ "${COVERAGE_FORCE_EXEMPTIONS:-0}" != "1" ]; then
-    echo "coverage.sh: refusing to grow the exemption list ($old_n -> $cur_n entries)." >&2
+  # Growth is a *set* property, not a count: shrinking by two and adding one is
+  # still an addition, and the ratchet only turns one way.
+  NEW_ONLY="$(awk -F'\t' '
+    NR == FNR { exc[$1 "\t" $3]++; next }
+    {
+      k = $1 "\t" $3
+      if (exc[k] > 0) { exc[k]-- } else { printf "  new  %s:%s  %s\n", $1, $2, $3 }
+    }
+  ' "$OLD_FILE" "$CUR_FILE")"
+  if [ -n "$NEW_ONLY" ] && [ "${COVERAGE_FORCE_EXEMPTIONS:-0}" != "1" ]; then
+    echo "coverage.sh: refusing to grow the exemption list ($old_n -> $cur_n entries):" >&2
+    printf '%s\n' "$NEW_ONLY" >&2
     echo "coverage.sh: write tests instead, or re-baseline deliberately with COVERAGE_FORCE_EXEMPTIONS=1." >&2
     exit 1
   fi
@@ -250,6 +260,9 @@ if [ "$UPDATE_EXEMPTIONS" -eq 1 ]; then
     echo "# the source text, so inserting code above an entry does not invalidate it."
     sort "$CUR_FILE"
   } >"$EXEMPTIONS_FILE.tmp"
+  if [ "$old_n" -gt "$cur_n" ]; then
+    echo "coverage.sh: pruned $((old_n - cur_n)) exemption(s) that are covered now"
+  fi
   mv "$EXEMPTIONS_FILE.tmp" "$EXEMPTIONS_FILE"
   echo "coverage.sh: wrote $cur_n exemption(s) to ${EXEMPTIONS_FILE#"$ROOT"/}"
   exit 0
@@ -259,22 +272,27 @@ EXC_REPORT=""
 if [ ! -f "$EXEMPTIONS_FILE" ]; then
   echo "coverage.sh: no $EXEMPTIONS_FILE — the per-file ratchet is skipped (floors still enforced)" >&2
 else
-  EXC_REPORT="$(awk -F'\t' '
-    NR == FNR { exc[$1 "\t" $3]++; exc_line[$1 "\t" $3] = $2; next }
-    { cur[$1 "\t" $3]++; cur_line[$1 "\t" $3] = $2; file[$1 "\t" $3] = $1; text[$1 "\t" $3] = $3 }
-    END {
-      for (k in cur) {
-        if (cur[k] > exc[k] + 0) {
-          printf "new\t%s\t%s\t%s\n", file[k], cur_line[k], text[k]
+  # Match line by line, first come first served, so that a duplicated source
+  # text reports the *actual* line that has no exemption and the actual recorded
+  # entry that can be deleted. Both directions use the same text key.
+  EXC_REPORT="$(
+    {
+      awk -F'\t' '
+        NR == FNR { exc[$1 "\t" $3]++; next }
+        {
+          k = $1 "\t" $3
+          if (exc[k] > 0) { exc[k]-- } else { printf "new\t%s\t%s\t%s\n", $1, $2, $3 }
         }
-      }
-      for (k in exc) {
-        if (exc[k] > cur[k] + 0) {
-          printf "stale\t%s\t%s\t%s\n", (k in file ? file[k] : k), exc_line[k], text[k]
+      ' "$OLD_FILE" "$CUR_FILE"
+      awk -F'\t' '
+        NR == FNR { cur[$1 "\t" $3]++; next }
+        {
+          k = $1 "\t" $3
+          if (cur[k] > 0) { cur[k]-- } else { printf "stale\t%s\t%s\t%s\n", $1, $2, $3 }
         }
-      }
-    }
-  ' "$OLD_FILE" "$CUR_FILE" | sort)"
+      ' "$CUR_FILE" "$OLD_FILE"
+    } | sort
+  )"
 
   if [ -n "$EXC_REPORT" ]; then
     FAIL=1

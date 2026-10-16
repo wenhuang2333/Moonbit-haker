@@ -206,10 +206,17 @@ decided	20 calls, 99515 bytes	3.8 ms	188.89 us/call	2.61x repair	25.1 MB/s
 | `watcher chunk 64`（流式路径） | **114 – 143 µs** | **1.64 – 2.00×** | 33.2 – 41.8 MB/s | 不适用 |
 | `decided`（`decided_at_permille`） | 179 – 243 µs | 2.54 – 3.40× | 19.5 – 26.6 MB/s | 不适用 |
 
-0.7.0 删除 `sampled` 行后的复测（同机同轮，`moon run bench --target native --release`，
-单位 µs/call / 相对 `repair`）：`semantic_readiness` 192.31 = **2.81×**、
+0.7.0 的复测（同机同轮，`moon run bench --target native --release`，单位 µs/call /
+相对 `repair`）。删除 `sampled` 对照行后一次：`semantic_readiness` 192.31 = 2.81×、
 `field_readiness` 255.00 = 3.72×（52.48 µs/KiB）、`watcher chunk 64` 113.64 = 1.66×、
-`decided` 182.14 = 2.66×。删除的是**对照行**，不是测量：其余各行与 0.6.0 的区间一致。
+`decided` 182.14 = 2.66×。Q-35 把时间轴改成由 `Delta.at` 给出、`semantic_readiness`
+从约一千次采样改成整篇喂一次之后，三次运行：`semantic_readiness` = 116.28 / 147.06 /
+170.00 µs = **1.52× / 1.68× / 1.74×** `repair`（`repair` 同轮 76.52 / 84.75 / 101.00 µs）；
+`watcher chunk 64` 166.67 – 192.31 µs（1.90 – 2.33×）、`decided` 260.00 – 384.62 µs
+（3.00 – 5.03×）、`field_readiness` 336.67 – 481.82 µs（4.40 – 4.77×）。
+余下与 `repair` 的差距主要是 `collect_deltas` 本身：同一份语料上 `deltas` 行报
+144.4 – 153.0% 的解析耗时，不是采样点。上表 0.6.0 的 191 – 248 µs = 2.42 – 3.47×
+是 0.6.0 的历史记录，未改动。
 
 读法：
 

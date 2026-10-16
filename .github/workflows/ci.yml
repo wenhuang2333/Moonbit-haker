@@ -104,15 +104,15 @@ jobs:
             --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe \
             --check
 
-      - name: Library coverage
+      - name: Library coverage (floors and the monotonic ratchet are enforced)
         working-directory: code
         run: |
-          moon coverage clean
-          moon test --enable-coverage
-          echo "== library package =="
-          moon coverage report -f summary -p zhanshishan/jsonmend
-          echo "== including bench =="
-          moon coverage report -f summary
+          # `tests/coverage.sh` runs the same report and then enforces the
+          # 85%/90% floors and the monotonic exemption list. Running the raw
+          # report here would print the numbers without failing on them, which
+          # is the same as not having a gate: the ratchet only means something
+          # if a regression can turn the build red.
+          bash tests/coverage.sh
 
       - name: Browser demo bundle is in sync
         run: |

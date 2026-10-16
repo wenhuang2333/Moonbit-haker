@@ -5,7 +5,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [0.7.0] - 未发布（开发中）
+## [0.7.0] - 2026-10-16
 
 主题：**前言重放、可定位的增量与声明式约束**。第七轮遗留的半修正确性问题在本轮收尾，
 `Delta` 补上位置字段（1.0.0 之前必须做的契约变更），骨架声明开始表达**值**而不只是形状。
@@ -38,6 +38,79 @@
   delta 的 JSON 序列化通道，因此这次字段新增不需要同步改任何 `to_json`；
   `Delta::pointer()` 的输出格式也未变。
 - 版本推进到 `0.7.0`（`code/moon.mod`、`--version`）。
+
+### 新增：声明式值约束（Schema constraints v1）
+
+骨架以前只描述**形状**，`{!limit:integer}` 接受 `{"limit":-1}`。现在声明可以约束值：
+
+- `minimum` / `exclusiveMinimum` / `maximum` / `exclusiveMaximum`（`number` / `integer`）；
+- `minLength` / `maxLength`（`string`）；
+- `enum:[字面量,…]`（任意标量种类，字面量必须与种类匹配）；
+- `pattern:[字符类]`——**只有一个字符类，没有正则引擎**，明确不支持
+  `+ * ? | ^ $ ( )`、连接、选择、锚点与反向引用。
+
+语法紧跟在种类之后：`{!limit:integer(minimum:0)}`、
+`{!code:string(pattern:[A-Z0-9_])}`、`{!kind:string(enum:["low","high"])}`。
+因此**所有 0.6.x 声明逐字解析出同一个 schema、行为不变**（`{a:integer b:string}`
+仍是两个成员；`{a:integer (minimum:0)}` 是 E070）。`stringify()` 会规范化并往返约束，
+Q-23 往返语料扩到 25 条受限声明。
+
+让这只是「运行时特性」而不是「校验器」的部分：新事件
+`ReadinessEvent::FieldRejected(path, expected, got)` 在**使该值定稿的那条 delta** 上
+发出，流式调用方可以据此取消——`{"limit":-1,"note":"…"}` 在 216 个码元中的第 12 个
+就能拒绝，而不必读完尾部。`FieldInvalid` 仍然表示**种类不对**并携带整条声明；
+`FieldRejected` 表示种类正确而值违反了约束。
+
+### 变更：清掉第二个实现（Q-36）
+
+- 删除 `semantic_readiness_sampled` 与 `KeepFirst` 分支（−72 行）。`KeepFirst`
+  不再是一条独立实现路径，而是一个**有文档的组合**：观察器按「delta 被 drain 时
+  值树里是什么」判定（增量喂入时重复名取先到的值，整块喂入时取后到的值）；
+  早发的 `RootReady` 在 `KeepFirst` 下为真、在 `KeepLast` 下是**不会被撤回的下界**，
+  `conflict()` 说明落在哪种情况，`verdict()` 始终是 `KeepLast` 的裁决。
+- 已发布的就绪表格逐字未变（995/121、1000/1000、996/996、996/213、996/200、1000/1000、
+  977/264、995/128/1000、992/84/1000、995/1000/1000）。唯一移动的数字是重复键文档的
+  `syntax_permille`（933‰）——它以前是采样近似的产物。
+- `plan.mbt` 的骨架消息从 `wrong kind` 改为 `mismatch`：0.7.0 之后种类可能正确而约束被
+  违反，`expected` 里带的已经是约束（`integer >= 0`、`one of ["low","high"]`），
+  再说「种类错误」会把读者引向一个并不存在的类型错误。
+
+### 测试与门禁
+
+- **Q-35 的落点**：`syntax_at` / `settled_at` / `RootInvalid` 与
+  `decided_at_permille` 全部改用 `Delta.at`，`step` 参数仍被汇报但不再决定分辨率。
+  新增回归测试断言 `chunk=1/997/整块` 与 `step=1/auto/997` 下的 permille 完全一致。
+  实测同一台机器上 `semantic_readiness` 从 2.42–3.47× `repair` 降到
+  **1.52× / 1.68× / 1.74×**（三次）。**没有达到规划里希望的 1.0–1.5×**：
+  剩余成本是 `collect_deltas` 本身（`deltas` 基准行报告为解析基线的 144–153%）。
+  再往前一步需要在引擎里把 delta 过滤到被观察路径上，属于 0.8 的候选。
+- **Q-33 硬化为门禁**：`run_independent.py` 把「能在语法合法文件上触发的规则 ⊆ {R018}」
+  从报告行升级为**无条件判据**（违反即 exit 1 并逐条点名 `file: R0xx line:col`）；
+  `RULES.md` 给 22 条规则加了「能在合法 JSON 上触发」一列。执行这条判据时发现
+  **R018 并不是唯一**：`R014 FixEscape` 的非配对代理项分支会在两个参考实现都接受输入时
+  触发（11 个 `i_*` 文件、13 条记录）。已作为**具名残留**记录，并写明后果——
+  `valid_json` 的含义是「除重复键归一化外没有任何修复」，**不是**「严格解析器接受这份输入」。
+- **Q-37 覆盖率棘轮**：`tests/coverage.sh` 现在读取 `coverage_exemptions.txt`
+  （71 条，格式 `文件⇥行号⇥该行源码`）。未覆盖且未登记 → 失败并点名；
+  已登记但现在覆盖了 → 失败（「只能收缩」）；`--update-exemptions` 拒绝集合增长。
+  锚定在**源码文本**而非行号，因此在上方插入代码不会让整个清单失效。
+  同时把 CI 的覆盖率步骤从「打印原始报告」改为 `bash tests/coverage.sh`——
+  只打印数字而不据此失败的步骤，等于没有门禁。
+- `moon test --target all`：**192/192**（0.6.1 基线 171），四个后端同源。
+
+### 文档与发布
+
+- `code/docs/SPEC.md`：规范性规格（SR-1…SR-33），把 §20.1 的就绪表格冻结为 SR-12，
+  并写入 delta 契约、精确度格、四个字段与 `settled = 1000‰` 的含义。
+- **浏览器演示已发布**：https://wenhuang2333.github.io/Moonbit-haker/
+  （`index.html` / `live.html` / `jsonmend.js` 三者实测 200），
+  并录制了 69 秒走查（`static/demo/demo.mp4`，1280×800）与 10 秒 GIF（README 首屏）。
+- `产品文档-精简版.md`：**356 行**的交付评审版（归档 `产品文档.md` 2691 行保留为历史）。
+- **版本一致性进 CI**：`cli_smoke.sh` 新增 5 项断言，要求根 `README.md`、
+  `code/README.md`、`code/README.zh.md`、`产品文档-精简版.md` 与 `--version`
+  全部等于 `code/moon.mod` 的版本号，不一致时点名文件与两个字符串。
+  顺带删掉 `cli_smoke.sh` 里硬编码的 `jsonmend 0.6.1`——那是个陷阱：
+  每次发版都要手改，忘了就让一个正确的发版变红。
 
 ### 已知边界（诚实记录，未修）
 

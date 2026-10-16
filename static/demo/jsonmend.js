@@ -691,7 +691,7 @@ function _M0DTPC16result6ResultGRP211zhanshishan8jsonmend15SemanticWatcherRP211z
   this._0 = param0;
 }
 _M0DTPC16result6ResultGRP211zhanshishan8jsonmend15SemanticWatcherRP211zhanshishan8jsonmend9MendErrorE2Ok.prototype.$tag = 1;
-function _M0TP211zhanshishan8jsonmend15SemanticWatcher(param0, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12) {
+function _M0TP211zhanshishan8jsonmend15SemanticWatcher(param0, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12, param13, param14, param15, param16) {
   this.parser = param0;
   this.schema = param1;
   this.watched = param2;
@@ -702,9 +702,13 @@ function _M0TP211zhanshishan8jsonmend15SemanticWatcher(param0, param1, param2, p
   this.conflict = param7;
   this.checked = param8;
   this.events = param9;
-  this.bytes = param10;
-  this.settled_at = param11;
-  this.syntax_at = param12;
+  this.events_at = param10;
+  this.cur_at = param11;
+  this.in_finish = param12;
+  this.verdict_at = param13;
+  this.bytes = param14;
+  this.settled_at = param15;
+  this.syntax_at = param16;
 }
 function _M0DTPC16result6ResultGRPB5ArrayGRP211zhanshishan8jsonmend5DeltaERP211zhanshishan8jsonmend9MendErrorE3Err(param0) {
   this._0 = param0;
@@ -1097,13 +1101,13 @@ const _M0MP211zhanshishan8jsonmend6Engine16emit__bare__wordN6constrS2112 = 1;
 const _M0MP211zhanshishan8jsonmend6Engine16emit__bare__wordN6constrS2113 = 1;
 const _M0MPC16string10StringView4findN6constrS327 = 0;
 const _M0FPC28internal7strconv20parse__int64_2einnerN7_2abindS1023 = "";
-const _M0FP211zhanshishan8jsonmend12lookup__pathN7_2abindS2557 = ".";
+const _M0FP211zhanshishan8jsonmend12lookup__pathN7_2abindS2560 = ".";
 const _M0FP211zhanshishan8jsonmend20enum__literals__textN7_2abindS1803 = ",";
 const _M0MP211zhanshishan8jsonmend11Constraints4textN7_2abindS1810 = ",";
 const _M0FP211zhanshishan8jsonmend17treated__segmentsN7_2abindS1731 = ".";
 const _M0MP211zhanshishan8jsonmend6Schema8at__pathN7_2abindS1768 = ".";
-const _M0MP211zhanshishan8jsonmend9RetryHint9of__errorN5tupleS2980 = { _0: "", _1: 0 };
-const _M0FP411zhanshishan8jsonmend8examples3web10live__textN6constrS3176 = 1;
+const _M0MP211zhanshishan8jsonmend9RetryHint9of__errorN5tupleS2979 = { _0: "", _1: 0 };
+const _M0FP411zhanshishan8jsonmend8examples3web10live__textN6constrS3175 = 1;
 function _M0FPB13consume4__acc(acc, input) {
   const _p = (acc >>> 0) + ((Math.imul(input, -1028477379) | 0) >>> 0) | 0;
   const _p$2 = 17;
@@ -7496,7 +7500,7 @@ function _M0MP211zhanshishan8jsonmend15SemanticWatcher3new(schema, options) {
       break;
     }
   }
-  return new _M0DTPC16result6ResultGRP211zhanshishan8jsonmend15SemanticWatcherRP211zhanshishan8jsonmend9MendErrorE2Ok(new _M0TP211zhanshishan8jsonmend15SemanticWatcher(parser, schema, watched, index, settled, 0, false, false, false, [], 0, -1, -1));
+  return new _M0DTPC16result6ResultGRP211zhanshishan8jsonmend15SemanticWatcherRP211zhanshishan8jsonmend9MendErrorE2Ok(new _M0TP211zhanshishan8jsonmend15SemanticWatcher(parser, schema, watched, index, settled, 0, false, false, false, [], [], -1, false, -1, 0, -1, -1));
 }
 function _M0FP211zhanshishan8jsonmend10seg__equal(a, b) {
   if (a.$tag === 0) {
@@ -10688,12 +10692,17 @@ function _M0MP211zhanshishan8jsonmend6Schema8evaluate(self, value) {
   const ok = missing.length === 0 && mismatched.length === 0;
   return new _M0TP211zhanshishan8jsonmend13SchemaVerdict(_M0MPC15array5Array2atGiE(total, 0), _M0MPC15array5Array2atGiE(satisfied, 0), missing, mismatched, ok);
 }
+function _M0MP211zhanshishan8jsonmend15SemanticWatcher4emit(self, e) {
+  _M0MPC15array5Array4pushGsE(self.events, e);
+  _M0MPC15array5Array4pushGiE(self.events_at, self.cur_at);
+}
 function _M0MP211zhanshishan8jsonmend15SemanticWatcher17conclude__invalid(self) {
   if (self.concluded) {
     return undefined;
   }
   self.concluded = true;
-  _M0MPC15array5Array4pushGsE(self.events, new _M0DTP211zhanshishan8jsonmend14ReadinessEvent11RootInvalid(self.bytes));
+  self.verdict_at = self.cur_at >= 0 ? self.cur_at : self.bytes;
+  _M0MP211zhanshishan8jsonmend15SemanticWatcher4emit(self, new _M0DTP211zhanshishan8jsonmend14ReadinessEvent11RootInvalid(self.cur_at >= 0 ? self.cur_at : self.bytes));
 }
 function _M0MP211zhanshishan8jsonmend6Engine13pending__bare(self) {
   const _bind = self.opts.incomplete_number;
@@ -10923,7 +10932,8 @@ function _M0MP211zhanshishan8jsonmend15SemanticWatcher6decide(self) {
   const verdict = _M0MP211zhanshishan8jsonmend6Schema8evaluate(self.schema, _M0MP211zhanshishan8jsonmend15SemanticWatcher15value__at__root(self));
   if (verdict.ok) {
     self.concluded = true;
-    _M0MPC15array5Array4pushGsE(self.events, _M0DTP211zhanshishan8jsonmend14ReadinessEvent9RootReady__);
+    self.verdict_at = self.cur_at >= 0 ? self.cur_at : self.bytes;
+    _M0MP211zhanshishan8jsonmend15SemanticWatcher4emit(self, _M0DTP211zhanshishan8jsonmend14ReadinessEvent9RootReady__);
     return;
   } else {
     _M0MP211zhanshishan8jsonmend15SemanticWatcher17conclude__invalid(self);
@@ -10959,7 +10969,7 @@ function _M0FP211zhanshishan8jsonmend12lookup__path(v, path) {
     return v;
   }
   let cur = v;
-  const _it = _M0MPC16string6String5split(path, new _M0TPC16string10StringView(_M0FP211zhanshishan8jsonmend12lookup__pathN7_2abindS2557, 0, _M0FP211zhanshishan8jsonmend12lookup__pathN7_2abindS2557.length));
+  const _it = _M0MPC16string6String5split(path, new _M0TPC16string10StringView(_M0FP211zhanshishan8jsonmend12lookup__pathN7_2abindS2560, 0, _M0FP211zhanshishan8jsonmend12lookup__pathN7_2abindS2560.length));
   while (true) {
     const _bind = _M0MPB4Iter4nextGUsRPB4JsonEE(_it);
     if (_bind === undefined) {
@@ -11036,27 +11046,28 @@ function _M0MP211zhanshishan8jsonmend15SemanticWatcher6settle(self, i) {
   if (_M0MP211zhanshishan8jsonmend6Schema7accepts(decl, v)) {
     const _bind = _M0FP211zhanshishan8jsonmend21substructure__problem(decl, v);
     if (_bind === undefined) {
-      _M0MPC15array5Array4pushGsE(self.events, new _M0DTP211zhanshishan8jsonmend14ReadinessEvent10FieldReady(_M0MPC15array5Array2atGRP211zhanshishan8jsonmend6RepairE(self.watched, i).path));
+      _M0MP211zhanshishan8jsonmend15SemanticWatcher4emit(self, new _M0DTP211zhanshishan8jsonmend14ReadinessEvent10FieldReady(_M0MPC15array5Array2atGRP211zhanshishan8jsonmend6RepairE(self.watched, i).path));
     } else {
       const _Some = _bind;
       const _x = _Some;
       const _p = _x._0;
       const _e = _x._1;
-      _M0MPC15array5Array4pushGsE(self.events, new _M0DTP211zhanshishan8jsonmend14ReadinessEvent15FieldIncomplete(_p, _e));
+      _M0MP211zhanshishan8jsonmend15SemanticWatcher4emit(self, new _M0DTP211zhanshishan8jsonmend14ReadinessEvent15FieldIncomplete(_p, _e));
     }
     return undefined;
   }
   const _bind = _M0MP211zhanshishan8jsonmend6Schema19constraint__problem(decl, v);
   if (_bind === undefined) {
-    _M0MPC15array5Array4pushGsE(self.events, new _M0DTP211zhanshishan8jsonmend14ReadinessEvent12FieldInvalid(_M0MPC15array5Array2atGRP211zhanshishan8jsonmend6RepairE(self.watched, i).path, _M0MPC15array5Array2atGRP211zhanshishan8jsonmend6RepairE(self.watched, i).expect));
+    _M0MP211zhanshishan8jsonmend15SemanticWatcher4emit(self, new _M0DTP211zhanshishan8jsonmend14ReadinessEvent12FieldInvalid(_M0MPC15array5Array2atGRP211zhanshishan8jsonmend6RepairE(self.watched, i).path, _M0MPC15array5Array2atGRP211zhanshishan8jsonmend6RepairE(self.watched, i).expect));
   } else {
     const _Some = _bind;
     const _e = _Some;
-    _M0MPC15array5Array4pushGsE(self.events, new _M0DTP211zhanshishan8jsonmend14ReadinessEvent13FieldRejected(_M0MPC15array5Array2atGRP211zhanshishan8jsonmend6RepairE(self.watched, i).path, _e, _M0FP211zhanshishan8jsonmend8kind__of(v)));
+    _M0MP211zhanshishan8jsonmend15SemanticWatcher4emit(self, new _M0DTP211zhanshishan8jsonmend14ReadinessEvent13FieldRejected(_M0MPC15array5Array2atGRP211zhanshishan8jsonmend6RepairE(self.watched, i).path, _e, _M0FP211zhanshishan8jsonmend8kind__of(v)));
   }
   _M0MP211zhanshishan8jsonmend15SemanticWatcher17conclude__invalid(self);
 }
 function _M0MP211zhanshishan8jsonmend15SemanticWatcher9on__delta(self, d) {
+  self.cur_at = self.in_finish ? -1 : d.at;
   let _tmp;
   if (d.path.length === 0) {
     const _bind = d.op;
@@ -11071,7 +11082,13 @@ function _M0MP211zhanshishan8jsonmend15SemanticWatcher9on__delta(self, d) {
     _tmp = false;
   }
   if (!_tmp) {
-    self.syntax_at = self.bytes;
+    const _bind = d.op;
+    if (_bind === 1) {
+    } else {
+      if (self.syntax_at < d.at) {
+        self.syntax_at = d.at;
+      }
+    }
   }
   const closed = _M0FP211zhanshishan8jsonmend12delta__final(d);
   if (closed && d.path.length > 0) {
@@ -11104,7 +11121,7 @@ function _M0MP211zhanshishan8jsonmend15SemanticWatcher9on__delta(self, d) {
             } else {
               _M0MP211zhanshishan8jsonmend15SemanticWatcher6settle(self, i);
               if (self.settled_count === self.watched.length) {
-                self.settled_at = self.bytes;
+                self.settled_at = d.at;
               }
             }
             break _L;
@@ -11126,7 +11143,7 @@ function _M0MP211zhanshishan8jsonmend15SemanticWatcher9on__delta(self, d) {
         if (!_M0MPC15array5Array2atGbE(self.settled, i) && _M0FP211zhanshishan8jsonmend10is__prefix(d.path, _M0MPC15array5Array2atGRP211zhanshishan8jsonmend6RepairE(self.watched, i).segs)) {
           _M0MP211zhanshishan8jsonmend15SemanticWatcher6settle(self, i);
           if (self.settled_count === self.watched.length) {
-            self.settled_at = self.bytes;
+            self.settled_at = d.at;
           }
         }
         _tmp$2 = i + 1 | 0;
@@ -11188,11 +11205,6 @@ function _M0MP211zhanshishan8jsonmend15SemanticWatcher4feed(self, chunk) {
     }
   }
   return new _M0DTPC16result6ResultGuRP211zhanshishan8jsonmend9MendErrorE2Ok(undefined);
-}
-function _M0MP211zhanshishan8jsonmend15SemanticWatcher13drain__events(self) {
-  const out = self.events;
-  self.events = [];
-  return out;
 }
 function _M0FP211zhanshishan8jsonmend6render(v, indent) {
   return indent > 0 ? _M0MPC14json4Json17stringify_2einner(v, false, indent, undefined) : _M0MPC14json4Json17stringify_2einner(v, false, 0, undefined);
@@ -11551,6 +11563,7 @@ function _M0MP211zhanshishan8jsonmend15SemanticWatcher6finish(self) {
   } else {
     return _bind;
   }
+  self.in_finish = true;
   const _bind$2 = _M0MP211zhanshishan8jsonmend13PartialParser13drain__deltas(self.parser);
   let _bind$3;
   if (_bind$2.$tag === 1) {
@@ -11572,6 +11585,8 @@ function _M0MP211zhanshishan8jsonmend15SemanticWatcher6finish(self) {
       break;
     }
   }
+  self.in_finish = false;
+  self.cur_at = -1;
   let _tmp$2 = 0;
   while (true) {
     const i = _tmp$2;
@@ -12620,22 +12635,13 @@ function _M0FP211zhanshishan8jsonmend19semantic__readiness(input, schema, step, 
   } else {
     return _bind;
   }
-  let i = 0;
-  while (true) {
-    if (i < n) {
-      const next = (i + st | 0) > n ? n : i + st | 0;
-      const _bind$2 = _M0MP211zhanshishan8jsonmend15SemanticWatcher4feed(w, _M0MPC16string10StringView9to__owned(_M0MPC16string6String21clamped__view_2einner(input, i, next)));
-      if (_bind$2.$tag === 1) {
-        const _ok = _bind$2;
-        _ok._0;
-      } else {
-        return _bind$2;
-      }
-      i = next;
-      _M0MP211zhanshishan8jsonmend15SemanticWatcher13drain__events(w);
-      continue;
+  if (n > 0) {
+    const _bind$2 = _M0MP211zhanshishan8jsonmend15SemanticWatcher4feed(w, input);
+    if (_bind$2.$tag === 1) {
+      const _ok = _bind$2;
+      _ok._0;
     } else {
-      break;
+      return _bind$2;
     }
   }
   const _bind$2 = _M0MP211zhanshishan8jsonmend15SemanticWatcher6finish(w);
@@ -13482,7 +13488,7 @@ function _M0MP211zhanshishan8jsonmend9RetryHint9of__error(e, input, radius) {
   }
   let _bind;
   if (input === undefined) {
-    _bind = _M0MP211zhanshishan8jsonmend9RetryHint9of__errorN5tupleS2980;
+    _bind = _M0MP211zhanshishan8jsonmend9RetryHint9of__errorN5tupleS2979;
   } else {
     const _Some = input;
     const _text = _Some;
@@ -14459,7 +14465,7 @@ function _M0FP411zhanshishan8jsonmend8examples3web10live__text(input, upto, sche
       let _try_err$3;
       _L$4: {
         _L$5: {
-          const _bind$8 = _M0FP211zhanshishan8jsonmend19semantic__readiness(input, sk, _M0FP411zhanshishan8jsonmend8examples3web10live__textN6constrS3176, undefined);
+          const _bind$8 = _M0FP211zhanshishan8jsonmend19semantic__readiness(input, sk, _M0FP411zhanshishan8jsonmend8examples3web10live__textN6constrS3175, undefined);
           if (_bind$8.$tag === 1) {
             const _ok = _bind$8;
             full = _ok._0;

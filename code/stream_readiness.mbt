@@ -65,6 +65,19 @@
 //   * the refusal is published as `FieldRejected` (path, expected, got) — a
 //     verdict, so a caller that only reads verdicts sees it, and a caller that
 //     wants to tell "wrong kind" from "wrong value" sees which one it was;
+// ## Positions come from the deltas (Q-35)
+//
+// `Delta.at` is the input offset a delta was produced at, in UTF-16 code units,
+// and it is independent of how the caller split the stream. Every position this
+// module reports — `syntax_at`, `settled_at`, the stamp `watch_readiness` puts on
+// each event, the fraction `decided_at_permille` returns, and the payload of
+// `RootInvalid` — is read from it rather than from the number of code units fed
+// so far. The latter is the end of the current chunk and therefore moved with the
+// caller's chunking: a 1000-code-unit chunk reported the same "decided here" for
+// an event that fired one code unit into it as for one that fired at its end.
+// The fractions are now exact, which is why `semantic_readiness` feeds the
+// document once instead of sampling it about a thousand times.
+//
 //   * `RootInvalid(offset)` is published at the same offset as before, so
 //     `decided_at_permille` returns the fraction of the input at which the
 //     refusal became final;
@@ -273,6 +286,20 @@ pub struct SemanticWatcher {
   mut conflict : Bool
   mut checked : Bool
   mut events : Array[ReadinessEvent]
+  /// The offset each queued event fired at, in the same unit as `Delta.at`:
+  /// `-1` for an event only `finish()` could produce. Kept beside `events` so a
+  /// timeline can be built without re-deriving the position from how the caller
+  /// happened to split the stream (Q-35).
+  mut events_at : Array[Int32]
+  /// `Delta.at` of the delta being processed right now, or `-1` outside one.
+  mut cur_at : Int32
+  /// Whether the deltas being processed were produced by `finish()`.
+  mut in_finish : Bool
+  /// The offset at which the root verdict became final, or `-1` while it has
+  /// not been reached. `settled_at` is the moment every followed path was
+  /// final; this is the moment the *answer* was (they differ when the skeleton
+  /// turns out unsatisfied, and when nothing needed following).
+  mut verdict_at : Int32
   mut bytes : Int32
   /// Code units consumed when the last followed path became final, or `-1`.
   mut settled_at : Int32
@@ -348,6 +375,10 @@ pub fn SemanticWatcher::new(
     conflict: false,
     checked: false,
     events: [],
+    events_at: [],
+    cur_at: -1,
+    in_finish: false,
+    verdict_at: -1,
     bytes: 0,
     settled_at: -1,
     syntax_at: -1,
@@ -456,8 +487,26 @@ pub fn SemanticWatcher::feed(
 }
 
 ///|
+/// Queue one event, stamped with the position it fired at.
+///
+/// The stamp is the `at` of the delta that produced it (`-1` for an event that
+/// only `finish()` could produce), which is the whole point of Q-35: the
+/// timeline is a property of the input, not of the caller's chunking.
+fn SemanticWatcher::emit(self : SemanticWatcher, e : ReadinessEvent) -> Unit {
+  self.events.push(e)
+  self.events_at.push(self.cur_at)
+}
+
+///|
 /// Consume one delta.
 fn SemanticWatcher::on_delta(self : SemanticWatcher, d : Delta) -> Unit {
+  // `Delta.at` is the input offset the delta was produced at, and it does not
+  // depend on how the caller split the stream (`api.mbt`). Positions are taken
+  // from it rather than from `self.bytes`, which is the *end of the chunk* and
+  // therefore moves with the chunking (Q-35). An event produced by the
+  // `finish()` drain is stamped `-1`: the document was not yet final when the
+  // input ran out, so it has no position in the timeline.
+  self.cur_at = if self.in_finish { -1 } else { d.at }
   // Syntax readiness is "the moment the value stopped changing", which is the
   // moment of the last delta that touched the value tree — not the root `Close`,
   // which only re-states a value the tree already holds (a snapshot auto-closes
@@ -465,8 +514,16 @@ fn SemanticWatcher::on_delta(self : SemanticWatcher, d : Delta) -> Unit {
   // two apart is the point of the report: on a document whose last member is
   // long, syntax is ready one code unit before the end, and a skeleton can be
   // ready far earlier than that.
+  //
+  // `AppendText` is skipped: its `at` is the *drain* point, not the text's
+  // position (`api.mbt`), and text does not itself change the value tree — the
+  // `Set` for the member it belongs to does. Reading a position off it would
+  // reintroduce the chunk dependence this replaces.
   if !(d.path.length() == 0 && d.op is Close) {
-    self.syntax_at = self.bytes
+    match d.op {
+      AppendText => ()
+      _ => if self.syntax_at < d.at { self.syntax_at = d.at }
+    }
   }
   let closed = delta_final(d)
   if closed && d.path.length() > 0 {
@@ -488,7 +545,7 @@ fn SemanticWatcher::on_delta(self : SemanticWatcher, d : Delta) -> Unit {
           } else {
             self.settle(i)
             if self.settled_count == self.watched.length() {
-              self.settled_at = self.bytes
+              self.settled_at = d.at
             }
           }
         }
@@ -507,7 +564,7 @@ fn SemanticWatcher::on_delta(self : SemanticWatcher, d : Delta) -> Unit {
       if !self.settled[i] && is_prefix(d.path, self.watched[i].segs) {
         self.settle(i)
         if self.settled_count == self.watched.length() {
-          self.settled_at = self.bytes
+          self.settled_at = d.at
         }
       }
     }
@@ -559,18 +616,15 @@ fn SemanticWatcher::settle(self : SemanticWatcher, i : Int32) -> Unit {
   let decl = self.watched[i].decl
   if decl.accepts(v) {
     match substructure_problem(decl, v) {
-      Some((p, e)) => self.events.push(FieldIncomplete(p, e))
-      None => self.events.push(FieldReady(self.watched[i].path))
+      Some((p, e)) => self.emit(FieldIncomplete(p, e))
+      None => self.emit(FieldReady(self.watched[i].path))
     }
     return
   }
   match decl.constraint_problem(v) {
-    Some(e) =>
-      self.events.push(FieldRejected(self.watched[i].path, e, kind_of(v)))
+    Some(e) => self.emit(FieldRejected(self.watched[i].path, e, kind_of(v)))
     None =>
-      self.events.push(
-        FieldInvalid(self.watched[i].path, self.watched[i].expect),
-      )
+      self.emit(FieldInvalid(self.watched[i].path, self.watched[i].expect))
   }
   self.conclude_invalid()
 }
@@ -598,7 +652,8 @@ fn SemanticWatcher::decide(self : SemanticWatcher) -> Unit {
   let verdict = self.schema.evaluate(self.value_at_root())
   if verdict.ok {
     self.concluded = true
-    self.events.push(RootReady)
+    self.verdict_at = self.offset_now()
+    self.emit(RootReady)
   } else {
     self.conclude_invalid()
   }
@@ -629,7 +684,22 @@ fn SemanticWatcher::conclude_invalid(self : SemanticWatcher) -> Unit {
     return
   }
   self.concluded = true
-  self.events.push(RootInvalid(self.bytes))
+  self.verdict_at = self.offset_now()
+  // The payload is a position even when the timeline stamp is `-1`: an event
+  // produced by the `finish()` drain is at the end of the input, and saying so
+  // is more useful than naming no offset at all.
+  self.emit(RootInvalid(self.offset_now()))
+}
+
+///|
+/// The offset an event produced outside a structural delta belongs to: the
+/// current delta's `at`, or the end of the fed input when there is none.
+fn SemanticWatcher::offset_now(self : SemanticWatcher) -> Int32 {
+  if self.cur_at >= 0 {
+    self.cur_at
+  } else {
+    self.bytes
+  }
 }
 
 ///|
@@ -639,6 +709,30 @@ pub fn SemanticWatcher::drain_events(
 ) -> Array[ReadinessEvent] {
   let out = self.events
   self.events = []
+  self.events_at = []
+  out
+}
+
+///|
+/// The offset the root verdict was reached at, or `-1` while it has not been
+/// reached. The event list's stamp for a `RootReady`/`RootInvalid` is the same
+/// number; this exists so `decided_at_permille` does not have to build the list.
+fn SemanticWatcher::verdict_offset(self : SemanticWatcher) -> Int32 {
+  self.verdict_at
+}
+
+///|
+/// The queued events with the offset each fired at, oldest first. `-1` is an
+/// event that only `finish()` could produce. Both arrays are cleared.
+fn SemanticWatcher::drain_events_at(
+  self : SemanticWatcher,
+) -> Array[(ReadinessEvent, Int32)] {
+  let out : Array[(ReadinessEvent, Int32)] = []
+  for i = 0; i < self.events.length(); i = i + 1 {
+    out.push((self.events[i], self.events_at[i]))
+  }
+  self.events = []
+  self.events_at = []
   out
 }
 
@@ -651,6 +745,10 @@ pub fn SemanticWatcher::bytes(self : SemanticWatcher) -> Int32 {
 ///|
 /// Code units consumed when the last followed path became final, or `-1` while
 /// that has not happened.
+///
+/// The `at` of the delta that made the last path final: a property of the
+/// input, not of the chunking (Q-35). When only `finish()` can make a path
+/// final — a member the input never wrote — this is the total length.
 pub fn SemanticWatcher::settled_at(self : SemanticWatcher) -> Int32 {
   self.settled_at
 }
@@ -658,6 +756,13 @@ pub fn SemanticWatcher::settled_at(self : SemanticWatcher) -> Int32 {
 ///|
 /// Code units consumed when the root value became final, or `-1` while the
 /// document still needs more input to be readable at all.
+///
+/// This is the `at` of the last structural delta that touched the value tree
+/// (`Set`/`Close`, the root `Close` excluded), so it is the same number however
+/// the caller split the stream — it used to be the end of the chunk the delta
+/// was drained in, which moved with the chunking (Q-35). `AppendText` carries
+/// the *drain* point rather than a position and does not move the tree, so it
+/// does not advance this.
 pub fn SemanticWatcher::syntax_at(self : SemanticWatcher) -> Int32 {
   self.syntax_at
 }
@@ -723,9 +828,16 @@ pub fn SemanticWatcher::finish(
   self : SemanticWatcher,
 ) -> FinalResult raise MendError {
   let fin = self.parser.finish()
+  // Deltas the input never produced: they close what the model left open. Their
+  // positions are still the deltas' `at` (the total length, per `api.mbt`), but
+  // an *event* they produce is not something the stream could have shown, so it
+  // is stamped `-1`.
+  self.in_finish = true
   for d in self.parser.drain_deltas() {
     self.on_delta(d)
   }
+  self.in_finish = false
+  self.cur_at = -1
   for i = 0; i < self.watched.length(); i = i + 1 {
     if !self.settled[i] {
       self.settle(i)
@@ -764,6 +876,12 @@ pub(all) struct ReadinessEventAt {
 /// Watch `input` in `chunk`-sized pieces and return every event (FR-39). The
 /// events are the same the streaming API produces; this form exists so that an
 /// audit can print them with a position.
+///
+/// The position is the `at` of the delta that produced the event, so the
+/// timeline does not depend on the chunk size (Q-35): `chunk=1` and one whole
+/// document produce the same permille for the same event. An event only
+/// `finish()` could produce carries `-1`, as before. `chunk` now controls the
+/// memory the feed loop holds, not the resolution of the answer.
 pub fn watch_readiness(
   input : String,
   schema : Schema,
@@ -785,8 +903,12 @@ pub fn watch_readiness(
     let next = if i + size > n { n } else { i + size }
     w.feed(input[i:next].to_owned())
     i = next
-    for e in w.drain_events() {
-      out.push({ event: e, permille: permille(i, n), })
+    for pair in w.drain_events_at() {
+      let (e, at) = pair
+      // While the input is being fed every event was produced inside a delta,
+      // so its offset is real; only the `finish()` drain below can produce one
+      // that has no position.
+      out.push({ event: e, permille: permille(at, n), })
     }
   }
   try {
@@ -794,8 +916,9 @@ pub fn watch_readiness(
   } catch {
     _ => ()
   }
-  for e in w.drain_events() {
-    out.push({ event: e, permille: -1, })
+  for pair in w.drain_events_at() {
+    let (e, at) = pair
+    out.push({ event: e, permille: if at < 0 { -1 } else { permille(at, n) }, })
   }
   out
 }
@@ -807,6 +930,11 @@ pub fn watch_readiness(
 /// `RootReady` and `RootInvalid` both count: what the caller needs to know is
 /// that the answer is final, not that the answer is yes. `""` when the input is
 /// decided only at the end.
+///
+/// The fraction is the verdict event's own offset, not the end of the chunk it
+/// was drained in (Q-35), so the answer no longer depends on `chunk`: the
+/// parameter now only controls how finely the input is fed and the loop still
+/// stops as soon as the answer is known.
 pub fn decided_at_permille(
   input : String,
   schema : Schema,
@@ -830,12 +958,16 @@ pub fn decided_at_permille(
     let next = if i + size > n { n } else { i + size }
     w.feed(input[i:next].to_owned())
     i = next
-    for e in w.drain_events() {
-      match e {
-        RootReady | RootInvalid(_) => return permille(i, n)
-        _ => ()
-      }
+    if w.concluded() {
+      // The answer arrived at the delta that produced it, not at the end of the
+      // chunk it happened to be drained in (Q-35). The offset is read from the
+      // watcher rather than from the event list, so the hot loop allocates
+      // nothing per chunk. A verdict reached while the input is still being fed
+      // was always reached inside a delta, so its offset is real.
+      return permille(w.verdict_offset(), n)
     }
+    // Keep the queue bounded: the events themselves are not needed here.
+    let _ = w.drain_events()
   }
   try {
     let _ = w.finish()

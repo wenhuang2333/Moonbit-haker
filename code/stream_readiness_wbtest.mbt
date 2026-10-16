@@ -703,6 +703,80 @@ test "the incremental and the batch form agree on every document" {
 }
 
 ///|
+test "the timeline is a property of the input, not of the chunking (Q-35)" {
+  // Longer than 1 000 code units, so `auto_step` would have sampled it and every
+  // reported fraction would have quantised to a sample boundary.
+  let s = sr_schema("{!query:string,!limit:integer}")
+  let text = "{\"query\":\"MoonBit\",\"limit\":10,\"tail\":\"" +
+    "x".repeat(4000) +
+    "\"}"
+  let one = watch_readiness(text, s, chunk=1) catch {
+    _ => return assert_true(false, msg="watch_readiness failed")
+  }
+  let big = watch_readiness(text, s, chunk=997) catch {
+    _ => return assert_true(false, msg="watch_readiness failed")
+  }
+  let whole = watch_readiness(text, s, chunk=text.length()) catch {
+    _ => return assert_true(false, msg="watch_readiness failed")
+  }
+  assert_eq(one.length(), big.length())
+  assert_eq(one.length(), whole.length())
+  for i = 0; i < one.length(); i = i + 1 {
+    let label = text.length().to_string() + " event " + i.to_string()
+    assert_eq(
+      label + " kind " + one[i].event.kind(),
+      label + " kind " + big[i].event.kind(),
+    )
+    assert_eq(
+      label + " permille " + one[i].permille.to_string(),
+      label + " permille " + big[i].permille.to_string(),
+    )
+    assert_eq(
+      label + " permille whole " + one[i].permille.to_string(),
+      label + " permille whole " + whole[i].permille.to_string(),
+    )
+  }
+  // The event the old quantum moved: `limit` is final at its own offset, not at
+  // the end of the 997-code-unit chunk that happened to contain it.
+  let limit_perm = sr_event_permille(one, "field_ready")
+  assert_true(limit_perm > 0 && limit_perm < 100, msg=limit_perm.to_string())
+  // Feeding once and sampling per code unit are the same measurement now, so the
+  // published numbers cannot depend on the `step` the caller asks for.
+  let sampled = semantic_readiness(text, s, step=1) catch {
+    _ => return assert_true(false, msg="semantic_readiness failed")
+  }
+  let batched = semantic_readiness(text, s) catch {
+    _ => return assert_true(false, msg="semantic_readiness failed")
+  }
+  let coarse = semantic_readiness(text, s, step=997) catch {
+    _ => return assert_true(false, msg="semantic_readiness failed")
+  }
+  assert_eq(sampled.settled_permille, batched.settled_permille)
+  assert_eq(sampled.settled_permille, coarse.settled_permille)
+  assert_eq(sampled.syntax_permille, batched.syntax_permille)
+  assert_eq(sampled.syntax_permille, coarse.syntax_permille)
+  assert_eq(sampled.schema_permille, batched.schema_permille)
+  // `syntax_at` and `settled_at` themselves, not only their fractions.
+  let w1 = match sr_watch(text, s, 1) {
+    Some(x) => x
+    None => return assert_true(false, msg="watcher did not build")
+  }
+  let w2 = match sr_watch(text, s, 997) {
+    Some(x) => x
+    None => return assert_true(false, msg="watcher did not build")
+  }
+  assert_eq(w1.syntax_at(), w2.syntax_at())
+  assert_eq(w1.settled_at(), w2.settled_at())
+  // The verdict, too: the answer is the same however the input arrived.
+  assert_eq(w1.verdict().ok, true)
+  assert_eq(w2.verdict().ok, true)
+  assert_eq(
+    decided_at_permille(text, s, chunk=1),
+    decided_at_permille(text, s, chunk=997),
+  )
+}
+
+///|
 test "deciding early and deciding late are different numbers" {
   let s = sr_schema("{!limit:integer}")
   // Refused as soon as the wrong value is final: a small fraction of the input.

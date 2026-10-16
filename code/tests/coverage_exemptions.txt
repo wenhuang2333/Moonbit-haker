@@ -49,9 +49,8 @@ schema.mbt	1532	path
 schema.mbt	1697	None => 0
 schema.mbt	1705	_ => return -1
 schema.mbt	1710	None => ()
-schema.mbt	1773	None => 0
-schema.mbt	1801	1000
-schema.mbt	1809	1000
+schema.mbt	1806	1000
+schema.mbt	1814	1000
 schema.mbt	236	0x74 => if u == 0x09 { hit = true } // \t
 schema.mbt	237	0x72 => if u == 0x0D { hit = true } // \r
 schema.mbt	238	0x5C | 0x5D | 0x2D | 0x5E => if u == e { hit = true } // \\ \] \- \^
@@ -71,13 +70,13 @@ schema.mbt	816	0x09 => "\\t"
 schema.mbt	817	0x0D => "\\r"
 schema.mbt	949	raise SchemaError(
 schema.mbt	953	at.to_string() +
-stream_readiness.mbt	326	Index(i) => i.to_string()
-stream_readiness.mbt	380	return out
-stream_readiness.mbt	385	if idx >= 0 && s.length() > 0 && s.at(0).to_int() != 0x30 {
-stream_readiness.mbt	386	out.push(Index(idx))
-stream_readiness.mbt	399	(Index(x), Index(y)) => x == y
-stream_readiness.mbt	400	_ => false
-stream_readiness.mbt	429	None => false
-stream_readiness.mbt	475	Index(i) => i.to_string()
-stream_readiness.mbt	589	return Some((p, "missing"))
-stream_readiness.mbt	738	self.syntax_at = self.bytes
+stream_readiness.mbt	353	Index(i) => i.to_string()
+stream_readiness.mbt	411	return out
+stream_readiness.mbt	416	if idx >= 0 && s.length() > 0 && s.at(0).to_int() != 0x30 {
+stream_readiness.mbt	417	out.push(Index(idx))
+stream_readiness.mbt	430	(Index(x), Index(y)) => x == y
+stream_readiness.mbt	431	_ => false
+stream_readiness.mbt	460	None => false
+stream_readiness.mbt	532	Index(i) => i.to_string()
+stream_readiness.mbt	643	return Some((p, "missing"))
+stream_readiness.mbt	850	self.syntax_at = self.bytes

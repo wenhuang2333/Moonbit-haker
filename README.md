@@ -85,7 +85,7 @@ export PATH="$HOME/.moon/bin:$PATH"
 git clone https://github.com/wenhuang2333/Moonbit-haker.git
 cd Moonbit-haker/code
 moon check --deny-warn   # 0 warning
-moon test                # 191 个测试全部通过
+moon test                # 192 个测试全部通过
 ```
 
 ```moonbit
@@ -228,11 +228,11 @@ Suggested retry:
 | 增量流重放 | 400 份生成文档 + 400 份变异输入 | 「增量重放 == 快照」全部成立 |
 | 大模型适配器 | 9 个夹具 × 双 provider | 通过（含截断、转义切分、代理对切分、多路并发） |
 | 公共面与选项测试 | 22 个 R 码 + 12 个 E 码逐一检查 | 通过 |
-| 三个后端 | wasm-gc / native / JS（`--target wasm` 也跑） | 各 191/191 通过（四个 target 共 764 次） |
+| 四个后端 | wasm-gc / native / JS / wasm（每条命令跑同一套测试） | 各 192/192 通过（共 768 次） |
 | 命令行冒烟 | 80 项断言（含全部退出码、`llm` 子命令、`explain` 的 14 条与 5 项版本一致性） | 通过 |
 | 示例对照 | 6 组输入/期望输出 | 逐字节一致 |
 | 差分测试（对照 `jsonrepair`、`json-repair`） | 402 条用例 | 202 处差异**全部有文档解释**，未解释 0 |
-| 库代码行覆盖率 | 根包 3306/3534、`llm` 包 337/391 | 93.5% / 86.2% |
+| 库代码行覆盖率 | 根包 3325/3552、`llm` 包 337/391 | 93.6% / 86.2% |
 | **独立第三方语料** | `nst/JSONTestSuite` 318 文件（MIT，commit `1ef36fa0`） | `y_` 误修 **2/95**（重复键），`n_` 有效值 **165/188** vs `json_repair` 166、`jsonrepair` 144 |
 | **骨架就绪表** | 7 个场景 | 4 个存在落差（最大 973‰ vs 260‰），3 个两层同时到达末尾 |
 | **安全层单价** | 4.9 KiB × 20 次调用 | `analyze` = `repair` 的 1.00–1.03×，`for_agent` 1.33–1.36×，`+schema` 1.38–1.45× |
@@ -324,7 +324,7 @@ mooncakes 页面核对**，原文引用保留英文）：
 | JSONL 批处理 | **无**（CLI 有 `--batch`，但那是评测用的一次性批量；库内无 `repair_jsonl`） | **有**（`repair_jsonl`，10 000 行上限，空行报错） |
 | 严格模式 | 有（`E010`，退出码 5） | `Options::strict`（原文："No heuristic is enabled in strict mode."） |
 | 三条不变量（输出合法 / 幂等 / 分块不变） | 由属性测试强制，见 `prop_wbtest.mbt` | 未承诺 |
-| 三后端一致性 | wasm-gc / native / JS 各 191/191 同一套测试 | 未声明 |
+| 三后端一致性 | wasm-gc / native / JS 各 192/192 同一套测试 | 未声明 |
 | 浏览器演示 | 有（`static/demo/index.html`，bundle 由 CI 校验同步） | 未提及 |
 | 差分证据 | 402 例对照 `jsonrepair` 与 `json-repair`，202 处差异全归因 | 未提及 |
 | 真值评测（与真值比，不与参照比） | 有（1200 条，协议先冻结，恢复率 100%） | 未提及 |
@@ -347,7 +347,7 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
   而且每个状态转移都是 `match` 的一个分支，22 条规则各自独立可测；
 - **`raise` 错误系统**直接承载 10 个 `E` 码，错误载荷（`limit`、`offset`、`RepairCode`、`Position`）
   随类型走，调用方不需要解析字符串；
-- **三后端一条命令**：`moon test` / `--target native` / `--target js` 跑同一套 191 个测试，
+- **三后端一条命令**：`moon test` / `--target native` / `--target js` 跑同一套 192 个测试，
   同一份引擎源码产出 wasm-gc 101.4 KiB 的库、native CLI 和浏览器 bundle —— 这在别的语言里
   要三套构建与三套测试；
 - **零第三方依赖**：无正则、无外部解析器，wasm-gc 产物只含引擎与 core 的必要部分；
@@ -462,10 +462,10 @@ repaired, complete what is truncated, and record every change with a code and a 
 - **Guarantees enforced by property tests**: output is always valid JSON, repair is idempotent,
   and streaming is chunk invariant.
 - **Verified**: 126 golden cases, 21 streaming cases, 8 property groups × 400 cases,
-  191 tests on each of wasm-gc / native / JS / wasm, 80 CLI assertions (including five that keep every
+  192 tests on each of wasm-gc / native / JS / wasm, 80 CLI assertions (including five that keep every
   stated version equal to `moon.mod`), and a 402-case differential
   corpus against `jsonrepair` and `json-repair` in which every one of the 202 divergences has
-  a documented cause. Library line coverage 93.5%; native throughput 41–43 MB/s
+  a documented cause. Library line coverage 93.6%; native throughput 41–43 MB/s
   (single-machine observation; CI reruns the same benchmark script).
 - **Live demo**: <https://wenhuang2333.github.io/Moonbit-haker/live.html> (four scenarios, frame
   by frame, with the three readiness numbers and the refusal-to-retry panel).

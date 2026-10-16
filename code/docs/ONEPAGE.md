@@ -91,13 +91,13 @@ jsonmend --check broken.json ; echo $?     # 1 = 需要修复
 | 骨架感知就绪 | 7 个场景：4 个存在落差（最小 1‰、最大 713‰），3 个两层同时到达末尾；`docs/READINESS.md` |
 | 独立语料 | `nst/JSONTestSuite` 318 文件：`y_` 误修 2/95（重复键），`n_` 有效值 165/188 vs `json_repair` 166/188、`jsonrepair` 144/188 |
 | 自愈闭环 | 4 个 episode：2 次重试后执行、1 次骨架不符回灌、1 次判定无改进后放弃 |
-| 覆盖率 | 根包 3306/3534 = 93.5%（`plan.mbt` 489/526、`schema.mbt` 797/844、`stream_readiness.mbt` 288/305），`llm` 包 337/391 = 86.2% |
+| 覆盖率 | 根包 3325/3552 = 93.6%（`plan.mbt` 489/526、`schema.mbt` 794/840、`stream_readiness.mbt` 310/327），`llm` 包 337/391 = 86.2% |
 | 差分测试 | 402 条用例对照 `json-repair` 与 `jsonrepair`；202 处差异全部由修复记录解释，未解释 0 |
 | 命令行 | 80 项断言全部通过（退出码 0/1/2/3/4/5/70 覆盖，含 `explain` 的 14 条与 5 项版本一致性：4 份文档 + `--version` 对齐 `moon.mod`） |
 | 演示页 | `static/demo/index.html` + `static/demo/live.html`，MoonBit JS 产物驱动，无头浏览器验证无报错 |
 | 在线演示 | <https://wenhuang2333.github.io/Moonbit-haker/live.html>（GitHub Pages，`pages.yml` 发布） |
 | 录屏 | `static/demo/demo.mp4`（69 秒，Chromium 真实录制）+ `static/demo/live-demo.gif` |
-| 跨后端 | wasm-gc / native / JS / wasm 四个 target 各 191/191 同一套测试（共 764 次） |
+| 跨后端 | wasm-gc / native / JS / wasm 四个 target 各 192/192 同一套测试（共 768 次） |
 | 吞吐 | native 35–39 MB/s（合法 JSON，1 KB–10 MB）；首个可见值出现在文档长度的 0.7%（中位数）；agent 场景（4 KB / 3 码元）0.08 µs/feed |
 | 内存 | 12.95 MB 输入 177.9 MB（13.7 ×）；同机 Node 10.6 ×、Python 14.3 ×，4 × 目标对建树实现不现实 |
 | 体积 | wasm-gc release 101.4 KiB（上限 150 KB）；native CLI 623.8 KiB；浏览器包 284.1 KiB |

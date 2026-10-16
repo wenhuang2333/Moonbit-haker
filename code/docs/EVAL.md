@@ -8,9 +8,9 @@
 | 生成器 | `code/tests/eval/corpus.py` eval-2，种子 20261015 |
 | 语料 | `code/tests/eval/corpus.jsonl`，1200 条，sha256 `c528375a0d996a78` |
 | 生成跳过 | 1203 次尝试因算子不适用而丢弃（登记 §5） |
-| 被测二进制 | `./_build/native/release/build/cmd/jsonmend/jsonmend.exe`（sha256:1d797f4fba7554b2, 936240 bytes） |
+| 被测二进制 | `./_build/native/release/build/cmd/jsonmend/jsonmend.exe`（sha256:c06ab96944921c4d, 954352 bytes） |
 | 工具链 | `moon 0.1.20261012 (748b63c 2026-10-12)` |
-| 运行时刻 | 2026-10-16T07:42:38Z |
+| 运行时刻 | 2026-10-16T08:03:56Z |
 | 退出码 | 0（0 = 全部验收判据通过） |
 
 ## 1. 总体

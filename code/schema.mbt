@@ -1773,15 +1773,20 @@ pub fn semantic_readiness(
       None => 0
     },
   )
+  // The caller's granularity, reported as `SemanticReadiness::step` and printed
+  // by the CLI. It no longer decides the resolution of the three numbers (they
+  // are exact now), so it is kept as the caller's declared sampling step.
   let w = SemanticWatcher::new(schema, options?)
-  let mut i = 0
-  while i < n {
-    let next = if i + st > n { n } else { i + st }
-    w.feed(input[i:next].to_owned())
-    i = next
-    // The events are consumed to keep the watcher's array from growing; the
-    // numbers come from the offsets it recorded.
-    let _ = w.drain_events()
+  // One feed, not one feed per sample: since 0.7.0 every number below comes from
+  // the `at` of the delta that produced the event, which does not depend on the
+  // chunking (Q-35), so there is nothing left for a sample point to control. The
+  // old loop fed `st` code units at a time — about a thousand `feed` calls per
+  // document — and each chunk end then quantised `syntax` and `settled`. The
+  // trade is that the delta queue holds the whole document for one drain; a
+  // caller that cannot afford that should drive `SemanticWatcher` in chunks
+  // itself.
+  if n > 0 {
+    w.feed(input)
   }
   let fin = w.finish()
   let required = schema.required_paths()
