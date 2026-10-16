@@ -416,7 +416,8 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 
 ## 路线图
 
-- ~~发布到 mooncakes.io~~：0.3.0 … **0.6.1** 均已发布（`moon publish` 退出码 0）；`v0.6.0`/`v0.6.1` tag 已推送，`release.yml` 产出预编译产物。0.7.0 是当前开发版本。
+- ~~发布到 mooncakes.io~~：0.3.0 … **0.7.0** 均已发布；tag `v0.5.0` … `v0.7.0` 已推送，`release.yml` 产出四个预编译产物与 `SHA256SUMS`。
+  0.7.0 的 CLI 上传路径失败（`receiver is gone`），改用同一份已校验产物 POST 官方端点成功——细节与证据见 [产品文档-精简版.md](产品文档-精简版.md) §11.1b。
 - ~~演示页新增「模拟 LLM 流」标签~~：`static/demo/live.html` 已落地（含重试面板与三层 readiness），并已发布到 GitHub Pages。
 - ~~给骨架加约束~~：`minimum` / `maximum` / `enum` / `maxLength` / `minLength` / `pattern`（字符类子集）已在 0.7.0 落地，见 [code/docs/SPEC.md](code/docs/SPEC.md)。
 - **把 `semantic_readiness` 做成增量**：`Delta.at` 已补齐时间戳，消费侧（`stream_readiness.mbt`）正在改接。
