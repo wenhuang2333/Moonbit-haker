@@ -7,7 +7,7 @@
 
 | 依赖 | 版本（实测） | 安装 |
 | --- | --- | --- |
-| MoonBit 工具链 | `moon 0.1.20261012`、`moonc v0.10.15+943464bfa` | `curl -fsSL https://cli.moonbitlang.com/install/unix.sh \| bash`，然后 `export PATH="$HOME/.moon/bin:$PATH"` |
+| MoonBit 工具链 | `moon 0.1.20261016`、`moonc v0.10.16+b1a0e846e` | `curl -fsSL https://cli.moonbitlang.com/install/unix.sh \| bash`，然后 `export PATH="$HOME/.moon/bin:$PATH"` |
 | Python | 3.9+ | 差分测试脚本 |
 | `json-repair`（Python） | 0.64.0 | `python3 -m pip install "json-repair==0.64.0"` |
 | Node.js | 24.x | JS 后端、演示 bundle 冒烟测试与第二个差分参照 |
@@ -22,6 +22,13 @@ moon version --all
 ```
 
 ## 1. 构建与静态检查
+
+> **工具链与 bundle 的耦合**：`static/demo/jsonmend.js` 与 `code/npm/vendor/jsonmend.js`
+> 是 MoonBit JavaScript 后端的产物，不同 `moonc` 版本的 codegen 会有字节差异。
+> CI 安装 `latest`，并对两个 bundle 做 `git diff --exit-code`；升级工具链后先重跑
+> `bash static/demo/build.sh && bash code/npm/build.sh`，把新产物一起提交。
+> 当前提交产物由 `moon 0.1.20261016` 生成。
+
 
 ```bash
 cd code

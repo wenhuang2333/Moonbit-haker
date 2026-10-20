@@ -11,7 +11,7 @@ export PATH="$HOME/.moon/bin:$PATH"
 cd code && moon check && moon test
 ```
 
-The toolchain used for 0.2.0 is `moon 0.1.20261012` / `moonc v0.10.15+943464bfa`.
+The toolchain used for 1.1.0 is `moon 0.1.20261016` / `moonc v0.10.16+b1a0e846e`. Bundle artifacts must be rebuilt with the same toolchain as CI (latest).
 Python 3 and Node.js are only needed for the differential harness.
 
 ## Layout

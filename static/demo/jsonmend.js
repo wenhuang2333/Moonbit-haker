@@ -72,13 +72,13 @@ _M0DTP211zhanshishan8jsonmend3Tok6TFence.prototype.$tag = 7;
 function _M0DTP211zhanshishan8jsonmend3Tok10TFenceLine() {}
 _M0DTP211zhanshishan8jsonmend3Tok10TFenceLine.prototype.$tag = 8;
 const _M0DTP211zhanshishan8jsonmend3Tok10TFenceLine__ = new _M0DTP211zhanshishan8jsonmend3Tok10TFenceLine();
-function _M0TPB13StringBuilder(param0) {
-  this.val = param0;
-}
 function _M0TPC16string10StringView(param0, param1, param2) {
   this.str = param0;
   this.start = param1;
   this.end = param2;
+}
+function _M0TPB13StringBuilder(param0) {
+  this.val = param0;
 }
 class $PanicError extends Error {}
 function $panic() {
@@ -216,76 +216,81 @@ function _M0DTPC16result6ResultGUiRPC16string10StringViewbERPB7FailureE2Ok(param
 }
 _M0DTPC16result6ResultGUiRPC16string10StringViewbERPB7FailureE2Ok.prototype.$tag = 1;
 function _M0DTPC15error5Error47zhanshishan_2fjsonmend_2eMendError_2eEmptyInput() {}
-_M0DTPC15error5Error47zhanshishan_2fjsonmend_2eMendError_2eEmptyInput.prototype.$tag = 17;
+_M0DTPC15error5Error47zhanshishan_2fjsonmend_2eMendError_2eEmptyInput.prototype.$tag = 18;
 const _M0DTPC15error5Error47zhanshishan_2fjsonmend_2eMendError_2eEmptyInput__ = new _M0DTPC15error5Error47zhanshishan_2fjsonmend_2eMendError_2eEmptyInput();
 function _M0DTPC15error5Error48zhanshishan_2fjsonmend_2eMendError_2eNoJsonFound(param0) {
   this._0 = param0;
 }
-_M0DTPC15error5Error48zhanshishan_2fjsonmend_2eMendError_2eNoJsonFound.prototype.$tag = 16;
+_M0DTPC15error5Error48zhanshishan_2fjsonmend_2eMendError_2eNoJsonFound.prototype.$tag = 17;
 function _M0DTPC15error5Error52zhanshishan_2fjsonmend_2eMendError_2eStrictViolation(param0, param1, param2) {
   this._0 = param0;
   this._1 = param1;
   this._2 = param2;
 }
-_M0DTPC15error5Error52zhanshishan_2fjsonmend_2eMendError_2eStrictViolation.prototype.$tag = 15;
+_M0DTPC15error5Error52zhanshishan_2fjsonmend_2eMendError_2eStrictViolation.prototype.$tag = 16;
 function _M0DTPC15error5Error52zhanshishan_2fjsonmend_2eMendError_2eAmbiguousRepair(param0, param1, param2) {
   this._0 = param0;
   this._1 = param1;
   this._2 = param2;
 }
-_M0DTPC15error5Error52zhanshishan_2fjsonmend_2eMendError_2eAmbiguousRepair.prototype.$tag = 14;
+_M0DTPC15error5Error52zhanshishan_2fjsonmend_2eMendError_2eAmbiguousRepair.prototype.$tag = 15;
 function _M0DTPC15error5Error47zhanshishan_2fjsonmend_2eMendError_2eDepthLimit(param0, param1) {
   this._0 = param0;
   this._1 = param1;
 }
-_M0DTPC15error5Error47zhanshishan_2fjsonmend_2eMendError_2eDepthLimit.prototype.$tag = 13;
+_M0DTPC15error5Error47zhanshishan_2fjsonmend_2eMendError_2eDepthLimit.prototype.$tag = 14;
 function _M0DTPC15error5Error46zhanshishan_2fjsonmend_2eMendError_2eSizeLimit(param0, param1) {
   this._0 = param0;
   this._1 = param1;
 }
-_M0DTPC15error5Error46zhanshishan_2fjsonmend_2eMendError_2eSizeLimit.prototype.$tag = 12;
+_M0DTPC15error5Error46zhanshishan_2fjsonmend_2eMendError_2eSizeLimit.prototype.$tag = 13;
 function _M0DTPC15error5Error47zhanshishan_2fjsonmend_2eMendError_2eTokenLimit(param0, param1) {
   this._0 = param0;
   this._1 = param1;
 }
-_M0DTPC15error5Error47zhanshishan_2fjsonmend_2eMendError_2eTokenLimit.prototype.$tag = 11;
+_M0DTPC15error5Error47zhanshishan_2fjsonmend_2eMendError_2eTokenLimit.prototype.$tag = 12;
 function _M0DTPC15error5Error49zhanshishan_2fjsonmend_2eMendError_2eInvalidState(param0) {
   this._0 = param0;
 }
-_M0DTPC15error5Error49zhanshishan_2fjsonmend_2eMendError_2eInvalidState.prototype.$tag = 10;
+_M0DTPC15error5Error49zhanshishan_2fjsonmend_2eMendError_2eInvalidState.prototype.$tag = 11;
 function _M0DTPC15error5Error48zhanshishan_2fjsonmend_2eMendError_2eInvalidUtf8(param0) {
   this._0 = param0;
 }
-_M0DTPC15error5Error48zhanshishan_2fjsonmend_2eMendError_2eInvalidUtf8.prototype.$tag = 9;
+_M0DTPC15error5Error48zhanshishan_2fjsonmend_2eMendError_2eInvalidUtf8.prototype.$tag = 10;
 function _M0DTPC15error5Error50zhanshishan_2fjsonmend_2eMendError_2eInvalidOption(param0) {
   this._0 = param0;
 }
-_M0DTPC15error5Error50zhanshishan_2fjsonmend_2eMendError_2eInvalidOption.prototype.$tag = 8;
+_M0DTPC15error5Error50zhanshishan_2fjsonmend_2eMendError_2eInvalidOption.prototype.$tag = 9;
 function _M0DTPC15error5Error49zhanshishan_2fjsonmend_2eMendError_2eInvalidEvent(param0) {
   this._0 = param0;
 }
-_M0DTPC15error5Error49zhanshishan_2fjsonmend_2eMendError_2eInvalidEvent.prototype.$tag = 7;
+_M0DTPC15error5Error49zhanshishan_2fjsonmend_2eMendError_2eInvalidEvent.prototype.$tag = 8;
 function _M0DTPC15error5Error48zhanshishan_2fjsonmend_2eMendError_2eSchemaError(param0) {
   this._0 = param0;
 }
-_M0DTPC15error5Error48zhanshishan_2fjsonmend_2eMendError_2eSchemaError.prototype.$tag = 6;
+_M0DTPC15error5Error48zhanshishan_2fjsonmend_2eMendError_2eSchemaError.prototype.$tag = 7;
 function _M0DTPC15error5Error52moonbitlang_2fcore_2fjson_2eParseError_2eInvalidChar(param0, param1) {
   this._0 = param0;
   this._1 = param1;
 }
-_M0DTPC15error5Error52moonbitlang_2fcore_2fjson_2eParseError_2eInvalidChar.prototype.$tag = 5;
+_M0DTPC15error5Error52moonbitlang_2fcore_2fjson_2eParseError_2eInvalidChar.prototype.$tag = 6;
 function _M0DTPC15error5Error51moonbitlang_2fcore_2fjson_2eParseError_2eInvalidEof() {}
-_M0DTPC15error5Error51moonbitlang_2fcore_2fjson_2eParseError_2eInvalidEof.prototype.$tag = 4;
+_M0DTPC15error5Error51moonbitlang_2fcore_2fjson_2eParseError_2eInvalidEof.prototype.$tag = 5;
 const _M0DTPC15error5Error51moonbitlang_2fcore_2fjson_2eParseError_2eInvalidEof__ = new _M0DTPC15error5Error51moonbitlang_2fcore_2fjson_2eParseError_2eInvalidEof();
 function _M0DTPC15error5Error54moonbitlang_2fcore_2fjson_2eParseError_2eInvalidNumber(param0, param1) {
   this._0 = param0;
   this._1 = param1;
 }
-_M0DTPC15error5Error54moonbitlang_2fcore_2fjson_2eParseError_2eInvalidNumber.prototype.$tag = 3;
+_M0DTPC15error5Error54moonbitlang_2fcore_2fjson_2eParseError_2eInvalidNumber.prototype.$tag = 4;
 function _M0DTPC15error5Error59moonbitlang_2fcore_2fjson_2eParseError_2eInvalidIdentEscape(param0) {
   this._0 = param0;
 }
-_M0DTPC15error5Error59moonbitlang_2fcore_2fjson_2eParseError_2eInvalidIdentEscape.prototype.$tag = 2;
+_M0DTPC15error5Error59moonbitlang_2fcore_2fjson_2eParseError_2eInvalidIdentEscape.prototype.$tag = 3;
+function _M0DTPC15error5Error53moonbitlang_2fcore_2fjson_2eParseError_2eDuplicateKey(param0, param1) {
+  this._0 = param0;
+  this._1 = param1;
+}
+_M0DTPC15error5Error53moonbitlang_2fcore_2fjson_2eParseError_2eDuplicateKey.prototype.$tag = 2;
 function _M0DTPC15error5Error59moonbitlang_2fcore_2fjson_2eParseError_2eDepthLimitExceeded() {}
 _M0DTPC15error5Error59moonbitlang_2fcore_2fjson_2eParseError_2eDepthLimitExceeded.prototype.$tag = 1;
 const _M0DTPC15error5Error59moonbitlang_2fcore_2fjson_2eParseError_2eDepthLimitExceeded__ = new _M0DTPC15error5Error59moonbitlang_2fcore_2fjson_2eParseError_2eDepthLimitExceeded();
@@ -446,10 +451,12 @@ function _M0DTPC16result6ResultGiRPC14json10ParseErrorE2Ok(param0) {
   this._0 = param0;
 }
 _M0DTPC16result6ResultGiRPC14json10ParseErrorE2Ok.prototype.$tag = 1;
-function _M0TPC14json12ParseContext(param0, param1, param2) {
+function _M0TPC14json12ParseContext(param0, param1, param2, param3, param4) {
   this.offset = param0;
   this.input = param1;
   this.end_offset = param2;
+  this.reject_duplicate_keys = param3;
+  this.preserve_number_repr = param4;
 }
 function $f64_convert_i64(a) {
   return Number(BigInt.asIntN(64, a));
@@ -522,6 +529,14 @@ const _M0DTPC14json5Token8RBracket__ = new _M0DTPC14json5Token8RBracket();
 function _M0DTPC14json5Token5Comma() {}
 _M0DTPC14json5Token5Comma.prototype.$tag = 9;
 const _M0DTPC14json5Token5Comma__ = new _M0DTPC14json5Token5Comma();
+function _M0DTPC16result6ResultGURPC14json5TokeniERPC14json10ParseErrorE3Err(param0) {
+  this._0 = param0;
+}
+_M0DTPC16result6ResultGURPC14json5TokeniERPC14json10ParseErrorE3Err.prototype.$tag = 0;
+function _M0DTPC16result6ResultGURPC14json5TokeniERPC14json10ParseErrorE2Ok(param0) {
+  this._0 = param0;
+}
+_M0DTPC16result6ResultGURPC14json5TokeniERPC14json10ParseErrorE2Ok.prototype.$tag = 1;
 function _M0TPB9ArrayViewGUsRPB4JsonEE(param0, param1, param2) {
   this.buf = param0;
   this.start = param1;
@@ -1145,36 +1160,36 @@ const _M0FPC28internal7strconv5table = [1, 10, 100, 1000, 10000, 100000, 1000000
 const _M0FPC28internal7strconv12checked__mulN6constrS1155 = 0n;
 const _M0FPC14json17int__pow10__table = [1n, 10n, 100n, 1000n, 10000n, 100000n, 1000000n, 10000000n, 100000000n, 1000000000n, 10000000000n, 100000000000n, 1000000000000n, 10000000000000n, 100000000000000n, 1000000000000000n];
 const _M0FPC14json12pow10__table = [1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000, 100000000000, 1e+12, 1e+13, 1e+14, 1e+15, 1e+16, 1e+17, 1e+18, 1e+19, 1e+20, 1e+21, 1e+22, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-const _M0FPC14json12checked__mulN6constrS1469 = 0n;
-const _M0FP211zhanshishan8jsonmend4pos0N6recordS1891 = new _M0TP211zhanshishan8jsonmend8Position(0, 1, 1);
+const _M0FPC14json12checked__mulN6constrS1474 = 0n;
+const _M0FP211zhanshishan8jsonmend4pos0N6recordS1908 = new _M0TP211zhanshishan8jsonmend8Position(0, 1, 1);
 const _M0FPC28internal7strconv17parse__scientificN8exp__numS1056 = 0n;
 const _M0FPC28internal7strconv17check__underscoreN25_2atransition__table__222S1206 = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 5, 5, 5, 5, 5, 0, 1, 2, 5];
 const _M0FPC28internal7strconv15parse__inf__nanN25_2atransition__table__304S1135 = [14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 3, 4, 14, 14, 14, 14, 14, 14, 14, 7, 14, 14, 14, 14, 5, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 6, 14, 14, 14, 0, 14, 14, 14, 14, 14, 14, 14, 14, 14, 8, 14, 14, 14, 14, 14, 1, 14, 14, 9, 14, 14, 14, 14, 14, 14, 14, 14, 10, 14, 14, 14, 14, 14, 14, 11, 14, 14, 14, 14, 14, 14, 14, 14, 14, 12, 14, 14, 14, 14, 14, 14, 14, 14, 13, 14, 1, 14, 14, 14, 14, 14, 14, 14];
 const _M0FPB4seed = _M0FPB12random__seed();
-const _M0MP211zhanshishan8jsonmend6Engine11value__doneN6constrS2237 = 3;
-const _M0MP211zhanshishan8jsonmend6Engine13step__preludeN6constrS2383 = new _M0DTP211zhanshishan8jsonmend3Tok6TFence(1);
-const _M0MP211zhanshishan8jsonmend6Engine14epilogue__dropN6constrS2373 = 4;
-const _M0MP211zhanshishan8jsonmend6Engine14step__epilogueN6constrS2377 = new _M0DTP211zhanshishan8jsonmend3Tok6TFence(1);
-const _M0MP211zhanshishan8jsonmend6Engine16emit__bare__wordN6constrS2250 = 1;
-const _M0MP211zhanshishan8jsonmend6Engine16emit__bare__wordN6constrS2251 = 1;
+const _M0MP211zhanshishan8jsonmend6Engine11value__doneN6constrS2254 = 3;
+const _M0MP211zhanshishan8jsonmend6Engine13step__preludeN6constrS2400 = new _M0DTP211zhanshishan8jsonmend3Tok6TFence(1);
+const _M0MP211zhanshishan8jsonmend6Engine14epilogue__dropN6constrS2390 = 4;
+const _M0MP211zhanshishan8jsonmend6Engine14step__epilogueN6constrS2394 = new _M0DTP211zhanshishan8jsonmend3Tok6TFence(1);
+const _M0MP211zhanshishan8jsonmend6Engine16emit__bare__wordN6constrS2267 = 1;
+const _M0MP211zhanshishan8jsonmend6Engine16emit__bare__wordN6constrS2268 = 1;
 const _M0MPC16string10StringView4findN6constrS341 = 0;
-const _M0FPC28internal7strconv20parse__int64_2einnerN7_2abindS1161 = "";
-const _M0FP211zhanshishan8jsonmend12lookup__pathN7_2abindS2698 = ".";
-const _M0FP211zhanshishan8jsonmend20enum__literals__textN7_2abindS1941 = ",";
-const _M0MP211zhanshishan8jsonmend11Constraints4textN7_2abindS1948 = ",";
-const _M0FP211zhanshishan8jsonmend17treated__segmentsN7_2abindS1869 = ".";
-const _M0MP211zhanshishan8jsonmend6Schema8at__pathN7_2abindS1906 = ".";
-const _M0MP211zhanshishan8jsonmend9RetryHint9of__errorN5tupleS3119 = { _0: "", _1: 0 };
-const _M0FP411zhanshishan8jsonmend8examples3web10live__textN6constrS3500 = 1;
-const _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3279 = 1;
-const _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3280 = 1;
-const _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3281 = 0;
-const _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3282 = 1;
-const _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3283 = 0;
-const _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3284 = 1;
-const _M0FP211zhanshishan8jsonmend21json__schema__patternN7_2abindS3285 = "\\";
-const _M0FP211zhanshishan8jsonmend21json__schema__patternN7_2abindS3286 = "[";
-const _M0FP211zhanshishan8jsonmend21json__schema__patternN7_2abindS3287 = ",";
+const _M0FPC28internal7strconv20parse__int64_2einnerN6recordS1161 = new _M0TPC16string10StringView("", 0, 0);
+const _M0FP211zhanshishan8jsonmend12lookup__pathN6recordS2715 = new _M0TPC16string10StringView(".", 0, 1);
+const _M0FP211zhanshishan8jsonmend20enum__literals__textN6recordS1958 = new _M0TPC16string10StringView(",", 0, 1);
+const _M0MP211zhanshishan8jsonmend11Constraints4textN6recordS1965 = new _M0TPC16string10StringView(",", 0, 1);
+const _M0FP211zhanshishan8jsonmend17treated__segmentsN6recordS1886 = new _M0TPC16string10StringView(".", 0, 1);
+const _M0MP211zhanshishan8jsonmend6Schema8at__pathN6recordS1923 = new _M0TPC16string10StringView(".", 0, 1);
+const _M0MP211zhanshishan8jsonmend9RetryHint9of__errorN5tupleS3136 = { _0: "", _1: 0 };
+const _M0FP411zhanshishan8jsonmend8examples3web10live__textN6constrS3517 = 1;
+const _M0FP211zhanshishan8jsonmend21json__schema__patternN6recordS3296 = new _M0TPC16string10StringView("\\", 0, 1);
+const _M0FP211zhanshishan8jsonmend21json__schema__patternN6recordS3297 = new _M0TPC16string10StringView("[", 0, 1);
+const _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3298 = 1;
+const _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3299 = 1;
+const _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3300 = 0;
+const _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3301 = 1;
+const _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3302 = 0;
+const _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3303 = 1;
+const _M0FP211zhanshishan8jsonmend21json__schema__patternN6recordS3304 = new _M0TPC16string10StringView(",", 0, 1);
 function _M0FPB13consume4__acc(acc, input) {
   const _p = (acc >>> 0) + ((Math.imul(input, -1028477379) | 0) >>> 0) | 0;
   const _p$2 = 17;
@@ -3802,7 +3817,7 @@ function _M0FPC28internal7strconv19overflow__threshold(base, neg) {
   }
 }
 function _M0FPC28internal7strconv20parse__int64_2einner(str, base) {
-  if (_M0IP016_24default__implPB2Eq10not__equalGRPC16string10StringViewE(str, new _M0TPC16string10StringView(_M0FPC28internal7strconv20parse__int64_2einnerN7_2abindS1161, 0, _M0FPC28internal7strconv20parse__int64_2einnerN7_2abindS1161.length))) {
+  if (_M0IP016_24default__implPB2Eq10not__equalGRPC16string10StringViewE(str, _M0FPC28internal7strconv20parse__int64_2einnerN6recordS1161)) {
     let neg;
     let rest;
     _L: {
@@ -5326,8 +5341,8 @@ function _M0MPC14json12ParseContext21lex__skip__whitespace(ctx) {
   }
   ctx.offset = _tmp;
 }
-function _M0MPC14json12ParseContext4make(input) {
-  return new _M0TPC14json12ParseContext(0, input, input.end - input.start | 0);
+function _M0MPC14json12ParseContext12make_2einner(input, reject_duplicate_keys, preserve_number_repr) {
+  return new _M0TPC14json12ParseContext(0, input, input.end - input.start | 0, reject_duplicate_keys, preserve_number_repr);
 }
 function _M0MPC14json12ParseContext19expect__ascii__char(ctx, c) {
   if (ctx.offset < ctx.end_offset) {
@@ -5341,7 +5356,7 @@ function _M0MPC14json12ParseContext19expect__ascii__char(ctx, c) {
 }
 function _M0FPC14json12checked__mul(a, b) {
   if (BigInt.asUintN(64, a) === BigInt.asUintN(64, 0n) || BigInt.asUintN(64, b) === BigInt.asUintN(64, 0n)) {
-    return _M0FPC14json12checked__mulN6constrS1469;
+    return _M0FPC14json12checked__mulN6constrS1474;
   }
   if (BigInt.asUintN(64, a) === BigInt.asUintN(64, 1n)) {
     return b;
@@ -5520,7 +5535,7 @@ function _M0MPC14json12ParseContext18scan__json__number(ctx, start, end) {
   const exponent_part$2 = exponent_negative ? BigInt.asUintN(64, -exponent_part) : exponent_part;
   return new _M0TPC14json14JsonNumberScan(negative, !has_decimal && !has_exponent, mantissa, BigInt.asUintN(64, exponent_part$2 - BigInt.asUintN(64, BigInt(fractional_digits))), significant_digits > 19);
 }
-function _M0MPC14json12ParseContext16lex__number__end(ctx, start, end) {
+function _M0MPC14json12ParseContext18lex__number__value(ctx, start, end) {
   const scan = _M0MPC14json12ParseContext18scan__json__number(ctx, start, end);
   if (scan.is_integer) {
     if (!scan.many_digits && (BigInt.asUintN(64, scan.exponent) === BigInt.asUintN(64, 0n) && BigInt.asUintN(64, scan.mantissa) <= BigInt.asUintN(64, 9007199254740991n))) {
@@ -5565,6 +5580,16 @@ function _M0MPC14json12ParseContext16lex__number__end(ctx, start, end) {
   } else {
     const _bind = s;
     return new _M0TPC14json11LexedNumber(_bind, _M0FPC16double8infinity);
+  }
+}
+function _M0MPC14json12ParseContext16lex__number__end(ctx, start, end) {
+  const number = _M0MPC14json12ParseContext18lex__number__value(ctx, start, end);
+  if (ctx.preserve_number_repr) {
+    const _bind = number.value;
+    const _bind$2 = _M0MPC16string10StringView12view_2einner(ctx.input, start, end);
+    return new _M0TPC14json11LexedNumber(_bind$2, _bind);
+  } else {
+    return number;
   }
 }
 function _M0MPC14json12ParseContext10read__char(ctx) {
@@ -6308,15 +6333,16 @@ function _M0MPC14json12ParseContext26lex__after__property__name(ctx) {
 }
 function _M0MPC14json12ParseContext19lex__property__name(ctx) {
   _M0MPC14json12ParseContext21lex__skip__whitespace(ctx);
+  const offset = ctx.offset;
   const _bind = _M0MPC14json12ParseContext10read__char(ctx);
   if (_bind === -1) {
-    return new _M0DTPC16result6ResultGRPC14json5TokenRPC14json10ParseErrorE3Err(_M0DTPC15error5Error51moonbitlang_2fcore_2fjson_2eParseError_2eInvalidEof__);
+    return new _M0DTPC16result6ResultGURPC14json5TokeniERPC14json10ParseErrorE3Err(_M0DTPC15error5Error51moonbitlang_2fcore_2fjson_2eParseError_2eInvalidEof__);
   } else {
     const _Some = _bind;
     const _x = _Some;
     switch (_x) {
       case 125: {
-        return new _M0DTPC16result6ResultGRPC14json5TokenRPC14json10ParseErrorE2Ok(_M0DTPC14json5Token6RBrace__);
+        return new _M0DTPC16result6ResultGURPC14json5TokeniERPC14json10ParseErrorE2Ok({ _0: _M0DTPC14json5Token6RBrace__, _1: offset });
       }
       case 34: {
         const _bind$2 = _M0MPC14json12ParseContext11lex__string(ctx);
@@ -6327,7 +6353,7 @@ function _M0MPC14json12ParseContext19lex__property__name(ctx) {
         } else {
           return _bind$2;
         }
-        return new _M0DTPC16result6ResultGRPC14json5TokenRPC14json10ParseErrorE2Ok(new _M0DTPC14json5Token6String(s));
+        return new _M0DTPC16result6ResultGURPC14json5TokeniERPC14json10ParseErrorE2Ok({ _0: new _M0DTPC14json5Token6String(s), _1: offset });
       }
       default: {
         return _M0MPC14json12ParseContext21invalid__char_2einnerGRPB4JsonE(ctx, -1);
@@ -6337,9 +6363,10 @@ function _M0MPC14json12ParseContext19lex__property__name(ctx) {
 }
 function _M0MPC14json12ParseContext20lex__property__name2(ctx) {
   _M0MPC14json12ParseContext21lex__skip__whitespace(ctx);
+  const offset = ctx.offset;
   const _bind = _M0MPC14json12ParseContext10read__char(ctx);
   if (_bind === -1) {
-    return new _M0DTPC16result6ResultGRPC14json5TokenRPC14json10ParseErrorE3Err(_M0DTPC15error5Error51moonbitlang_2fcore_2fjson_2eParseError_2eInvalidEof__);
+    return new _M0DTPC16result6ResultGURPC14json5TokeniERPC14json10ParseErrorE3Err(_M0DTPC15error5Error51moonbitlang_2fcore_2fjson_2eParseError_2eInvalidEof__);
   } else {
     const _Some = _bind;
     const _x = _Some;
@@ -6352,7 +6379,7 @@ function _M0MPC14json12ParseContext20lex__property__name2(ctx) {
       } else {
         return _bind$2;
       }
-      return new _M0DTPC16result6ResultGRPC14json5TokenRPC14json10ParseErrorE2Ok(new _M0DTPC14json5Token6String(s));
+      return new _M0DTPC16result6ResultGURPC14json5TokeniERPC14json10ParseErrorE2Ok({ _0: new _M0DTPC14json5Token6String(s), _1: offset });
     } else {
       return _M0MPC14json12ParseContext21invalid__char_2einnerGRPB4JsonE(ctx, -1);
     }
@@ -6495,14 +6522,19 @@ function _M0MPC14json12ParseContext13parse__object(ctx, remaining_available_dept
   let _tmp$3 = _tmp$2;
   _L: while (true) {
     const x = _tmp$3;
-    switch (x.$tag) {
+    const _x = x._0;
+    switch (_x.$tag) {
       case 6: {
         _tmp = new _M0DTPB4Json6Object(map);
         break _L;
       }
       case 4: {
-        const _String = x;
+        const _String = _x;
         const _name = _String._0;
+        const _offset = x._1;
+        if (ctx.reject_duplicate_keys && _M0MPB3Map8containsGsRPB4JsonE(map, _name)) {
+          return new _M0DTPC16result6ResultGRPB4JsonRPC14json10ParseErrorE3Err(new _M0DTPC15error5Error53moonbitlang_2fcore_2fjson_2eParseError_2eDuplicateKey(_M0FPC14json20offset__to__position(ctx.input, _offset), _name));
+        }
         const _bind$3 = _M0MPC14json12ParseContext26lex__after__property__name(ctx);
         if (_bind$3.$tag === 1) {
           const _ok = _bind$3;
@@ -6556,8 +6588,8 @@ function _M0MPC14json12ParseContext13parse__object(ctx, remaining_available_dept
   }
   return new _M0DTPC16result6ResultGRPB4JsonRPC14json10ParseErrorE2Ok(_tmp);
 }
-function _M0FPC14json13parse_2einner(input, max_nesting_depth) {
-  const ctx = _M0MPC14json12ParseContext4make(input);
+function _M0FPC14json13parse_2einner(input, max_nesting_depth, reject_duplicate_keys, preserve_number_repr) {
+  const ctx = _M0MPC14json12ParseContext12make_2einner(input, reject_duplicate_keys, preserve_number_repr);
   const _bind = _M0MPC14json12ParseContext12parse__value(ctx, max_nesting_depth);
   let val;
   if (_bind.$tag === 1) {
@@ -7371,7 +7403,7 @@ function _M0FP211zhanshishan8jsonmend17treated__segments(path) {
   if (path === "") {
     return out;
   }
-  const _it = _M0MPC16string6String5split(path, new _M0TPC16string10StringView(_M0FP211zhanshishan8jsonmend17treated__segmentsN7_2abindS1869, 0, _M0FP211zhanshishan8jsonmend17treated__segmentsN7_2abindS1869.length));
+  const _it = _M0MPC16string6String5split(path, _M0FP211zhanshishan8jsonmend17treated__segmentsN6recordS1886);
   while (true) {
     const _bind = _M0MPB4Iter4nextGUsRPB4JsonEE(_it);
     if (_bind === undefined) {
@@ -7476,8 +7508,8 @@ function _M0MP211zhanshishan8jsonmend6Engine11push__delta(self, op, path, value,
   _M0MPC15array5Array4pushGsE(self.deltas, new _M0TP211zhanshishan8jsonmend5Delta(path, op, value, text, at));
 }
 function _M0MP211zhanshishan8jsonmend6Engine4make(opts) {
-  const start = _M0FP211zhanshishan8jsonmend4pos0N6recordS1891;
-  const e = new _M0TP211zhanshishan8jsonmend6Engine(opts, 0, [], [], 0, 0, 0, 0, start, 0, start, _M0MPB13StringBuilder21StringBuilder_2einner(0), 0, _M0MPB13StringBuilder21StringBuilder_2einner(0), 0, start, start, false, start, _M0DTP211zhanshishan8jsonmend3Tok5TIdle__, start, undefined, [], false, false, _M0FP211zhanshishan8jsonmend4pos0N6recordS1891, 0, undefined, -1, start, 0, [], false, false, false, start, false, false, 0, 0, 0, 0, 0, 0, false, [], 0);
+  const start = _M0FP211zhanshishan8jsonmend4pos0N6recordS1908;
+  const e = new _M0TP211zhanshishan8jsonmend6Engine(opts, 0, [], [], 0, 0, 0, 0, start, 0, start, _M0MPB13StringBuilder21StringBuilder_2einner(0), 0, _M0MPB13StringBuilder21StringBuilder_2einner(0), 0, start, start, false, start, _M0DTP211zhanshishan8jsonmend3Tok5TIdle__, start, undefined, [], false, false, _M0FP211zhanshishan8jsonmend4pos0N6recordS1908, 0, undefined, -1, start, 0, [], false, false, false, start, false, false, 0, 0, 0, 0, 0, 0, false, [], 0);
   const _bind = opts.multi_root;
   if (_bind === 1) {
     const f = _M0FP211zhanshishan8jsonmend10new__frame(1, start, true);
@@ -7514,7 +7546,7 @@ function _M0MP211zhanshishan8jsonmend6Schema8at__path(self, path) {
     return self;
   }
   let cur = self;
-  const _it = _M0MPC16string6String5split(path, new _M0TPC16string10StringView(_M0MP211zhanshishan8jsonmend6Schema8at__pathN7_2abindS1906, 0, _M0MP211zhanshishan8jsonmend6Schema8at__pathN7_2abindS1906.length));
+  const _it = _M0MPC16string6String5split(path, _M0MP211zhanshishan8jsonmend6Schema8at__pathN6recordS1923);
   while (true) {
     const _bind = _M0MPB4Iter4nextGUsRPB4JsonEE(_it);
     if (_bind === undefined) {
@@ -7648,7 +7680,7 @@ function _M0FP211zhanshishan8jsonmend20enum__literals__text(vs) {
       break;
     }
   }
-  return `[${_M0MPC15array5Array4joinGsE(parts, new _M0TPC16string10StringView(_M0FP211zhanshishan8jsonmend20enum__literals__textN7_2abindS1941, 0, _M0FP211zhanshishan8jsonmend20enum__literals__textN7_2abindS1941.length))}]`;
+  return `[${_M0MPC15array5Array4joinGsE(parts, _M0FP211zhanshishan8jsonmend20enum__literals__textN6recordS1958)}]`;
 }
 function _M0MP211zhanshishan8jsonmend11Constraints4text(self) {
   const parts = [];
@@ -7703,7 +7735,7 @@ function _M0MP211zhanshishan8jsonmend11Constraints4text(self) {
     const _cls = _Some;
     _M0MPC15array5Array4pushGsE(parts, `pattern:[${_cls}]`);
   }
-  return _M0MPC15array5Array4joinGsE(parts, new _M0TPC16string10StringView(_M0MP211zhanshishan8jsonmend11Constraints4textN7_2abindS1948, 0, _M0MP211zhanshishan8jsonmend11Constraints4textN7_2abindS1948.length));
+  return _M0MPC15array5Array4joinGsE(parts, _M0MP211zhanshishan8jsonmend11Constraints4textN6recordS1965);
 }
 function _M0MP211zhanshishan8jsonmend6Schema4name(self) {
   let _tmp = self;
@@ -8792,7 +8824,7 @@ function _M0MP211zhanshishan8jsonmend6Engine11value__done(self, v) {
       const _String = v;
       const _s = _String._0;
       if (_M0MP211zhanshishan8jsonmend6Engine12concat__last(self, _s)) {
-        const _bind = _M0MP211zhanshishan8jsonmend6Engine6report(self, 18, self.concat_pos, undefined, _M0DTPC16option6OptionGORP211zhanshishan8jsonmend8SeverityE4None__, _M0MP211zhanshishan8jsonmend6Engine11value__doneN6constrS2237);
+        const _bind = _M0MP211zhanshishan8jsonmend6Engine6report(self, 18, self.concat_pos, undefined, _M0DTPC16option6OptionGORP211zhanshishan8jsonmend8SeverityE4None__, _M0MP211zhanshishan8jsonmend6Engine11value__doneN6constrS2254);
         if (_bind.$tag === 1) {
           const _ok = _bind;
           _ok._0;
@@ -8883,7 +8915,7 @@ function _M0MP211zhanshishan8jsonmend6Engine16emit__bare__word(self, text, start
     if (self.stack.length === 0) {
       return new _M0DTPC16result6ResultGuRP211zhanshishan8jsonmend9MendErrorE3Err(new _M0DTPC15error5Error48zhanshishan_2fjsonmend_2eMendError_2eNoJsonFound(start.offset));
     }
-    const _bind = _M0MP211zhanshishan8jsonmend6Engine6report(self, 3, start, _M0MP211zhanshishan8jsonmend6Engine16emit__bare__wordN6constrS2250, _M0DTPC16option6OptionGORP211zhanshishan8jsonmend8SeverityE4None__, _M0MP211zhanshishan8jsonmend6Engine16emit__bare__wordN6constrS2251);
+    const _bind = _M0MP211zhanshishan8jsonmend6Engine6report(self, 3, start, _M0MP211zhanshishan8jsonmend6Engine16emit__bare__wordN6constrS2267, _M0DTPC16option6OptionGORP211zhanshishan8jsonmend8SeverityE4None__, _M0MP211zhanshishan8jsonmend6Engine16emit__bare__wordN6constrS2268);
     if (_bind.$tag === 1) {
       const _ok = _bind;
       _ok._0;
@@ -9706,7 +9738,7 @@ function _M0MP211zhanshishan8jsonmend6Engine14epilogue__drop(self, p) {
   switch (_bind) {
     case 0: {
       if (!self.epilogue_reported) {
-        const _bind$2 = _M0MP211zhanshishan8jsonmend6Engine6report(self, 15, p, undefined, _M0DTPC16option6OptionGORP211zhanshishan8jsonmend8SeverityE4None__, _M0MP211zhanshishan8jsonmend6Engine14epilogue__dropN6constrS2373);
+        const _bind$2 = _M0MP211zhanshishan8jsonmend6Engine6report(self, 15, p, undefined, _M0DTPC16option6OptionGORP211zhanshishan8jsonmend8SeverityE4None__, _M0MP211zhanshishan8jsonmend6Engine14epilogue__dropN6constrS2390);
         if (_bind$2.$tag === 1) {
           const _ok = _bind$2;
           _ok._0;
@@ -9736,7 +9768,7 @@ function _M0MP211zhanshishan8jsonmend6Engine14step__epilogue(self, u, p) {
   }
   const n = u;
   if (self.opts.strip_fence && n === 96) {
-    self.tok = _M0MP211zhanshishan8jsonmend6Engine14step__epilogueN6constrS2377;
+    self.tok = _M0MP211zhanshishan8jsonmend6Engine14step__epilogueN6constrS2394;
     self.fence_start = p;
     self.fence_body = false;
     return new _M0DTPC16result6ResultGuRP211zhanshishan8jsonmend9MendErrorE2Ok(undefined);
@@ -9821,7 +9853,7 @@ function _M0MP211zhanshishan8jsonmend6Engine13step__prelude(self, u, p) {
     return new _M0DTPC16result6ResultGuRP211zhanshishan8jsonmend9MendErrorE2Ok(undefined);
   }
   if (self.opts.strip_fence && u === 96) {
-    self.tok = _M0MP211zhanshishan8jsonmend6Engine13step__preludeN6constrS2383;
+    self.tok = _M0MP211zhanshishan8jsonmend6Engine13step__preludeN6constrS2400;
     self.fence_start = p;
     self.fence_body = true;
     return new _M0DTPC16result6ResultGuRP211zhanshishan8jsonmend9MendErrorE2Ok(undefined);
@@ -11342,7 +11374,7 @@ function _M0FP211zhanshishan8jsonmend12lookup__path(v, path) {
     return v;
   }
   let cur = v;
-  const _it = _M0MPC16string6String5split(path, new _M0TPC16string10StringView(_M0FP211zhanshishan8jsonmend12lookup__pathN7_2abindS2698, 0, _M0FP211zhanshishan8jsonmend12lookup__pathN7_2abindS2698.length));
+  const _it = _M0MPC16string6String5split(path, _M0FP211zhanshishan8jsonmend12lookup__pathN6recordS2715);
   while (true) {
     const _bind = _M0MPB4Iter4nextGUsRPB4JsonEE(_it);
     if (_bind === undefined) {
@@ -12384,7 +12416,7 @@ function _M0FP211zhanshishan8jsonmend20sp__constraint__enum(p, base) {
   let _try_err;
   _L: {
     _L$2: {
-      const _bind$2 = _M0FPC14json13parse_2einner(new _M0TPC16string10StringView(slice, 0, slice.length), 1024);
+      const _bind$2 = _M0FPC14json13parse_2einner(new _M0TPC16string10StringView(slice, 0, slice.length), 1024, false, false);
       if (_bind$2.$tag === 1) {
         const _ok = _bind$2;
         parsed = _ok._0;
@@ -12476,7 +12508,7 @@ function _M0FP211zhanshishan8jsonmend22sp__constraint__number(p, name) {
   let _try_err;
   _L: {
     _L$2: {
-      const _bind = _M0FPC14json13parse_2einner(new _M0TPC16string10StringView(tok, 0, tok.length), 1024);
+      const _bind = _M0FPC14json13parse_2einner(new _M0TPC16string10StringView(tok, 0, tok.length), 1024, false, false);
       if (_bind.$tag === 1) {
         const _ok = _bind;
         parsed = _ok._0;
@@ -13767,37 +13799,37 @@ function _M0MP211zhanshishan8jsonmend9Ambiguity7message(self) {
 }
 function _M0MP211zhanshishan8jsonmend9MendError4code(self) {
   switch (self.$tag) {
-    case 17: {
+    case 18: {
       return "E001";
     }
-    case 16: {
+    case 17: {
       return "E002";
     }
-    case 15: {
+    case 16: {
       return "E010";
     }
-    case 14: {
+    case 15: {
       return "E011";
     }
-    case 13: {
+    case 14: {
       return "E020";
     }
-    case 12: {
+    case 13: {
       return "E021";
     }
-    case 11: {
+    case 12: {
       return "E022";
     }
-    case 10: {
+    case 11: {
       return "E030";
     }
-    case 9: {
+    case 10: {
       return "E040";
     }
-    case 8: {
+    case 9: {
       return "E050";
     }
-    case 7: {
+    case 8: {
       return "E060";
     }
     default: {
@@ -13839,7 +13871,7 @@ function _M0MP211zhanshishan8jsonmend9RetryHint9of__error(e, input, radius) {
   let reason;
   _L: {
     switch (e.$tag) {
-      case 15: {
+      case 16: {
         const _StrictViolation = e;
         const _c = _StrictViolation._0;
         const _p = _StrictViolation._1;
@@ -13850,7 +13882,7 @@ function _M0MP211zhanshishan8jsonmend9RetryHint9of__error(e, input, radius) {
         reason = _msg;
         break _L;
       }
-      case 14: {
+      case 15: {
         const _AmbiguousRepair = e;
         const _c$2 = _AmbiguousRepair._0;
         const _p$2 = _AmbiguousRepair._1;
@@ -13868,7 +13900,7 @@ function _M0MP211zhanshishan8jsonmend9RetryHint9of__error(e, input, radius) {
   }
   let _bind;
   if (input === undefined) {
-    _bind = _M0MP211zhanshishan8jsonmend9RetryHint9of__errorN5tupleS3119;
+    _bind = _M0MP211zhanshishan8jsonmend9RetryHint9of__errorN5tupleS3136;
   } else {
     const _Some = input;
     const _text = _Some;
@@ -13902,18 +13934,18 @@ function _M0MP211zhanshishan8jsonmend9MendError11retry__hint(self, input, radius
 function _M0MP211zhanshishan8jsonmend9MendError10to__string(self) {
   const sb = _M0MPB13StringBuilder21StringBuilder_2einner(0);
   switch (self.$tag) {
-    case 17: {
+    case 18: {
       _M0IPB13StringBuilderPB6Logger13write__string(sb, "E001 EmptyInput: input is empty or whitespace only");
       break;
     }
-    case 16: {
+    case 17: {
       const _NoJsonFound = self;
       const _offset = _NoJsonFound._0;
       _M0IPB13StringBuilderPB6Logger13write__string(sb, "E002 NoJsonFound: no JSON value found at offset ");
       _M0IPB13StringBuilderPB6Logger13write__string(sb, _M0MPC13int3Int18to__string_2einner(_offset, 10));
       break;
     }
-    case 15: {
+    case 16: {
       const _StrictViolation = self;
       const _code = _StrictViolation._0;
       const _pos = _StrictViolation._1;
@@ -13932,7 +13964,7 @@ function _M0MP211zhanshishan8jsonmend9MendError10to__string(self) {
       _M0IPB13StringBuilderPB6Logger13write__string(sb, _msg);
       break;
     }
-    case 14: {
+    case 15: {
       const _AmbiguousRepair = self;
       const _code$2 = _AmbiguousRepair._0;
       const _pos$2 = _AmbiguousRepair._1;
@@ -13951,7 +13983,7 @@ function _M0MP211zhanshishan8jsonmend9MendError10to__string(self) {
       _M0IPB13StringBuilderPB6Logger13write__string(sb, _M0MP211zhanshishan8jsonmend9Ambiguity7message(_ambiguity));
       break;
     }
-    case 13: {
+    case 14: {
       const _DepthLimit = self;
       const _limit = _DepthLimit._0;
       const _offset$2 = _DepthLimit._1;
@@ -13961,7 +13993,7 @@ function _M0MP211zhanshishan8jsonmend9MendError10to__string(self) {
       _M0IPB13StringBuilderPB6Logger13write__string(sb, _M0MPC13int3Int18to__string_2einner(_offset$2, 10));
       break;
     }
-    case 12: {
+    case 13: {
       const _SizeLimit = self;
       const _limit$2 = _SizeLimit._0;
       const _offset$3 = _SizeLimit._1;
@@ -13971,7 +14003,7 @@ function _M0MP211zhanshishan8jsonmend9MendError10to__string(self) {
       _M0IPB13StringBuilderPB6Logger13write__string(sb, _M0MPC13int3Int18to__string_2einner(_offset$3, 10));
       break;
     }
-    case 11: {
+    case 12: {
       const _TokenLimit = self;
       const _limit$3 = _TokenLimit._0;
       const _offset$4 = _TokenLimit._1;
@@ -13981,28 +14013,28 @@ function _M0MP211zhanshishan8jsonmend9MendError10to__string(self) {
       _M0IPB13StringBuilderPB6Logger13write__string(sb, _M0MPC13int3Int18to__string_2einner(_offset$4, 10));
       break;
     }
-    case 10: {
+    case 11: {
       const _InvalidState = self;
       const _msg$2 = _InvalidState._0;
       _M0IPB13StringBuilderPB6Logger13write__string(sb, "E030 InvalidState: ");
       _M0IPB13StringBuilderPB6Logger13write__string(sb, _msg$2);
       break;
     }
-    case 9: {
+    case 10: {
       const _InvalidUtf8 = self;
       const _offset$5 = _InvalidUtf8._0;
       _M0IPB13StringBuilderPB6Logger13write__string(sb, "E040 InvalidUtf8: invalid UTF-8 byte at offset ");
       _M0IPB13StringBuilderPB6Logger13write__string(sb, _M0MPC13int3Int18to__string_2einner(_offset$5, 10));
       break;
     }
-    case 8: {
+    case 9: {
       const _InvalidOption = self;
       const _msg$3 = _InvalidOption._0;
       _M0IPB13StringBuilderPB6Logger13write__string(sb, "E050 InvalidOption: ");
       _M0IPB13StringBuilderPB6Logger13write__string(sb, _msg$3);
       break;
     }
-    case 7: {
+    case 8: {
       const _InvalidEvent = self;
       const _msg$4 = _InvalidEvent._0;
       _M0IPB13StringBuilderPB6Logger13write__string(sb, "E060 InvalidEvent: ");
@@ -14022,7 +14054,7 @@ function _M0FP211zhanshishan8jsonmend15plan__of__error(e, input) {
   const code = _M0MP211zhanshishan8jsonmend9MendError4code(e);
   let refused;
   switch (e.$tag) {
-    case 15: {
+    case 16: {
       const _StrictViolation = e;
       const _c = _StrictViolation._0;
       const _p = _StrictViolation._1;
@@ -14030,7 +14062,7 @@ function _M0FP211zhanshishan8jsonmend15plan__of__error(e, input) {
       refused = { _0: _c, _1: _p, _2: _m, _3: 0 };
       break;
     }
-    case 14: {
+    case 15: {
       const _AmbiguousRepair = e;
       const _c$2 = _AmbiguousRepair._0;
       const _p$2 = _AmbiguousRepair._1;
@@ -14094,7 +14126,7 @@ function _M0FP211zhanshishan8jsonmend13analyze__once(input, opts, step, schema) 
 function _M0FP211zhanshishan8jsonmend15is__valid__json(text) {
   let _try_err;
   _L: {
-    const _bind = _M0FPC14json13parse_2einner(new _M0TPC16string10StringView(text, 0, text.length), 1024);
+    const _bind = _M0FPC14json13parse_2einner(new _M0TPC16string10StringView(text, 0, text.length), 1024, false, false);
     if (_bind.$tag === 1) {
       const _ok = _bind;
       _ok._0;
@@ -14108,7 +14140,7 @@ function _M0FP211zhanshishan8jsonmend15is__valid__json(text) {
   return false;
 }
 function _M0FP211zhanshishan8jsonmend17refused__no__json(e) {
-  if (e.$tag === 16) {
+  if (e.$tag === 17) {
     return true;
   } else {
     return false;
@@ -14517,7 +14549,7 @@ function _M0FP211zhanshishan8jsonmend21json__schema__pattern(s) {
     return new _M0DTPC16result6ResultGRP211zhanshishan8jsonmend11PatternSpecRP211zhanshishan8jsonmend9MendErrorE3Err(new _M0DTPC15error5Error48zhanshishan_2fjsonmend_2eMendError_2eSchemaError("json schema: `pattern` has an unterminated class"));
   }
   const inner = _M0MPC16string10StringView9to__owned(_M0MPC16string6String21clamped__view_2einner(body, 1, close));
-  if (_M0MPC16string6String8contains(inner, new _M0TPC16string10StringView(_M0FP211zhanshishan8jsonmend21json__schema__patternN7_2abindS3285, 0, _M0FP211zhanshishan8jsonmend21json__schema__patternN7_2abindS3285.length)) || _M0MPC16string6String8contains(inner, new _M0TPC16string10StringView(_M0FP211zhanshishan8jsonmend21json__schema__patternN7_2abindS3286, 0, _M0FP211zhanshishan8jsonmend21json__schema__patternN7_2abindS3286.length))) {
+  if (_M0MPC16string6String8contains(inner, _M0FP211zhanshishan8jsonmend21json__schema__patternN6recordS3296) || _M0MPC16string6String8contains(inner, _M0FP211zhanshishan8jsonmend21json__schema__patternN6recordS3297)) {
     return new _M0DTPC16result6ResultGRP211zhanshishan8jsonmend11PatternSpecRP211zhanshishan8jsonmend9MendErrorE3Err(new _M0DTPC15error5Error48zhanshishan_2fjsonmend_2eMendError_2eSchemaError("json schema: `pattern` character classes may not contain escapes or nested classes"));
   }
   const rest = _M0MPC16string10StringView9to__owned(_M0MPC16string6String21clamped__view_2einner(body, close + 1 | 0, undefined));
@@ -14525,23 +14557,23 @@ function _M0FP211zhanshishan8jsonmend21json__schema__pattern(s) {
   let max_len;
   _L: {
     if (rest === "") {
-      min_len = _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3279;
-      max_len = _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3280;
+      min_len = _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3298;
+      max_len = _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3299;
       break _L;
     } else {
       if (rest === "*") {
-        min_len = _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3281;
+        min_len = _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3300;
         max_len = undefined;
         break _L;
       } else {
         if (rest === "+") {
-          min_len = _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3282;
+          min_len = _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3301;
           max_len = undefined;
           break _L;
         } else {
           if (rest === "?") {
-            min_len = _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3283;
-            max_len = _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3284;
+            min_len = _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3302;
+            max_len = _M0FP211zhanshishan8jsonmend21json__schema__patternN6constrS3303;
             break _L;
           } else {
             let _tmp$2;
@@ -14559,7 +14591,7 @@ function _M0FP211zhanshishan8jsonmend21json__schema__pattern(s) {
             }
             if (_tmp$2) {
               const spec = _M0MPC16string10StringView9to__owned(_M0MPC16string6String21clamped__view_2einner(rest, 1, rest.length - 1 | 0));
-              const parts = _M0MPB4Iter9to__arrayGRPC16string10StringViewE(_M0MPC16string6String5split(spec, new _M0TPC16string10StringView(_M0FP211zhanshishan8jsonmend21json__schema__patternN7_2abindS3287, 0, _M0FP211zhanshishan8jsonmend21json__schema__patternN7_2abindS3287.length)));
+              const parts = _M0MPB4Iter9to__arrayGRPC16string10StringViewE(_M0MPC16string6String5split(spec, _M0FP211zhanshishan8jsonmend21json__schema__patternN6recordS3304));
               if (parts.length === 1) {
                 const _bind = _M0FP211zhanshishan8jsonmend29json__schema__quantifier__int(_M0MPC15array5Array2atGRP211zhanshishan8jsonmend6RepairE(parts, 0));
                 let k;
@@ -15108,7 +15140,7 @@ function _M0MP211zhanshishan8jsonmend6Schema19parse__json__schema(text) {
   let _try_err;
   _L: {
     _L$2: {
-      const _bind = _M0FPC14json13parse_2einner(new _M0TPC16string10StringView(text, 0, text.length), 1024);
+      const _bind = _M0FPC14json13parse_2einner(new _M0TPC16string10StringView(text, 0, text.length), 1024, false, false);
       if (_bind.$tag === 1) {
         const _ok = _bind;
         value = _ok._0;
@@ -15171,7 +15203,7 @@ function _M0FP211zhanshishan8jsonmend6repair(input, options) {
     }
     return new _M0DTPC16result6ResultGRP211zhanshishan8jsonmend12RepairResultRP211zhanshishan8jsonmend9MendErrorE2Ok(_tmp);
   }
-  if (_try_err.$tag === 16) {
+  if (_try_err.$tag === 17) {
     const _NoJsonFound = _try_err;
     const _off = _NoJsonFound._0;
     if (opts.skip_prose && _M0FP211zhanshishan8jsonmend15is__valid__json(input)) {
@@ -15698,7 +15730,7 @@ function _M0FP411zhanshishan8jsonmend8examples3web10live__text(input, upto, sche
       let _try_err$3;
       _L$4: {
         _L$5: {
-          const _bind$8 = _M0FP211zhanshishan8jsonmend19semantic__readiness(input, sk, _M0FP411zhanshishan8jsonmend8examples3web10live__textN6constrS3500, undefined);
+          const _bind$8 = _M0FP211zhanshishan8jsonmend19semantic__readiness(input, sk, _M0FP411zhanshishan8jsonmend8examples3web10live__textN6constrS3517, undefined);
           if (_bind$8.$tag === 1) {
             const _ok = _bind$8;
             full = _ok._0;

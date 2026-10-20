@@ -4,27 +4,27 @@ package "zhanshishan/jsonmend"
 // Values
 pub fn advice_for(PlanOp) -> String
 
-pub fn analyze(String, options? : Options, readiness? : Int, schema? : Schema) -> RepairPlan
+pub fn analyze(String, options? : Options, readiness? : Int32, schema? : Schema) -> RepairPlan
 
-pub fn auto_step(Int, Int) -> Int
+pub fn auto_step(Int32, Int32) -> Int32
 
 pub fn copy_json(Json) -> Json
 
-pub fn decide(Int, Exactness, Bool) -> ExecutionDecision
+pub fn decide(Int32, Exactness, Bool) -> ExecutionDecision
 
 pub fn decide_error(String) -> ExecutionDecision
 
-pub fn decided_at_permille(String, Schema, chunk? : Int, options? : Options) -> Int raise MendError
+pub fn decided_at_permille(String, Schema, chunk? : Int32, options? : Options) -> Int32 raise MendError
 
-pub fn early_stop_saving(Array[String], step? : Int) -> Int raise MendError
+pub fn early_stop_saving(Array[String], step? : Int32) -> Int32 raise MendError
 
 pub fn exactness_of(Array[Repair]) -> Exactness
 
-pub fn field_readiness(String, step? : Int, options? : Options) -> Array[FieldReady] raise MendError
+pub fn field_readiness(String, step? : Int32, options? : Options) -> Array[FieldReady] raise MendError
 
 pub fn has_ambiguity(Array[Repair]) -> Bool
 
-pub fn hint_context(String, Int, Int) -> (String, Int)
+pub fn hint_context(String, Int32, Int32) -> (String, Int32)
 
 pub fn is_valid_json(String) -> Bool
 
@@ -36,37 +36,37 @@ pub fn parse(String, options? : Options) -> ParseResult raise MendError
 
 pub fn plan_action(RepairCode) -> PlanAction
 
-pub fn readiness_deciles(Array[String], step? : Int) -> Array[Int] raise MendError
+pub fn readiness_deciles(Array[String], step? : Int32) -> Array[Int32] raise MendError
 
 pub fn readiness_events_json(Array[ReadinessEvent]) -> String
 
-pub fn readiness_median(Array[String], step? : Int) -> Int raise MendError
+pub fn readiness_median(Array[String], step? : Int32) -> Int32 raise MendError
 
 pub fn repair(String, options? : Options) -> RepairResult raise MendError
 
-pub fn semantic_readiness(String, Schema, step? : Int, options? : Options) -> SemanticReadiness raise MendError
+pub fn semantic_readiness(String, Schema, step? : Int32, options? : Options) -> SemanticReadiness raise MendError
 
-pub fn syntax_readiness_permille(String, step? : Int) -> Int
+pub fn syntax_readiness_permille(String, step? : Int32) -> Int32
 
-pub fn watch_readiness(String, Schema, chunk? : Int, options? : Options) -> Array[ReadinessEventAt] raise MendError
+pub fn watch_readiness(String, Schema, chunk? : Int32, options? : Options) -> Array[ReadinessEventAt] raise MendError
 
 // Errors
 pub(all) suberror MendError {
   EmptyInput
-  NoJsonFound(Int)
+  NoJsonFound(Int32)
   StrictViolation(RepairCode, Position, String)
   AmbiguousRepair(RepairCode, Position, Ambiguity)
-  DepthLimit(Int, Int)
-  SizeLimit(Int, Int)
-  TokenLimit(Int, Int)
+  DepthLimit(Int32, Int32)
+  SizeLimit(Int32, Int32)
+  TokenLimit(Int32, Int32)
   InvalidState(String)
-  InvalidUtf8(Int)
+  InvalidUtf8(Int32)
   InvalidOption(String)
   InvalidEvent(String)
   SchemaError(String)
 }
 pub fn MendError::code(Self) -> String
-pub fn MendError::retry_hint(Self, input? : String, radius? : Int) -> RetryHint?
+pub fn MendError::retry_hint(Self, input? : String, radius? : Int32) -> RetryHint?
 pub fn MendError::to_string(Self) -> String
 
 // Types and methods
@@ -98,8 +98,8 @@ pub(all) struct Constraints {
   mut exclusive_minimum : Double?
   mut maximum : Double?
   mut exclusive_maximum : Double?
-  mut min_length : Int?
-  mut max_length : Int?
+  mut min_length : Int32?
+  mut max_length : Int32?
   mut enum_values : Array[Json]?
   mut pattern : String?
 }
@@ -110,7 +110,7 @@ pub(all) struct Delta {
   op : DeltaOp
   value : Json?
   text : String
-  at : Int
+  at : Int32
 }
 pub fn Delta::pointer(Self) -> String
 
@@ -141,7 +141,7 @@ pub(all) enum Exactness {
 pub fn Exactness::equal(Self, Self) -> Bool
 pub fn Exactness::name(Self) -> String
 pub fn Exactness::not_equal(Self, Self) -> Bool
-pub fn Exactness::rank(Self) -> Int
+pub fn Exactness::rank(Self) -> Int32
 pub fn Exactness::within(Self, Self) -> Bool
 pub impl Eq for Exactness
 
@@ -157,13 +157,13 @@ pub fn ExecutionDecision::is_safe(Self) -> Bool
 pub fn ExecutionDecision::label(Self) -> String
 pub fn ExecutionDecision::name(Self) -> String
 pub fn ExecutionDecision::not_equal(Self, Self) -> Bool
-pub fn ExecutionDecision::rank(Self) -> Int
+pub fn ExecutionDecision::rank(Self) -> Int32
 pub fn ExecutionDecision::worse_of(Self, Self) -> Self
 pub impl Eq for ExecutionDecision
 
 pub(all) struct FieldReady {
   key : String
-  permille : Int
+  permille : Int32
 }
 pub fn FieldReady::equal(Self, Self) -> Bool
 pub fn FieldReady::not_equal(Self, Self) -> Bool
@@ -176,7 +176,7 @@ pub fn FieldTracker::all_ready(Self) -> Bool
 pub fn FieldTracker::feed(Self, Delta) -> Unit
 pub fn FieldTracker::new(Array[String]) -> Self
 pub fn FieldTracker::ready(Self, String) -> Bool
-pub fn FieldTracker::ready_count(Self) -> Int
+pub fn FieldTracker::ready_count(Self) -> Int32
 pub fn FieldTracker::ready_keys(Self) -> Array[String]
 
 pub(all) struct FinalResult {
@@ -225,10 +225,10 @@ pub impl Eq for NonFinite
 
 pub(all) struct Options {
   mode : Mode
-  max_depth : Int
-  max_input_len : Int
-  max_token_len : Int
-  max_prose_buffer : Int
+  max_depth : Int32
+  max_input_len : Int32
+  max_token_len : Int32
+  max_prose_buffer : Int32
   duplicate_keys : DuplicateKeys
   incomplete_number : IncompleteNumber
   pending_key : PendingKey
@@ -240,8 +240,8 @@ pub(all) struct Options {
   quote_lookahead : Bool
   multi_root : MultiRoot
   rules : RuleSet
-  indent : Int
-  max_repairs : Int
+  indent : Int32
+  max_repairs : Int32
   max_loss : Exactness
   collect_deltas : Bool
   reject_ambiguous : Bool
@@ -282,7 +282,7 @@ pub fn PartialParser::snapshot_copy(Self) -> Snapshot
 
 pub(all) enum PathSegment {
   Key(String)
-  Index(Int)
+  Index(Int32)
 }
 pub fn PathSegment::equal(Self, Self) -> Bool
 pub fn PathSegment::not_equal(Self, Self) -> Bool
@@ -326,9 +326,9 @@ pub fn PlanOp::of_repair(Repair) -> Self
 pub impl Eq for PlanOp
 
 pub(all) struct Position {
-  offset : Int
-  line : Int
-  column : Int
+  offset : Int32
+  line : Int32
+  column : Int32
 }
 pub fn Position::equal(Self, Self) -> Bool
 pub fn Position::not_equal(Self, Self) -> Bool
@@ -340,7 +340,7 @@ pub(all) enum ReadinessEvent {
   FieldRejected(String, String, String)
   FieldIncomplete(String, String)
   RootReady
-  RootInvalid(Int)
+  RootInvalid(Int32)
 }
 pub fn ReadinessEvent::is_verdict(Self) -> Bool
 pub fn ReadinessEvent::kind(Self) -> String
@@ -349,7 +349,7 @@ pub fn ReadinessEvent::to_json(Self) -> String
 
 pub(all) struct ReadinessEventAt {
   event : ReadinessEvent
-  permille : Int
+  permille : Int32
 }
 
 pub(all) struct Repair {
@@ -389,7 +389,7 @@ pub fn RepairCode::equal(Self, Self) -> Bool
 pub fn RepairCode::message(Self) -> String
 pub fn RepairCode::name(Self) -> String
 pub fn RepairCode::not_equal(Self, Self) -> Bool
-pub fn RepairCode::number(Self) -> Int
+pub fn RepairCode::number(Self) -> Int32
 pub fn RepairCode::severity(Self) -> Severity
 pub fn RepairCode::severity_in(Self, Slot) -> Severity
 pub impl Eq for RepairCode
@@ -407,9 +407,9 @@ pub(all) struct RepairPlan {
   retry_hint : RetryHint?
   error_code : String
   error_message : String
-  readiness_permille : Int
-  schema_total : Int
-  schema_satisfied : Int
+  readiness_permille : Int32
+  schema_total : Int32
+  schema_satisfied : Int32
   schema_missing : Array[String]
 }
 pub fn RepairPlan::ambiguity_kind(Self) -> String
@@ -439,11 +439,11 @@ pub(all) struct RetryHint {
   ambiguity : Ambiguity
   reason : String
   context : String
-  caret : Int
+  caret : Int32
 }
 pub fn RetryHint::equal(Self, Self) -> Bool
 pub fn RetryHint::not_equal(Self, Self) -> Bool
-pub fn RetryHint::of_error(MendError, input? : String, radius? : Int) -> Self?
+pub fn RetryHint::of_error(MendError, input? : String, radius? : Int32) -> Self?
 pub fn RetryHint::to_prompt(Self) -> String
 pub fn RetryHint::to_string(Self) -> String
 pub impl Eq for RetryHint
@@ -466,8 +466,8 @@ pub(all) struct SafetyPolicy {
   incomplete_number : IncompleteNumber
   pending_key : PendingKey
   multi_root : MultiRoot
-  max_depth : Int
-  max_input_len : Int
+  max_depth : Int32
+  max_input_len : Int32
   rules : RuleSet
 }
 pub fn SafetyPolicy::for_agent() -> Self
@@ -519,49 +519,49 @@ pub(all) struct SchemaMismatch {
 }
 
 pub(all) struct SchemaVerdict {
-  total : Int
-  satisfied : Int
+  total : Int32
+  satisfied : Int32
   missing : Array[String]
   mismatched : Array[SchemaMismatch]
   ok : Bool
 }
 
 pub(all) struct SemanticReadiness {
-  syntax_permille : Int
-  schema_permille : Int
-  settled_permille : Int
-  step : Int
+  syntax_permille : Int32
+  schema_permille : Int32
+  settled_permille : Int32
+  step : Int32
   verdict : SchemaVerdict
 }
 
 pub struct SemanticWatcher {
-  mut settled_count : Int
+  mut settled_count : Int32
   mut concluded : Bool
   mut conflict : Bool
   mut checked : Bool
   mut events : Array[ReadinessEvent]
-  mut events_at : Array[Int]
-  mut cur_at : Int
+  mut events_at : Array[Int32]
+  mut cur_at : Int32
   mut in_finish : Bool
-  mut verdict_at : Int
-  mut bytes : Int
-  mut settled_at : Int
-  mut syntax_at : Int
+  mut verdict_at : Int32
+  mut bytes : Int32
+  mut settled_at : Int32
+  mut syntax_at : Int32
   // private fields
 }
 pub fn SemanticWatcher::all_settled(Self) -> Bool
-pub fn SemanticWatcher::bytes(Self) -> Int
+pub fn SemanticWatcher::bytes(Self) -> Int32
 pub fn SemanticWatcher::concluded(Self) -> Bool
 pub fn SemanticWatcher::conflict(Self) -> Bool
 pub fn SemanticWatcher::drain_events(Self) -> Array[ReadinessEvent]
-pub fn SemanticWatcher::drain_events_at(Self) -> Array[(ReadinessEvent, Int)]
+pub fn SemanticWatcher::drain_events_at(Self) -> Array[(ReadinessEvent, Int32)]
 pub fn SemanticWatcher::feed(Self, String) -> Unit raise MendError
 pub fn SemanticWatcher::finish(Self) -> FinalResult raise MendError
 pub fn SemanticWatcher::new(Schema, options? : Options) -> Self raise MendError
-pub fn SemanticWatcher::ready_count(Self) -> Int
-pub fn SemanticWatcher::settled_at(Self) -> Int
-pub fn SemanticWatcher::syntax_at(Self) -> Int
-pub fn SemanticWatcher::total_required(Self) -> Int
+pub fn SemanticWatcher::ready_count(Self) -> Int32
+pub fn SemanticWatcher::settled_at(Self) -> Int32
+pub fn SemanticWatcher::syntax_at(Self) -> Int32
+pub fn SemanticWatcher::total_required(Self) -> Int32
 pub fn SemanticWatcher::verdict(Self) -> SchemaVerdict
 pub fn SemanticWatcher::watched_paths(Self) -> Array[String]
 
