@@ -475,3 +475,49 @@ test "E021 and E022 offsets are absolute across chunks" {
   assert_eq(feed_try(p2, "[\"abc"), "")
   assert_eq(feed_try(p2, "def\"]"), "E022(5,@1)")
 }
+
+///|
+test "prose overflow is observable; a cleaner prelude passes" {
+  // `skip_prose` recognises only `{` / `[`, so a whitespace prelude followed by
+  // a scalar root is replayed as JSON at `finish`. The replay is bounded by
+  // `max_prose_buffer`; past the bound the document is refused with E002 again,
+  // and `prose_overflow()` is how a caller tells that apart from "where the
+  // prose ends is undecidable".
+  let long_ws = " ".repeat(70000)
+  let tight : Options = {
+    ..Options::default(),
+    skip_prose: true,
+    max_prose_buffer: 65536,
+  }
+  let p = PartialParser::new(options=tight)
+  assert_eq(feed_try(p, long_ws + "true"), "")
+  // `nojson_pos` advances past leading whitespace, so the refusal points at the
+  // first code unit that is not blank (70000), not at 0.
+  assert_eq(finish_err(p), "E002@70000")
+  assert_eq(p.prose_overflow(), true, msg="the overflow must be observable")
+  // Raising the buffer lets the same document through: the replay is clean,
+  // and the whole path stays chunk-invariant.
+  let roomy : Options = { ..tight, max_prose_buffer: 131072, }
+  let text = long_ws + "true"
+  let p2 = PartialParser::new(options=roomy)
+  let mut i = 0
+  while i < text.length() {
+    let end = if i + 8192 < text.length() { i + 8192 } else { text.length() }
+    assert_eq(feed_try(p2, text[i:end].to_owned()), "")
+    i = end
+  }
+  let fin = finish_try(p2)
+  assert_eq(fin.err, "")
+  assert_eq(fin.text, "true")
+  assert_eq(p2.prose_overflow(), false)
+  // A prelude whose replay would need repairs stays refused however large the
+  // buffer is: that refusal is "not clean", not "overflow".
+  let p3 = PartialParser::new(options=roomy)
+  assert_eq(feed_try(p3, "x".repeat(70000) + "true"), "")
+  assert_eq(finish_err(p3), "E002@0")
+  assert_eq(
+    p3.prose_overflow(),
+    false,
+    msg="clean-replay refusal is not an overflow",
+  )
+}

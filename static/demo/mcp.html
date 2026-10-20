@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JSONMend × MCP — 执行门接入</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fg: #1f2328;
+        --bg: #ffffff;
+        --muted: #6a737d;
+        --line: #d8dee4;
+        --accent: #0969da;
+        --code-bg: #f6f8fa;
+        --ok: #1a7f37;
+        --bad: #cf222e;
+        --warn: #9a6700;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #e6edf3;
+          --bg: #0d1117;
+          --muted: #8b949e;
+          --line: #30363d;
+          --accent: #58a6ff;
+          --code-bg: #161b22;
+          --ok: #3fb950;
+          --bad: #f85149;
+          --warn: #d29922;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 2rem 1rem 4rem;
+        font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+        color: var(--fg);
+        background: var(--bg);
+      }
+      main { max-width: 960px; margin: 0 auto; }
+      h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+      h2 { font-size: 1.1rem; margin: 2.2rem 0 .6rem; }
+      p.lead { color: var(--muted); margin: 0 0 1.2rem; }
+      .nav { font-size: .9rem; color: var(--muted); margin-bottom: 1.4rem; }
+      .nav a { color: var(--accent); text-decoration: none; }
+      pre, textarea, code {
+        font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      pre {
+        margin: .5rem 0 0;
+        padding: .8rem;
+        overflow-x: auto;
+        background: var(--code-bg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      textarea {
+        width: 100%;
+        min-height: 5rem;
+        padding: .7rem;
+        color: var(--fg);
+        background: var(--code-bg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        resize: vertical;
+      }
+      button {
+        margin: .6rem .5rem 0 0;
+        padding: .38rem .85rem;
+        font: inherit;
+        color: var(--fg);
+        background: var(--code-bg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      button:hover { border-color: var(--accent); color: var(--accent); }
+      .grid { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+      @media (min-width: 860px) { .grid { grid-template-columns: 1fr 1fr; } }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 1rem;
+      }
+      .card h3 { margin: 0 0 .4rem; font-size: .95rem; }
+      .muted { color: var(--muted); }
+      .verdict { font-weight: 650; }
+      .ok { color: var(--ok); }
+      .bad { color: var(--bad); }
+      .warn { color: var(--warn); }
+      .kv { display: grid; grid-template-columns: 7.5rem 1fr; gap: .2rem .8rem; margin-top: .6rem; }
+      .kv span:nth-child(odd) { color: var(--muted); }
+      .steps { counter-reset: step; list-style: none; padding: 0; }
+      .steps li { margin: .8rem 0; padding-left: 2.1rem; position: relative; }
+      .steps li::before {
+        counter-increment: step;
+        content: counter(step);
+        position: absolute;
+        left: 0;
+        top: .05rem;
+        width: 1.45rem;
+        height: 1.45rem;
+        border-radius: 50%;
+        background: var(--code-bg);
+        border: 1px solid var(--line);
+        text-align: center;
+        font-size: .78rem;
+        line-height: 1.45rem;
+        color: var(--muted);
+      }
+      footer { margin-top: 3rem; color: var(--muted); font-size: .88rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>JSONMend × MCP — 执行门接入</h1>
+      <p class="lead">
+        MCP 让 agent 发现工具；真正的价值是宿主在执行工具参数之前过闸。
+        `jsonmend_analyze` 返回 <code>executable</code>；为 false 时把
+        <code>retry.prompt</code> 原样回灌模型。
+      </p>
+      <p class="nav">
+        <a href="./index.html">演示目录</a> ·
+        <a href="./live.html">流式执行门</a> ·
+        <a href="https://github.com/wenhuang2333/Moonbit-haker">GitHub</a> ·
+        <a href="https://github.com/wenhuang2333/Moonbit-haker/blob/main/code/docs/INTEGRATIONS.md">接入配方</a>
+      </p>
+
+      <h2>1. 一行配置</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Claude Code</h3>
+          <pre id="cfg-claude">claude mcp add jsonmend -- jsonmend mcp</pre>
+          <button data-copy="cfg-claude">复制</button>
+        </div>
+        <div class="card">
+          <h3>mcp.json（Cursor / Cline / Windsurf 等）</h3>
+          <pre id="cfg-json">{"mcpServers":{"jsonmend":{"command":"jsonmend","args":["mcp"]}}}</pre>
+          <button data-copy="cfg-json">复制</button>
+        </div>
+      </div>
+      <p class="muted">
+        装 pip 包时命令是 <code>jsonmend-mcp</code>（它解析二进制并替换进程）。
+        四个工具：<code>jsonmend_analyze</code> / <code>repair</code> /
+        <code>validate</code> / <code>readiness</code>。
+      </p>
+
+      <h2>2. 模型给出坏参数，门怎么回答</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>模型输出（被 max_tokens 截断）</h3>
+          <textarea id="model-text">{"amount":100,"currency":"USD"</textarea>
+          <div>
+            <button id="run-bad">运行 jsonmend_analyze</button>
+            <button id="run-good">模型重发</button>
+          </div>
+          <p class="muted" id="tool-hint">
+            schema 就是工具已有的 <code>inputSchema</code>；这里用 JSON Schema 子集直接传给 analyze。
+          </p>
+        </div>
+        <div class="card">
+          <h3>jsonmend_analyze 的回答</h3>
+          <div class="kv">
+            <span>decision</span><span id="decision" class="verdict">—</span>
+            <span>executable</span><span id="executable" class="verdict">—</span>
+            <span>exactness</span><span id="exactness">—</span>
+            <span>error</span><span id="error">—</span>
+            <span>schema</span><span id="schema">—</span>
+          </div>
+          <pre id="retry" hidden></pre>
+          <pre id="plan" style="max-height: 16rem; overflow: auto">—</pre>
+        </div>
+      </div>
+
+      <h2>3. 这三个数就是全部故事</h2>
+      <ol class="steps">
+        <li><b>截断 → E010。</b>补全会发明内容；执行档不允许，返回 <code>lossy_repair</code>，<code>executable: false</code>。</li>
+        <li><b>重试提示是 API 的一部分。</b><code>retry.prompt</code> 带位置、原因、片段，模型可以直接照着改。</li>
+        <li><b>重发 → safe。</b>同一份声明、同一个调用；这次 <code>executable: true</code>，宿主才执行。</li>
+      </ol>
+
+      <h2>4. 会话实录</h2>
+      <pre>→ tools/call  jsonmend_analyze
+← decision: lossy_repair      executable: false
+  error: E010  CloseContainer at 1:31
+  retry: "JSONMend refused the arguments: E010 ..."
+
+→ tools/call  jsonmend_analyze
+← decision: safe              executable: true
+OK  execute create_invoice({"amount":100,"currency":"USD"})</pre>
+
+      <footer>
+        页面里的每一次 <code>analyze</code> 都由同一份 MoonBit 引擎编译成的
+        <code>jsonmend.js</code> 在浏览器里计算，不是预写的结果。
+        配置命令与协议见
+        <a href="https://github.com/wenhuang2333/Moonbit-haker/blob/main/code/docs/PROTOCOL.md">PROTOCOL.md</a>。
+      </footer>
+    </main>
+
+    <script>
+      globalThis.jsonmendRegister1 = function (name, fn) {
+        globalThis.jsonmend = globalThis.jsonmend || {};
+        globalThis.jsonmend[name] = fn;
+      };
+      globalThis.jsonmendRegister2 = globalThis.jsonmendRegister1;
+      globalThis.jsonmendRegister3 = globalThis.jsonmendRegister1;
+    </script>
+    <script src="./jsonmend.js"></script>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const schema = JSON.stringify({
+        type: "object",
+        properties: {
+          amount: { type: "number", minimum: 0 },
+          currency: { type: "string", pattern: "^[A-Z]{3}$" },
+        },
+        required: ["amount", "currency"],
+      });
+
+      function render(plan) {
+        $("decision").textContent = plan.decision;
+        $("decision").className =
+          "verdict " + (plan.executable ? "ok" : plan.decision === "invalid" ? "bad" : "warn");
+        $("executable").textContent = String(plan.executable);
+        $("executable").className = "verdict " + (plan.executable ? "ok" : "bad");
+        $("exactness").textContent = plan.exactness;
+        $("error").textContent = plan.error ? plan.error.code + " " + plan.error.message : "none";
+        $("schema").textContent = plan.schema_satisfied + "/" + plan.schema_total;
+        const retry = $("retry");
+        if (plan.retry && plan.retry.prompt) {
+          retry.hidden = false;
+          retry.textContent = plan.retry.prompt;
+        } else {
+          retry.hidden = true;
+          retry.textContent = "";
+        }
+        $("plan").textContent = JSON.stringify(plan, null, 2);
+      }
+
+      function analyze(text) {
+        const raw = globalThis.jsonmend.analyze_json_schema(text, "agent", schema);
+        const plan = JSON.parse(raw);
+        if (plan.error && !plan.decision) {
+          $("decision").textContent = "invalid schema";
+          $("decision").className = "verdict bad";
+          $("plan").textContent = raw;
+          return;
+        }
+        render(plan);
+      }
+
+      $("run-bad").addEventListener("click", () => analyze($("model-text").value));
+      $("run-good").addEventListener("click", () => {
+        $("model-text").value = '{"amount":100,"currency":"USD"}';
+        analyze($("model-text").value);
+      });
+      $("model-text").addEventListener("input", () => analyze($("model-text").value));
+
+      for (const button of document.querySelectorAll("[data-copy]")) {
+        button.addEventListener("click", async () => {
+          const text = $(button.dataset.copy).textContent;
+          try {
+            await navigator.clipboard.writeText(text);
+            button.textContent = "已复制";
+            setTimeout(() => (button.textContent = "复制"), 1200);
+          } catch (_) {
+            button.textContent = "复制失败";
+          }
+        });
+      }
+
+      analyze($("model-text").value);
+    </script>
+  </body>
+</html>

@@ -5,6 +5,96 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.0] - 2026-10-21
+
+### 接入面（1.1.0 / 0.8.0）
+
+把已有的引擎做成 agent 能直接接入的四个面，核心修复语义不变。
+
+**新增**
+
+- **`jsonmend serve --stdio`（协议 v1）**：长驻 JSONL 协议，方法 `hello`、`repair`、
+  `analyze`、`validate`、`readiness`、`watch.start/feed/finish`、
+  `llm.open/feed/close/run`、`shutdown`。`hello` 同时返回 `engine`、`registry`
+  与 `protocol` 三个版本号；每条连接一个 `watch` 流和一个 `llm` 流。
+  规范见 `code/docs/PROTOCOL.md`。
+- **`jsonmend mcp`**：MCP stdio server（JSON-RPC 2.0），工具
+  `jsonmend_analyze` / `jsonmend_repair` / `jsonmend_validate` /
+  `jsonmend_readiness`；通知不产生响应，未知方法返回 `-32601`。
+- **`Schema::of_json_schema` / `Schema::parse_json_schema`**（公开面新增，minor 级）：
+  受控 JSON Schema 子集桥——`type`/`properties`/`required`/`items`/`enum`/`const`/
+  `minimum`/`maximum`/`exclusiveMinimum`/`exclusiveMaximum`/`minLength`/`maxLength`/
+  `pattern`（锚定字符类，量词折算为 `minLength`/`maxLength`）。不支持的键
+  （`$ref`、`oneOf`/`anyOf`/`allOf`、`not`、`format`、`patternProperties`、
+  `additionalProperties: false` 等）报 `E070`，不静默忽略。
+- **`SemanticWatcher::drain_events_at`**（公开面新增）：返回事件及其输入偏移，
+  供流式集成在字段定稿的瞬间行动。
+- **npm 包**（`code/npm/`）：ESM + CJS + TypeScript 类型，包装同一份浏览器
+  bundle；新增 `repairResult`、`analyze`（DSL 与 JSON Schema）、`repair_opts`。
+  导入不再向 stdout 打印 banner。
+- **Python 包**（`code/python/`）：`Client`（长驻 `serve` 子进程、请求/响应 id
+  校验、结构化 `JsonMendError`）、一次性 `repair`/`analyze`/`validate`、
+  `watch_*`/`llm_*`、无依赖 HTTP facade（`jsonmend-http`）与
+  `jsonmend-mcp` 控制台入口。
+- **Windows 预编译**：`release.yml` 增加 `windows-latest`，产物
+  `jsonmend-windows-x86_64.exe` 进入 Release 与 `SHA256SUMS`；CI 增加 Windows
+  原生构建与协议/MCP 一致性任务。
+- **一致性套件**：`code/tests/conformance/` 18 组用例（serve 17 + MCP 1），
+  期望值是响应子集；CI 在 Linux/macOS/Windows 上运行同一套。
+
+**修复**
+
+- **`serve`/`mcp` 的 stdout 在交互式客户端下会死锁**：首版用 `println` +
+  `fflush(NULL)`，输出只在进程退出时到达；改为逐字节 `fread`（避免管道上
+  等待 64 KiB）与显式 `fwrite`/`fflush` 的协议写入口，每行立即送达。
+- **浏览器 bundle 导入时打印 `jsonmend demo bundle ready`**：会污染任何
+  行协议；已移除，`demo_smoke.mjs` 增加“导入无输出”断言。
+- **`code/README.md` / `README.zh.md` 声称 mooncakes 已发布 1.0.0**：与根
+  README 的 0.7.0 冲突（平台只收 `0.x.y`）；已更正并指向通道映射。
+
+**文档**
+
+- 新增 `docs/PROTOCOL.md`、`docs/CONFORMANCE.md`、`docs/INTEGRATIONS.md`；
+  根 README 首屏改为“LLM JSON 的执行门”，新增“Agent 接入”一节（MCP 配置、
+  serve、npm/pip、JSON Schema 桥、执行档默认）。
+- 根 README 的“三后端”与证据表的“四后端”不一致已统一为四个。
+
+**测试**
+
+- 库测试 **210/210 × 4 后端**（840 次）；协议/MCP 一致性 **18/18**；
+  npm **10/10**；Python **16/16**；CLI 冒烟 85/85；覆盖率门不变。
+
+### 收尾轮（1.0.x，未发版）
+
+公开面**只增不改**：新增一个诊断访问器与一个 CLI 开关，
+其余是测试与文档；1.0.0 的行为承诺不受影响。
+
+### 新增
+
+- **`PartialParser::prose_overflow() -> Bool`**（公开面新增，minor 级）。
+  `skip_prose` 打开时，被跳过的前言超过 `max_prose_buffer` 会让「结束回放」被放弃、
+  文档按原样拒绝 `E002`；该访问器把「前言在哪结束不可判定」与「回放缓冲不够」
+  两种拒绝分开，可在 `finish` 失败后读取。
+- **CLI `--max-prose-buffer N`**（默认 65536）与溢出诊断提示：`E002` 因缓冲溢出发生时，
+  stderr 打印 `hint: the skipped prelude exceeded max_prose_buffer (…)`。
+  对「空白 + 标量」有效；「重放不干净」（如围栏标量）的输入调多大都会被拒。
+
+### 变更（测试与文档）
+
+- **`delta.mbt` 行覆盖 77.2% → 92.1%**（+3 用例：R019 拼接的 `AppendText` 位置、
+  字符串尾部按 drain 冲刷、逐码元 drain 的重放等价）；四后端 **196/196**。
+  根包行覆盖 3325/3552 → **3345/3553 = 94.1%**。
+- **README「发布通道与版本映射」**：GitHub `1.x` ⟷ mooncakes `0.(x+1)` 同字节映射；
+  `cli_smoke.sh` 断言映射表第一行与 `code/moon.mod` 不漂移。发布清单第一条改为
+  「**先 `moon publish --dry-run` 探平台限制，再打标签**」（1.0.0 顺序反了的教训）。
+- **`docs/ERRORS.md`：E002 增加「围栏标量为什么被拒」可检索条目**（干净回放规则、
+  两条诊断线索、哪些输入调缓冲也无效）。
+- 修正过期数字：`semantic_readiness` 从 0.5.0 时代的 32.7–34.3× 更新为
+  **1.1–1.7× `repair`**（约 116–170 µs/4.9 KiB，`Delta.at` 折算后）；`plan.mbt`
+  覆盖率 71.5% 的旧说法更新为 489/526 = 93.0%（覆盖率最低项现为
+  `llm/text.mbt` 66/91 = 72.5%）；测试数与 CLI 断言数同步为 **196 / 85**（含 6 项
+  版本一致性断言）。
+
 ## [1.0.0] - 2026-10-16
 
 **公开面稳定。此后遵守语义化版本：破坏性变更必须升 major。标签一旦推送不再移动。**

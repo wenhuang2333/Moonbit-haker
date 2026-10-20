@@ -72,6 +72,44 @@ fn read_chunk(f : Int64, cap : Int32) -> Bytes {
 }
 
 ///|
+/// Bulk write of a byte buffer. `fwrite` is used rather than the runtime's
+/// `println`, whose output is buffered until the process exits: a line
+/// protocol has to reach the reader while the process is still running.
+#borrow(buf)
+extern "C" fn ffi_fwrite(
+  buf : Bytes,
+  size : Int32,
+  nitems : Int32,
+  f : Int64,
+) -> Int64 = "moonbit_fwrite_ffi"
+
+///|
+/// Standard output as its own stdio stream. `0L` when it cannot be opened.
+///
+/// The protocol writers use this instead of `println` so that one line is
+/// flushed per response; `println`'s buffer is only flushed at exit, which
+/// deadlocks an interactive client.
+fn open_output() -> Int64 {
+  let f = ffi_fdopen(1, b"wb")
+  if ffi_is_null(f) != 0 {
+    0L
+  } else {
+    f
+  }
+}
+
+///|
+/// Write one protocol line and flush it.
+fn write_line(f : Int64, line : String) -> Unit {
+  if f == 0L {
+    return
+  }
+  let bytes = @utf8.encode(line + "\n")
+  ignore(ffi_fwrite(bytes, 1, bytes.length(), f))
+  ignore(ffi_fflush(f))
+}
+
+///|
 /// Close a stream opened by `open_input`.
 fn close_input(f : Int64) -> Unit {
   ignore(ffi_fclose(f))

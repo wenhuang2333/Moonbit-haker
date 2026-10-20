@@ -402,3 +402,99 @@ test "delta consumed offset is chunk invariant" {
     }
   }
 }
+
+///|
+test "R019 concatenation lands as AppendText at the merged slot" {
+  // The `+` merge (BR-21) changes a value that already landed, so the delta
+  // stream has to carry the change too: an `AppendText` at that string's slot.
+  // Root, array and object slots all route through `concat_target_path`.
+  let cases : Array[(String, String)] = [
+    ("\"a\" + \"b\"", ""),
+    ("[\"a\" + \"b\"]", "/0"),
+    ("{\"k\":\"a\" + \"b\"}", "/k"),
+  ]
+  for (input, pointer) in cases {
+    let p = PartialParser::new(options=Options::for_llm())
+    p.feed(input)
+    let ops : Array[Delta] = []
+    for d in p.drain_deltas() {
+      ops.push(d)
+    }
+    let mut merged = false
+    for d in ops {
+      if d.op is AppendText && d.pointer() == pointer && d.text == "b" {
+        merged = true
+      }
+    }
+    assert_true(merged, msg="no AppendText at `" + pointer + "` for " + input)
+    let fin = p.finish()
+    for d in p.drain_deltas() {
+      ops.push(d)
+    }
+    assert_eq(
+      dj_render(dj_replay(ops)),
+      fin.value.stringify(),
+      msg="replay after concat for " + input,
+    )
+  }
+}
+
+///|
+test "AppendText flushes the string tail at drain time" {
+  // A string drained between chunks reports only the growth since the last
+  // drain (`delta_str_reported`), and an escape splits `parts` mid-string; the
+  // replayed deltas must still reconstruct the whole value.
+  let p = PartialParser::new(options=Options::for_llm())
+  let ops : Array[Delta] = []
+  p.feed("{\"s\":\"abc")
+  for d in p.drain_deltas() {
+    ops.push(d)
+  }
+  p.feed("def")
+  for d in p.drain_deltas() {
+    ops.push(d)
+  }
+  p.feed("\\nghi\"}")
+  for d in p.drain_deltas() {
+    ops.push(d)
+  }
+  let fin = p.finish()
+  for d in p.drain_deltas() {
+    ops.push(d)
+  }
+  assert_eq(
+    dj_render(dj_replay(ops)),
+    fin.value.stringify(),
+    msg="tail flush replay",
+  )
+}
+
+///|
+test "drains after every code unit still replay" {
+  // A drain taken between any two code units exercises `flush_delta_text`
+  // while the scanner is in every token state (idle, in a string, in a
+  // pending escape, inside a bare word); the replays must hold everywhere.
+  let text = "{\"a\":[1,2,{\"b\":\"x\"}],\"c\":\"y\"}"
+  let p = PartialParser::new(options=Options::for_llm())
+  let ops : Array[Delta] = []
+  for i = 0; i < text.length(); i = i + 1 {
+    p.feed(text[i:i + 1].to_owned())
+    for d in p.drain_deltas() {
+      ops.push(d)
+    }
+    assert_eq(
+      dj_render(dj_replay(ops)),
+      dj_render(p.snapshot().value),
+      msg="per-unit replay",
+    )
+  }
+  let fin = p.finish()
+  for d in p.drain_deltas() {
+    ops.push(d)
+  }
+  assert_eq(
+    dj_render(dj_replay(ops)),
+    fin.value.stringify(),
+    msg="per-unit final replay",
+  )
+}

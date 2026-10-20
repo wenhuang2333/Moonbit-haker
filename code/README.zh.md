@@ -5,10 +5,10 @@
 | | |
 | --- | --- |
 | 模块 | `zhanshishan/jsonmend` |
-| 版本 | 1.0.0 |
+| 版本 | 1.1.0 |
 | 许可证 | Apache-2.0 |
 | 首选后端 | `wasm`（同时支持 `native` 与 `js`） |
-| 预编译产物 | [Release `v0.6.1`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.6.1)——Linux CLI、wasm 探针、浏览器包、`SHA256SUMS` |
+| 预编译产物 | [Release `v1.1.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.1.0)——Linux CLI、wasm 探针、浏览器包、`SHA256SUMS` |
 | 发行渠道 | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
 
 ## 特性
@@ -95,6 +95,22 @@ try {
 ```
 
 需要 `Json` 树而不是文本时改用 `@jsonmend.parse`，它同样返回 `repairs` 与 `completeness`，并额外给出 `value`。`repair` 返回 `RepairResult`，字段为 `text`、`repairs` 和 `completeness`。
+
+## 接入面
+
+库是引擎；五种交付面包装同一套语义：
+
+| 接入面 | 用途 |
+| --- | --- |
+| `moon add zhanshishan/jsonmend` | MoonBit 项目（本包） |
+| `jsonmend serve --stdio` | 任意语言；版本化 JSONL（[docs/PROTOCOL.md](docs/PROTOCOL.md)） |
+| `jsonmend mcp` | Claude Code、Cursor、Codex CLI、Gemini CLI、Cline、Windsurf：四个工具 |
+| `npm install ./code/npm` / `pip install ./code/python` | Node 与 Python 宿主 |
+| `jsonmend-http`（Python 包） | n8n、Dify、Coze、网关 |
+
+执行门在所有接入面上是同一个调用：`analyze(text, profile="agent",
+schema_json=tool.inputSchema)` 返回 `executable`；为 false 时把 `retry.prompt`
+原样回灌模型。逐工具配方见 [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)。
 
 ## 流式示例
 
@@ -408,7 +424,7 @@ moon run examples/agent_loop --target native --release   # 自愈闭环
 | 选项策略与字节输入 | 10 例 | 通过 |
 | 命令行冒烟（退出码 0/1/2/3/4/5/70） | 62 项断言，含 `explain` 14 条 | 通过 |
 | 差分语料（对照 `jsonrepair` / `json-repair`） | 402 条 | 202 处差异全部有文档解释，未解释 0 |
-| 库代码行覆盖率 | 根包 2312/2651 行、`llm` 包 337/391 行 | 87.2% / 86.2% |
+| 库代码行覆盖率 | 根包 3551/3777 行、`llm` 包 337/391 行 | 94.0% / 86.2% |
 
 三个后端结果一致：wasm-gc、native 与 JavaScript 均为 129 个测试全通过。`.github/workflows/ci.yml`
 在每次推送时执行同一组命令（含差分、真值评测与产物体积），因此上表是重新推导出来的结果，
@@ -453,8 +469,8 @@ moon run bench --target js --release
 0.5.0 另加了一组「安全层要多少钱」的基准（`bench` 的 `gate` 行）：同一份 4.9 KiB 工具调用、
 20 次调用，`analyze` 是 `repair` 的 **1.00–1.03 倍**（66–72 µs/次），
 `analyze` + `for_agent` 两道闸 **1.33–1.36 倍**，再加骨架检查 **1.38–1.45 倍**；
-`semantic_readiness` 是 **32.7–34.3 倍**（2.25–2.30 ms/4.9 KiB），
-因为它是按 1‰ 采样重放解析器的**诊断指标**，设计上就不是热路径。
+`semantic_readiness` 在 `Delta.at` 落地后是 **1.1–1.7 倍**（约 116–170 µs/4.9 KiB）：
+时间轴直接取每个 delta 的消费偏移，不再按 1‰ 采样重放。
 
 这些数字是观测值而非承诺：吞吐取决于输入形态、分块大小、快照频率与工具链版本。
 内存（12.95 MB 输入实测 177.9 MB，13.7 倍；同机 Node 10.6 倍、Python 14.3 倍，
@@ -463,9 +479,9 @@ moon run bench --target js --release
 
 ## 已知限制
 
-- **`semantic_readiness` 很贵。** 2.25–2.30 ms / 4.9 KiB（`repair` 的 32.7–34.3 倍）：它按 1‰ 采样、每次都取快照并查路径。适合数据面板与离线审计，不适合放进每次 `feed` 的循环。
-- **骨架只认类型，不认约束。** 声明能表达 `integer` / `string` / `[inner]` / 嵌套对象，但不能表达「`limit` 必须 ≤ 100」这类约束。
-- **`plan.mbt` 覆盖率 71.5%（328/459）是当前最低项。** `explain_text` 与 `to_json` 的分支与字段组合多，测试只覆盖主路径；这是遗留的测试债，不是已知缺陷。
+- **`semantic_readiness` 与 `repair` 同量级但仍是整篇调用。** 约 116–170 µs / 4.9 KiB（`repair` 的 1.1–1.7 倍）：`Delta.at` 折算免掉了重放采样。要放进每次 `feed` 的循环，仍然用增量观察器（`SemanticWatcher` / `FieldTracker`），它不做快照。
+- **骨架约束只覆盖值约束子集。** 0.7.0 起支持 `minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern`（字符类子集），但没有 `$ref` / `oneOf` / `format`（见 `docs/SPEC.md`）。
+- **覆盖率最低项在 `llm` 包**：`llm/text.mbt` 66/91 = 72.5%（文本流的错误分支只覆盖一半）；根包最低为 `api.mbt` 86/95 = 90.5%，`plan.mbt` 已达 489/526 = 93.0%。
 - **live 演示页只重放四个固定场景。** 它是「同一份数据在两种读法下的对比」演示，不是任意流的通用可视化；浏览器验证在本机用 Playwright 做过，CI 只跑帧级断言。
 - **`Options::for_text()` 是预设，不是无树引擎。** 它关掉修复记录与缩进，但值仍然建树；真正的「只出文本」模式（`want_value = false`）仍未实现，见路线图。
 - **`FR-16` 事件接口是薄封装。** `feed_with` / `feed_bytes_with` 只是 `drain_deltas` 的迭代器形式，回调在 `feed` 内部运行，因此回调里不能再次喂同一个解析器；它不是独立的推送接口（理由见 [docs/ONEPAGE.md](docs/ONEPAGE.md)）。
@@ -489,12 +505,12 @@ moon run bench --target js --release
 
 ## 路线图
 
-- ~~发布到 mooncakes.io~~：`zhanshishan/jsonmend` 0.3.0 … **1.0.0** 已发布；1.0.0 是当前版本（见 `moon.mod`）。
+- ~~发布到 mooncakes.io~~：`zhanshishan/jsonmend` 0.3.0 … **0.7.0** 已发布。`1.0.0` **无法**发布——mooncakes 现阶段只接受 `0.x.y`；`0.8.0` 是 `1.1.0` 的 registry 版本，两者除版本字符串外逐字节相同。接入面（`serve`、`mcp`、npm、pip）已在 `1.1.0` / `0.8.0` 发布。
 - ~~给浏览器演示页加一个播放「模型流」的标签页~~：`static/demo/live.html` 已落地（四个真实场景逐帧重放，含重试面板），线上地址 <https://wenhuang2333.github.io/Moonbit-haker/live.html>。
 - ~~把就绪曲线扩展到「调用方真正需要的字段」~~：`Schema` + `semantic_readiness` 已落地（语法/骨架两层分数）。
 - ~~给骨架加约束~~：`minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern`（字符类子集，不是正则）已在 0.7.0 落地。
-- **`--schema` 的约束语言**：目前只有类型，没有 `minimum` / `enum` / `maxLength` 之类的约束；下一步可以加一层「声明即校验」。
-- **把 `semantic_readiness` 做成增量**：现在是全量重放（32.7× `repair`），用 `FieldTracker` 的增量路径可以做到只在新成员定稿时计算。
+- ~~`--schema` 的约束语言~~：`minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern` 已在 0.7.0 落地（`SPEC.md`）。
+- ~~把 `semantic_readiness` 做成增量~~：`Delta.at` 折算已落地（1.1–1.7× `repair`）；流式运行时用 `SemanticWatcher`（1.64–2.00×）。
 - 让增量流变便宜：把操作编码进可复用缓冲、共享路径前缀，目标从 1.40–1.46 倍降到 ≤1.11 倍。
   （场景基准显示这不在关键路径上，优先级因此下调。）
 - ~~`FR-16` 事件/回调接口~~：已以 `feed_with` 薄封装完成。

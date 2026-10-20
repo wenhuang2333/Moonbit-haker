@@ -722,9 +722,14 @@ fn SemanticWatcher::verdict_offset(self : SemanticWatcher) -> Int32 {
 }
 
 ///|
-/// The queued events with the offset each fired at, oldest first. `-1` is an
-/// event that only `finish()` could produce. Both arrays are cleared.
-fn SemanticWatcher::drain_events_at(
+/// The queued events with the input offset each fired at, oldest first. `-1` is
+/// an event that only `finish()` could produce. Both arrays are cleared.
+///
+/// The offset is the `at` of the delta that produced the event, so it does not
+/// depend on how the caller split the stream. A streaming integration that
+/// wants to act the moment a field became final reads this instead of
+/// `drain_events`, which drops the position.
+pub fn SemanticWatcher::drain_events_at(
   self : SemanticWatcher,
 ) -> Array[(ReadinessEvent, Int32)] {
   let out : Array[(ReadinessEvent, Int32)] = []

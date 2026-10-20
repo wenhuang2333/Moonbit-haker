@@ -81,7 +81,7 @@ moon coverage report -f summary                               # 含 bench：3187
 ```bash
 cd code
 moon build cmd/jsonmend --target native --release
-bash tests/cli_smoke.sh                       # 77 项断言，全部 ok 才算通过
+bash tests/cli_smoke.sh                       # 85 项断言，全部 ok 才算通过
 bash tests/examples.sh                        # 示例输入与期望输出逐字节对照
 bash tests/cli_smoke.sh ./path/to/jsonmend.exe  # 指定其它可执行文件
 ```
@@ -89,6 +89,41 @@ bash tests/cli_smoke.sh ./path/to/jsonmend.exe  # 指定其它可执行文件
 `code/examples/cases/` 下有 6 组 `*.json` 输入与同名 `*.expected` 期望输出
 （引号与尾逗号、截断补全、围栏与注释、字面量与非有限值、多根值、前导说明），
 `tests/examples.sh` 逐组比较，全部一致才算通过。
+
+## 3b. 接入面一致性（serve / MCP / npm / Python）
+
+```bash
+cd code
+moon build cmd/jsonmend --target native --release
+J=./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+
+# 协议与 MCP：18 组用例（serve 17 + MCP 1），退出码 0 才算通过
+python3 tests/conformance/run_conformance.py --cli "$J"
+
+# Python 客户端与 HTTP facade：16 项
+(cd python && JSONMEND_BIN="$PWD/../_build/native/release/build/cmd/jsonmend/jsonmend.exe" \
+  python3 -m unittest discover -s tests)
+
+# npm 包：10 项；先确保 vendor bundle 与 static/demo/jsonmend.js 一致
+(cd npm && node --test)
+```
+
+手工试一次协议（每行一个请求、每行一个响应，stdout 只走协议）：
+
+```bash
+printf '%s\n' '{"id":1,"method":"hello"}' \
+  '{"id":2,"method":"analyze","params":{"text":"{\"words\":[\"a\" \"b\"]}","profile":"execution"}}' \
+  '{"id":3,"method":"shutdown"}' | "$J" serve
+```
+
+MCP 配置（Claude Code / Cursor / Codex CLI / Gemini CLI / Cline / Windsurf）：
+
+```json
+{"mcpServers":{"jsonmend":{"command":"jsonmend","args":["mcp"]}}}
+```
+
+协议规范见 `docs/PROTOCOL.md`，用例格式见 `docs/CONFORMANCE.md`，
+逐工具配方见 `docs/INTEGRATIONS.md`。
 
 ## 4. 差分测试（TC-D）
 
@@ -312,27 +347,43 @@ node ../code/tests/demo_smoke.mjs              # 演示 bundle 仍可用
 
 ### 7.1 发布到 mooncakes.io
 
+**第一条规则：先探测，再打标签。** 标签一旦推送不再移动，而平台限制只能在
+`moon publish` 时才暴露——1.0.0 就是这么被拦下的（mooncakes 现阶段只接受
+`0.x.y`，`In this very early stage, the major version must be '0'`）。顺序反一次，
+选择就要重做。
+
 ```bash
 moon whoami                 # 必须是模块名里的用户名（当前 zhanshishan）
-moon publish --dry-run      # 打包并检查，不上传
-moon publish                # 上传 0.5.0
+moon publish --dry-run      # 打包并检查；注意：dry-run 成功也可能以 255 退出，看输出里的 Server status
+moon publish                # 上传；成功以 `Server status: 200 OK` 结束
 ```
 
 `moon.mod` 的 `name` 必须等于 `moon whoami` 的用户名，否则 `moon publish` 报
-「User mismatch」。0.3.0 的发布记录：模块 `zhanshishan/jsonmend`，
-校验和 `0241a16e343c6f91814efaa189ad16bb95ec49c97a6b8ae6a6406547faf6185c`。
+「User mismatch」。版本与渠道映射见根 `README.md`「发布通道与版本映射」；
+发布后把映射表第一行更新到新版本（`cli_smoke.sh` 有断言防止漂移）。
+
+**已知故障与临时通道（1.0.x）**：0.7.0 起 `moon publish` 的上传阶段在本机会
+以 `send failed because receiver is gone` 失败（退出码 255），而同一条 token、
+同一个已校验产物用 `curl` multipart POST 同一端点 1.7 s 成功——指向 moon 的
+HTTP 客户端实现而非账号或网络。因此每次发布**先试官方路径**；若仍失败：
+
+1. 用 `moon package` 产出的已校验 zip 手工 POST：
+   `curl -F token=<token> -F file=@<zip> https://mooncakes.io/api/v0/publish`；
+2. 用「重复提交得 409 Version … is duplicated」或包页 200 做二次校验；
+3. 把这次失败如实记录（这是临时通道，不改变发布的字节）。
+
+工具链升级后按第一条规则复测官方路径；确认修好后删掉本节的手工步骤。
 
 ### 7.2 只能在 GitHub 页面上完成的动作（agent 沙箱够不到）
 
-这三项在第五轮评审里被标为「需要你本人」：
+> 1.0.0 起这三项都已完成或已可由仓库 token 走 API 完成；保留本节作为操作指引。
 
-1. **建 1 个 Issue 与 1 个 PR**：官方要求保留 Issues、PR 与更新记录。建完之后可以改用
-   分支 + PR 的流程（`git checkout -b round5 && git push -u origin round5`，
-   然后在页面上开 PR）。
-2. **手动触发一次 `nightly.yml`**：Actions 页 → 左侧选 `Nightly` → `Run workflow`。
-   命令已在本机验证过（`JSONMEND_LONGRUN=1000000`，41.2 s 通过）。
-3. **确认 Release 页**：`v0.5.0` 标签推送后 `release.yml` 会自动构建 4 个资产
-   （Linux CLI、wasm 探针、浏览器包、`SHA256SUMS`），到 Release 页确认可下载即可。
+1. **建 Issue 与 PR**：官方要求保留 Issues、PR 与更新记录。`#1`（tracking）与
+   `#2`（发布证据）均已关闭，闭环示例见 `docs/GITHUB.md`。
+2. **手动触发一次 `nightly.yml`**：Actions 页 → 左侧选 `Nightly` → `Run workflow`；
+   此后由 `schedule` 自动运行（首次定时运行已 success）。
+3. **确认 Release 页**：`release.yml` 在 `v*` 标签上构建 5 个资产
+   （Linux CLI、macOS arm64 CLI、wasm 探针、浏览器包、`SHA256SUMS`）。
 
 ## 8. 已知的环境差异
 

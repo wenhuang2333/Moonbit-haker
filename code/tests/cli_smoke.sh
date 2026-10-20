@@ -427,5 +427,48 @@ check_has "readiness reports settled" 0 "settled" out -- readiness --schema '{!l
 STDIN='{"limit":"ten","pad":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}'
 check_has "invalid settles before the end" 0 "settled 218/1000" out -- readiness --schema '{!limit:integer}'
 
+# --- 1.0.1: the prose-buffer hint and the channel map -----------------------
+#
+# `E002` after a skipped prelude has two causes and they need different
+# actions: "where the prose ends is undecidable" (a documented boundary) and
+# "the end-of-input replay buffer was too small" (a tunable limit). The hint
+# names the second one, and `--max-prose-buffer` is the knob it points at.
+head -c 70000 /dev/zero | tr '\0' x >"$TMP/prose_overflow.json"
+printf 'true' >>"$TMP/prose_overflow.json"
+"$BIN" --skip-prose "$TMP/prose_overflow.json" >/dev/null 2>"$TMP/err"; rc=$?
+if [ "$rc" = 3 ] && grep -qF "exceeded max_prose_buffer" "$TMP/err"; then
+  pass=$((pass + 1)); printf 'ok   %-34s rc=%s\n' "prose overflow hint" "$rc"
+else
+  fail=$((fail + 1))
+  printf 'FAIL %-34s rc=%s (want 3)\n     err=%s\n' "prose overflow hint" "$rc" \
+    "$(head -1 "$TMP/err")"
+fi
+
+printf 'hello world' >"$TMP/undecidable.json"
+"$BIN" --skip-prose "$TMP/undecidable.json" >/dev/null 2>"$TMP/err"; rc=$?
+if [ "$rc" = 3 ] && ! grep -qF "max_prose_buffer" "$TMP/err"; then
+  pass=$((pass + 1)); printf 'ok   %-34s rc=%s\n' "no hint without overflow" "$rc"
+else
+  fail=$((fail + 1))
+  printf 'FAIL %-34s rc=%s (want 3, no hint)\n' "no hint without overflow" "$rc"
+fi
+
+STDIN='{"a":1}' check "--max-prose-buffer accepted" 0 '{"a":1}' "" -- --max-prose-buffer 1024
+STDIN='{}' check "--max-prose-buffer rejects 0" 2 '' "正整数" -- --max-prose-buffer 0
+
+# The channel map in README.md names the released version; if the row and
+# code/moon.mod drift apart, the mapping table is lying. The first
+# `| `vX.Y.Z` |` row wins, so the table must keep the newest release first.
+MAP_VERSION="$(
+  grep -m1 -o '^| `v[0-9][0-9.]*` |' "$REPO/README.md" | grep -o '[0-9][0-9.]*'
+)"
+if [ "$MAP_VERSION" = "$MOD_VERSION" ]; then
+  pass=$((pass + 1)); printf 'ok   %-34s README=%s\n' "channel map matches moon.mod" "$MAP_VERSION"
+else
+  fail=$((fail + 1))
+  printf 'FAIL %-34s README says "%s" but code/moon.mod says "%s"\n' \
+    "channel map matches moon.mod" "$MAP_VERSION" "$MOD_VERSION"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]

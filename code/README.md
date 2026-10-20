@@ -5,10 +5,10 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 | | |
 | --- | --- |
 | Module | `zhanshishan/jsonmend` |
-| Version | 1.0.0 |
+| Version | 1.1.0 |
 | License | Apache-2.0 |
 | Preferred target | `wasm` (also builds for `native` and `js`) |
-| Prebuilt binaries | [Release `v0.6.1`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.6.1) — Linux CLI, wasm probe, browser bundle, `SHA256SUMS` |
+| Prebuilt binaries | [Release `v1.1.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.1.0) — Linux CLI, wasm probe, browser bundle, `SHA256SUMS` |
 | Registry | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
 
 ## Features
@@ -83,6 +83,23 @@ import {
 ```
 
 `moon add` records the dependency in the module manifest (this repository uses `code/moon.mod`). The exact registry syntax and the current toolchain command follow the mooncakes.io instructions; verify them against the released package page.
+
+## Integration surfaces
+
+The library is the engine; four delivery surfaces wrap it without changing the semantics:
+
+| Surface | Use |
+| --- | --- |
+| `moon add zhanshishan/jsonmend` | MoonBit projects (this package) |
+| `jsonmend serve --stdio` | any language; versioned JSONL ([docs/PROTOCOL.md](docs/PROTOCOL.md)) |
+| `jsonmend mcp` | Claude Code, Cursor, Codex CLI, Gemini CLI, Cline, Windsurf: four tools |
+| `npm install ./code/npm` / `pip install ./code/python` | Node and Python hosts |
+| `jsonmend-http` (Python package) | n8n, Dify, Coze, gateways |
+
+The execution gate is the same call everywhere: `analyze(text, profile="agent",
+schema_json=tool.inputSchema)` returns `executable`; when it is false,
+`retry.prompt` is the text to send back to the model. Recipes for each surface
+are in [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 
 ## Quick start
 
@@ -400,7 +417,7 @@ moon run examples/agent_loop --target native --release
 | Ground-truth evaluation (protocol frozen first) | 1200 cases (19 mutation families + 1 control × 60) | recovery **100.00%**, 0 mislabelled, 4/4 pre-registered criteria PASS |
 | Command line smoke (exit codes 0/1/2/3/4/5/70) | 62 assertions, 14 of them `explain` | pass |
 | Differential corpus against `jsonrepair` / `json-repair` | 402 cases | 202 divergences, all documented, 0 unexplained |
-| Line coverage of the library | 2312/2651 lines (root), 337/391 (`llm`) | 87.2% / 86.2% (`moon coverage` cannot instrument the `cmd` package, which calls `quit()`; the new modules widen the denominator, `plan.mbt` at 71.5% is the weakest file) |
+| Line coverage of the library | 3551/3777 lines (root), 337/391 (`llm`) | 94.0% / 86.2% (`moon coverage` cannot instrument the `cmd` package, which calls `quit()`; within the root package the weakest file is `api.mbt` at 90.5%, and across the library `llm/text.mbt` at 72.5%) |
 
 Cross-backend results are identical: 129 tests pass on wasm-gc, native and
 JavaScript. `.github/workflows/ci.yml` runs the same commands on every push, so
@@ -476,11 +493,11 @@ separately from the process. The full method, tables and decision records are in
 
 ## Roadmap
 
-- ~~Publish on mooncakes.io~~: `zhanshishan/jsonmend` 0.3.0 … **1.0.0** are published; 1.0.0 is the current version (`moon.mod`).
+- ~~Publish on mooncakes.io~~: `zhanshishan/jsonmend` 0.3.0 … **0.7.0** are published. `1.0.0` cannot be published because mooncakes currently only accepts `0.x.y`; `0.8.0` is the registry version of `1.1.0`; the two are byte-identical except for the version string. The integration surfaces (`serve`, `mcp`, npm, pip) shipped in `1.1.0` / `0.8.0`.
 - ~~A browser tab that plays a model stream~~: `static/demo/live.html`, also published at <https://wenhuang2333.github.io/Moonbit-haker/live.html>.
 - ~~Readiness for the members the caller actually needs~~: `Schema` + `semantic_readiness`.
 - ~~Constraints in the declaration~~: `minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern` (a character-class subset, not a regex) landed in 0.7.0.
-- **Make `semantic_readiness` incremental**: today it replays the document (32.7× `repair`); the delta-driven `FieldTracker` path could compute the same numbers as members settle.
+- ~~Make `semantic_readiness` incremental~~: done via the `Delta.at` timeline (1.1–1.7× `repair`); the streaming runtime is `SemanticWatcher` (1.64–2.00×).
 - Make the delta stream cheap: encode operations into a reusable buffer and share path prefixes, targeting ≤ 1.11 × the baseline instead of 1.40–1.46 × (lower priority now that the scenario benchmark shows it is off the critical path).
 - ~~The `FR-16` event interface~~: done as the `feed_with` thin wrapper.
 - Record real provider streams to replace the documented event shapes (needs credentials; `tests/record_stream.py` is ready).

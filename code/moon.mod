@@ -2,7 +2,7 @@
 // Module manifest for the MoonBit toolchain.
 name = "zhanshishan/jsonmend"
 
-version = "1.0.0"
+version = "1.1.0"
 
 readme = "README.md"
 

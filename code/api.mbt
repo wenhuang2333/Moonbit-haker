@@ -343,6 +343,23 @@ pub fn PartialParser::finish(
 }
 
 ///|
+/// Whether the skipped prelude outgrew `max_prose_buffer` while this parser was
+/// reading, so the `finish` retry that recovers a scalar root could not run.
+///
+/// `skip_prose` recognises only `{` and `[`, so a document whose root is a
+/// scalar (`true`, `42`, `"ok"`) looks like prose until the input ends. The
+/// engine keeps what the prelude saw — bounded by `max_prose_buffer` — and
+/// replays it as JSON at `finish`. When the buffer was too small, the replay is
+/// impossible and the document is refused with `E002` exactly as before; this
+/// getter is how a caller tells the two refusals apart: "where the prose ends
+/// is undecidable" (no overflow) versus "the buffer was too small, raise
+/// `max_prose_buffer` or drop `skip_prose`" (overflow). It never raises, and it
+/// may be read after a failed `finish`.
+pub fn PartialParser::prose_overflow(self : PartialParser) -> Bool {
+  self.engine.prose_overflow
+}
+
+///|
 /// Repair `input` in one shot. Returns the repaired text, the repair records
 /// and `Complete`.
 pub fn repair(

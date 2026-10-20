@@ -55,6 +55,34 @@ JSONMend 有两条完全分开的信号通道（ADR-006，规格 D09 9.1）：
   E002 NoJsonFound: no JSON value found at offset 0
   ```
 
+#### E002 与 `skip_prose`：围栏标量为什么被拒（可检索条目）
+
+`skip_prose` 只看 `{` 和 `[`。一个根是标量的合法文档（`true`、`42`、`"ok"`，
+RFC 8259 允许）没有这两个字符，所以它看起来和前言完全一样。0.7.0 起引擎会
+缓存被跳过的前言（`max_prose_buffer`，默认 65536 码元），在 `finish` 时用
+`skip_prose` 关闭重放它。
+
+**重放只在「干净」时才被接受**：重放过程不产生任何修复记录。由此一条规则解释
+全部相关拒绝——**在取到值之前需要任何修复的文档仍被拒绝**：
+
+| 输入（`skip_prose` 打开） | 结果 | 原因 |
+| --- | --- | --- |
+| `true`、`42`、`"ok"`（无前缀） | 接受 | 重放干净 |
+| 空白 + 标量（如 7 万个空格 + `true`） | 接受（缓冲够大时） | 空白不需要修复 |
+| ``` ```json\ntrue\n``` ```（围栏标量） | **拒绝 E002** | 重放要先剥围栏 → 有 R001 记录 → 不干净 |
+| `hello world`、`The answer is 42` | **拒绝 E002**（不新增提示） | 前言在哪结束不可判定 |
+
+两条相关的可诊断线索：
+
+- 前言超过 `max_prose_buffer` 时回放被放弃，CLI 在 stderr 打一行
+  `hint: the skipped prelude exceeded max_prose_buffer (…)`；库调用方读
+  `PartialParser::prose_overflow()` 区分「不可判定」与「缓冲区不够」；
+  `--max-prose-buffer N` 可以调大（对「空白 + 标量」有效，对「重放不干净」
+  的输入无效——那类输入无论缓冲多大都会被拒）。
+- CLI 在输入 ≤ 1 MiB 时还有一层全文回退：当整份输入本身就是合法 JSON 时
+  直接重解析，所以「围栏标量」经 `repair`（`skip_prose` 默认关闭）是接受的，
+  只有 `explain` 的 agent 预设（`skip_prose` 默认打开）会拒绝它。
+
 ### E010 StrictViolation
 
 - `code()`：`E010`

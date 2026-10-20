@@ -145,6 +145,7 @@ fn options_of(o : CliOpts, agent_protocol? : Bool) -> @mend.Options {
     skip_prose: o.skip_prose || agent_protocol.unwrap_or(false),
     quote_lookahead: o.quote_lookahead,
     max_repairs: o.max_repairs,
+    max_prose_buffer: o.max_prose_buffer,
     max_loss: o.max_loss,
     reject_ambiguous: o.reject_ambiguous,
   }
@@ -155,6 +156,24 @@ fn options_of(o : CliOpts, agent_protocol? : Bool) -> @mend.Options {
       Some(p) => base.with_policy(p)
       None => base
     }
+  }
+}
+
+///|
+/// Distinguish the two `E002` refusals when `skip_prose` is on: "where the
+/// prose ends is undecidable" versus "the prelude outgrew the replay buffer".
+/// The first is a documented boundary, the second is a tunable limit, and
+/// without this line the user cannot tell which one they hit.
+fn prose_overflow_hint(
+  parser : @mend.PartialParser,
+  options : @mend.Options,
+) -> Unit {
+  if options.skip_prose && parser.prose_overflow() {
+    eprintln(
+      "jsonmend: hint: the skipped prelude exceeded max_prose_buffer (" +
+      options.max_prose_buffer.to_string() +
+      "); raise --max-prose-buffer or drop --skip-prose",
+    )
   }
 }
 
@@ -176,7 +195,7 @@ fn run() -> Unit {
     }
     Version => {
       // Keep in sync with `version` in moon.mod; cli_smoke.sh checks it.
-      println("jsonmend 1.0.0")
+      println("jsonmend 1.1.0")
       quit(0)
     }
     Llm => {
@@ -189,6 +208,14 @@ fn run() -> Unit {
     }
     Explain => {
       run_explain(o)
+      quit(0)
+    }
+    Serve => {
+      run_serve(o)
+      quit(0)
+    }
+    Mcp => {
+      run_mcp(o)
       quit(0)
     }
     Run => ()
@@ -248,9 +275,11 @@ fn run() -> Unit {
                 retry.feed(text)
                 retry.finish()
               } else {
+                prose_overflow_hint(parser, options)
                 raise e
               }
             } else {
+              prose_overflow_hint(parser, options)
               raise e
             }
           _ => raise e

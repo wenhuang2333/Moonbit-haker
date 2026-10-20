@@ -7,9 +7,11 @@
 | 文件 | 内容 |
 | --- | --- |
 | `live.html` | 实时演示：四条真实场景逐帧重放，同一帧里显示模型流、实时结构、成员就绪、`syntax ready` / `schema ready` 两个比例与拒绝时的重试提示 |
+| `mcp.html` | 接入演示：`claude mcp add jsonmend -- jsonmend mcp` 配置、真实 `jsonmend_analyze` 的 E010 拒绝与重试、工具 `inputSchema` 直连 |
 | `index.html` | 交互演示：一次性修复、修复记录、流式快照滑块 |
 | `jsonmend.js` | MoonBit → JavaScript 产物（由 `bash static/demo/build.sh` 生成，CI 校验它与源码同步） |
-| `screenshot.png` | `index.html` 的静态截图（README 用） |
+| `mcp-demo.gif` / `mcp-demo.png` | MCP 会话实录（真实 `jsonmend mcp` 的响应；由 `test/render_mcp_gif.py` 渲染） |
+| `screenshot.png` / `mcp-screenshot.png` | `index.html` / `mcp.html` 的静态截图（README 用） |
 
 ## 本地打开（一条命令）
 
@@ -28,5 +30,6 @@ python3 -m http.server 8000 -d static/demo
 
 - <https://wenhuang2333.github.io/Moonbit-haker/> —— `index.html`
 - <https://wenhuang2333.github.io/Moonbit-haker/live.html> —— 实时演示
+- <https://wenhuang2333.github.io/Moonbit-haker/mcp.html> —— MCP 接入演示
 
 Pages 不可用时的等价方案就是上面那条本地命令。

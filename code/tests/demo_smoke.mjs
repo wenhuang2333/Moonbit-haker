@@ -39,12 +39,43 @@ const check = (label, got, want) => {
 
 new Function(readFileSync(bundle, "utf8"))();
 
-check("bundle registers four entry points", Object.keys(registered).sort().join(","), "live,repair,report,snapshot");
+check(
+  "bundle registers the demo and library entry points",
+  ["live", "repair", "report", "snapshot", "repair_opts", "analyze", "analyze_json_schema"]
+    .every((name) => typeof registered[name] === "function"),
+  true,
+);
 
 check("repair fixes quotes and a trailing comma", registered.repair("{'a':1,}"), '{"a":1}');
 check("repair leaves valid JSON alone", registered.repair('{"a":[1,2]}'), '{"a":[1,2]}');
 check("repair closes a truncated container", registered.repair('{"a":{"b":[1,2'), '{"a":{"b":[1,2]}}');
 check("repair strips a fence and comments", registered.repair('```json\n{"a": 1, // c\n}\n```'), '{"a":1}');
+check("repair_opts applies a profile", registered.repair_opts("{'a':1,}", "execution"), '{"a":1}');
+check(
+  "analyze returns the decision plan",
+  JSON.parse(registered.analyze('{"a":1,}', "execution", "")).decision,
+  "cosmetic_repair",
+);
+check(
+  "analyze_json_schema reads a tool declaration",
+  JSON.parse(
+    registered.analyze_json_schema(
+      '{"query":"x","limit":2}',
+      "agent",
+      JSON.stringify({
+        type: "object",
+        properties: { query: { type: "string" }, limit: { type: "integer", minimum: 1 } },
+        required: ["query", "limit"],
+      }),
+    ),
+  ).schema_satisfied,
+  2,
+);
+check(
+  "analyze_json_schema refuses an unsupported keyword",
+  JSON.parse(registered.analyze_json_schema("{}", "agent", JSON.stringify({ $ref: "#/x" }))).error.includes("E070"),
+  true,
+);
 
 const report = registered.report("{'a':1,}");
 check("report lists one line per repair", report.split("\n").length, 2);

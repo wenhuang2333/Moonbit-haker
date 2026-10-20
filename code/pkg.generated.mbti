@@ -276,6 +276,7 @@ pub fn PartialParser::feed_bytes_with(Self, Bytes, (Delta) -> Unit) -> Unit rais
 pub fn PartialParser::feed_with(Self, String, (Delta) -> Unit) -> Unit raise MendError
 pub fn PartialParser::finish(Self) -> FinalResult raise MendError
 pub fn PartialParser::new(options? : Options) -> Self raise MendError
+pub fn PartialParser::prose_overflow(Self) -> Bool
 pub fn PartialParser::snapshot(Self) -> Snapshot
 pub fn PartialParser::snapshot_copy(Self) -> Snapshot
 
@@ -496,7 +497,9 @@ pub fn Schema::expectation(Self) -> String
 pub fn Schema::field(Self, String) -> SchemaMember?
 pub fn Schema::member_keys(Self) -> Array[String]
 pub fn Schema::name(Self) -> String
+pub fn Schema::of_json_schema(Json) -> Self raise MendError
 pub fn Schema::parse(String) -> Self raise MendError
+pub fn Schema::parse_json_schema(String) -> Self raise MendError
 pub fn Schema::required_paths(Self) -> Array[String]
 pub fn Schema::stringify(Self) -> String
 
@@ -551,6 +554,7 @@ pub fn SemanticWatcher::bytes(Self) -> Int
 pub fn SemanticWatcher::concluded(Self) -> Bool
 pub fn SemanticWatcher::conflict(Self) -> Bool
 pub fn SemanticWatcher::drain_events(Self) -> Array[ReadinessEvent]
+pub fn SemanticWatcher::drain_events_at(Self) -> Array[(ReadinessEvent, Int)]
 pub fn SemanticWatcher::feed(Self, String) -> Unit raise MendError
 pub fn SemanticWatcher::finish(Self) -> FinalResult raise MendError
 pub fn SemanticWatcher::new(Schema, options? : Options) -> Self raise MendError

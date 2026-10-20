@@ -66,25 +66,54 @@ jobs:
             asset: jsonmend-linux-x86_64
           - os: macos-latest
             asset: jsonmend-macos-arm64
+          - os: windows-latest
+            asset: jsonmend-windows-x86_64.exe
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install the MoonBit toolchain
+      - name: Install the MoonBit toolchain (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
 
-      - name: Build the CLI
+      - name: Install the MoonBit toolchain (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$HOME\.moon\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build the CLI (Unix)
+        if: runner.os != 'Windows'
         working-directory: code
         run: moon build cmd/jsonmend --target native --release
 
-      - name: Check the CLI runs
+      - name: Build the CLI (Windows)
+        if: runner.os == 'Windows'
+        working-directory: code
+        shell: pwsh
+        run: moon build cmd/jsonmend --target native --release
+
+      - name: Check the CLI runs (Unix)
+        if: runner.os != 'Windows'
         working-directory: code
         run: |
           printf '{"a":1,}' | ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
           ./_build/native/release/build/cmd/jsonmend/jsonmend.exe --version
 
+      - name: Check the CLI runs (Windows)
+        if: runner.os == 'Windows'
+        working-directory: code
+        shell: pwsh
+        run: |
+          '{"a":1,}' | & .\_build\native\release\build\cmd\jsonmend\jsonmend.exe
+          & .\_build\native\release\build\cmd\jsonmend\jsonmend.exe --version
+          '{"id":1,"method":"hello"}','{"id":2,"method":"shutdown"}' | & .\_build\native\release\build\cmd\jsonmend\jsonmend.exe serve
+
       - name: Stage the CLI
+        shell: bash
         run: cp code/_build/native/release/build/cmd/jsonmend/jsonmend.exe "$RUNNER_TEMP/${{ matrix.asset }}"
 
       - uses: actions/upload-artifact@v4
@@ -110,10 +139,11 @@ jobs:
           mkdir -p dist
           cp artifacts/jsonmend-linux-x86_64/jsonmend-linux-x86_64 dist/jsonmend-linux-x86_64
           cp artifacts/jsonmend-macos-arm64/jsonmend-macos-arm64 dist/jsonmend-macos-arm64
+          cp artifacts/jsonmend-windows-x86_64.exe/jsonmend-windows-x86_64.exe dist/jsonmend-windows-x86_64.exe
           cp artifacts/web-assets/probe.wasm dist/jsonmend-probe.wasm
           cp artifacts/web-assets/jsonmend-demo.js dist/jsonmend-demo.js
           chmod +x dist/jsonmend-linux-x86_64 dist/jsonmend-macos-arm64
-          (cd dist && sha256sum jsonmend-linux-x86_64 jsonmend-macos-arm64 jsonmend-probe.wasm jsonmend-demo.js > SHA256SUMS)
+          (cd dist && sha256sum jsonmend-linux-x86_64 jsonmend-macos-arm64 jsonmend-windows-x86_64.exe jsonmend-probe.wasm jsonmend-demo.js > SHA256SUMS)
           cat dist/SHA256SUMS
 
       # The release body is the section of CHANGELOG.md for this tag, not the

@@ -1,6 +1,6 @@
 # JSONMend 一页说明
 
-**流式 JSON 修复与部分解析库，纯 MoonBit 实现。**
+**LLM JSON 的执行门：流式修复、部分解析与「能不能执行」的决策，纯 MoonBit 实现。**
 
 ## 问题
 
@@ -32,6 +32,20 @@ plan.to_json()         // 机器通道：decision/exactness/value/retry/repairs
 ```
 
 `analyze` **永不抛错**：拒绝是返回值的一部分，不是一个需要 `try` 的异常。
+
+### 给宿主用：四种接入面
+
+| 接入面 | 命令 / 包 | 谁调用 |
+| --- | --- | --- |
+| MCP | `jsonmend mcp` | Claude Code / Cursor / Codex CLI / Gemini CLI / Cline / Windsurf |
+| 长驻协议 | `jsonmend serve --stdio` | 任意语言；`watch`/`llm` 流式 |
+| 语言包 | `npm install ./code/npm` / `pip install ./code/python` | Node / Python 宿主 |
+| HTTP | `jsonmend-http --port 8080`（Python） | n8n / Dify / Coze / 网关 |
+
+工具声明不用翻译：`schema_json=tool.inputSchema` 直接吃 JSON Schema 子集
+（`type`/`properties`/`required`/`items`/`enum`/`const`/数值与长度约束/锚定
+字符类 `pattern`）；不支持的键报 `E070`。协议规范见 `PROTOCOL.md`，逐工具
+配方见 `INTEGRATIONS.md`。
 
 ```moonbit
 // 一次性
@@ -91,13 +105,13 @@ jsonmend --check broken.json ; echo $?     # 1 = 需要修复
 | 骨架感知就绪 | 7 个场景：4 个存在落差（最小 1‰、最大 713‰），3 个两层同时到达末尾；`docs/READINESS.md` |
 | 独立语料 | `nst/JSONTestSuite` 318 文件：`y_` 误修 2/95（重复键），`n_` 有效值 165/188 vs `json_repair` 166/188、`jsonrepair` 144/188 |
 | 自愈闭环 | 4 个 episode：2 次重试后执行、1 次骨架不符回灌、1 次判定无改进后放弃 |
-| 覆盖率 | 根包 3325/3552 = 93.6%（`plan.mbt` 489/526、`schema.mbt` 794/840、`stream_readiness.mbt` 310/327），`llm` 包 337/391 = 86.2% |
+| 覆盖率 | 根包 3551/3777 = 94.0%（含新增 `json_schema.mbt` 206/224 = 92.0%；`plan.mbt` 489/526、`schema.mbt` 794/840、`stream_readiness.mbt` 310/327），`llm` 包 337/391 = 86.2%；库门禁 3818/4098 = 93.2% |
 | 差分测试 | 402 条用例对照 `json-repair` 与 `jsonrepair`；202 处差异全部由修复记录解释，未解释 0 |
-| 命令行 | 80 项断言全部通过（退出码 0/1/2/3/4/5/70 覆盖，含 `explain` 的 14 条与 5 项版本一致性：4 份文档 + `--version` 对齐 `moon.mod`） |
+| 命令行 | 85 项断言全部通过（退出码 0/1/2/3/4/5/70 覆盖，含 `explain` 的 14 条、6 项版本一致性：4 份文档 + `--version` + README 通道映射对齐 `moon.mod`） |
 | 演示页 | `static/demo/index.html` + `static/demo/live.html`，MoonBit JS 产物驱动，无头浏览器验证无报错 |
 | 在线演示 | <https://wenhuang2333.github.io/Moonbit-haker/live.html>（GitHub Pages，`pages.yml` 发布） |
 | 录屏 | `static/demo/demo.mp4`（69 秒，Chromium 真实录制）+ `static/demo/live-demo.gif` |
-| 跨后端 | wasm-gc / native / JS / wasm 四个 target 各 192/192 同一套测试（共 768 次） |
+| 跨后端 | wasm-gc / native / JS / wasm 四个 target 各 210/210 同一套测试（共 840 次） |
 | 吞吐 | native 35–39 MB/s（合法 JSON，1 KB–10 MB）；首个可见值出现在文档长度的 0.7%（中位数）；agent 场景（4 KB / 3 码元）0.08 µs/feed |
 | 内存 | 12.95 MB 输入 177.9 MB（13.7 ×）；同机 Node 10.6 ×、Python 14.3 ×，4 × 目标对建树实现不现实 |
 | 体积 | wasm-gc release 101.4 KiB（上限 150 KB）；native CLI 623.8 KiB；浏览器包 284.1 KiB |
@@ -112,10 +126,10 @@ jsonmend --check broken.json ; echo $?     # 1 = 需要修复
 
 ## 已知限制
 
-- `semantic_readiness` 的代价是 `repair` 的 32.7×（2.25 ms/4.9 KiB）：它按 1‰ 采样重放解析器，
-  是诊断与数据面板用的指标，不是热路径；
-- `plan.mbt` 的覆盖率 71.5%（328/459）是当前最低项：`explain_text` 与 `to_json` 的分支多、
-  组合多，测试只覆盖主路径；
+- `semantic_readiness` 的代价是 `repair` 的 1.1–1.7×（约 116–170 µs/4.9 KiB）：时间轴取
+  `Delta.at`，不再重放采样；放进每次 `feed` 的循环仍应用增量观察器（`SemanticWatcher`）；
+- 覆盖率最低项是 `llm/text.mbt` 66/91 = 72.5%；根包最低为 `api.mbt` 86/95 = 90.5%，
+  `plan.mbt` 489/526 = 93.0%、`delta.mbt` 本轮补到 93/101 = 92.1%；
 - live 演示页的浏览器验证在本机做过（Playwright 无头），CI 只跑帧级断言；
 - FR-37 的 live 帧只重放四个固定场景，不是任意流的通用可视化；
 - FR-16 事件/回调接口已实现为 `feed_with` / `feed_bytes_with`（`drain_deltas` 的薄封装，0.4.0）；

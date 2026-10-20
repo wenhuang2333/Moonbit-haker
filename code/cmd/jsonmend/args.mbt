@@ -9,6 +9,8 @@ enum CliAction {
   Llm
   Readiness
   Explain
+  Serve
+  Mcp
 }
 
 ///|
@@ -22,6 +24,7 @@ struct CliOpts {
   mut skip_prose : Bool
   mut quote_lookahead : Bool
   mut max_repairs : Int32
+  mut max_prose_buffer : Int32
   mut max_loss : @mend.Exactness
   mut reject_ambiguous : Bool
   mut retry_hint : Bool
@@ -49,7 +52,9 @@ fn help_text() -> String {
     "  --check             只检查，不输出；需要修复时退出码 1", "  --report            把修复记录写到标准错误",
     "  --indent N          输出缩进空格数，默认紧凑输出", "  --multi-root MODE   first、array 或 error，默认 first",
     "  --skip-prose        跳过 JSON 之前的说明文字", "  --quote-lookahead   启用引号歧义前瞻",
-    "  --max-repairs N     最多记录多少条修复记录，默认 10000", "  --max-loss LEVEL    精确度上限：exact、cosmetic 或 lossy，默认 lossy",
+    "  --max-repairs N     最多记录多少条修复记录，默认 10000", "  --max-prose-buffer N",
+    "                      跳过前言时最多缓存多少码元供结束回放（默认 65536），超过则按原样拒绝",
+    "  --max-loss LEVEL    精确度上限：exact、cosmetic 或 lossy，默认 lossy",
     "  --for-execution     执行档：等价于 --max-loss cosmetic --reject-ambiguous",
     "  --reject-ambiguous  拒绝有第二种读法的修复，报 E011（退出码 5）",
     "  --retry-hint        拒绝时在标准错误上打印可直接回灌模型的提示",
@@ -69,6 +74,11 @@ fn help_text() -> String {
     "  --provider NAME     anthropic（默认）或 openai", "  --sse               输入是 SSE 文本（默认按每行一个事件 JSON 读取）",
     "  --text              读取文本增量（delta.content / text_delta）而不是工具调用参数（配 --skip-prose 可跳过前言）",
     "  --follow            每次增量都输出一行，而不是只在结束时输出",
+    "", "jsonmend serve [选项]", "  长驻 stdio 协议（PROTOCOL.md）：每行一个请求 JSON，每行一个响应 JSON。",
+    "  方法：hello、repair、analyze、validate、readiness、watch.*、llm.*、shutdown。",
+    "  进程级选项（--policy 等）作为默认值，请求里的 profile/schema 逐条覆盖。",
+    "", "jsonmend mcp [选项]", "  MCP stdio server（JSON-RPC 2.0）：jsonmend_repair、jsonmend_analyze、",
+    "  jsonmend_validate、jsonmend_readiness 四个工具，供 agent 直接调用。",
     "  -h, --help          显示帮助", "  --version           显示版本", "",
     "文件为 `-` 或缺省时读取标准输入。", "", "退出码：0 成功（可能有修复）；1 --check 发现需要修复；2 用法错误；",
     "        3 输入无效；4 资源限制；5 严格模式违规；70 内部错误。",
@@ -169,6 +179,7 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
     skip_prose: false,
     quote_lookahead: false,
     max_repairs: 10000,
+    max_prose_buffer: 65536,
     max_loss: @mend.Lossy,
     reject_ambiguous: false,
     retry_hint: false,
@@ -197,6 +208,10 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
       o.action = Readiness
     } else if i == 1 && a == "explain" {
       o.action = Explain
+    } else if i == 1 && a == "serve" {
+      o.action = Serve
+    } else if i == 1 && a == "mcp" {
+      o.action = Mcp
     } else if a == "-h" || a == "--help" {
       o.action = Help
     } else if a == "--version" {
@@ -376,6 +391,35 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
               o.max_repairs = n
             }
           None => err = "--max-repairs 需要正整数，收到 `" + value + "`"
+        }
+      }
+    } else if a == "--max-prose-buffer" || a.has_prefix("--max-prose-buffer=") {
+      let value = if a == "--max-prose-buffer" {
+        consumed = 1
+        if i + 1 < args.length() {
+          args[i + 1]
+        } else {
+          ""
+        }
+      } else {
+        slice_tail(a, 20)
+      }
+      if value == "" && a == "--max-prose-buffer" {
+        err = "--max-prose-buffer 缺少参数"
+      } else {
+        match parse_uint_up_to(value, 67108864) {
+          Some(n) =>
+            if n <= 0 {
+              err = "--max-prose-buffer 需要正整数，收到 `" +
+                value +
+                "`"
+            } else {
+              o.max_prose_buffer = n
+            }
+          None =>
+            err = "--max-prose-buffer 需要 1 到 67108864 之间的整数，收到 `" +
+              value +
+              "`"
         }
       }
     } else if a == "--indent" || a.has_prefix("--indent=") {

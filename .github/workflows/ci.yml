@@ -64,6 +64,18 @@ jobs:
           moon build cmd/jsonmend --target native --release
           bash tests/cli_smoke.sh
 
+      - name: Protocol and MCP conformance
+        working-directory: code
+        run: |
+          python3 tests/conformance/run_conformance.py \
+            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+
+      - name: Python client and HTTP facade tests
+        working-directory: code/python
+        env:
+          JSONMEND_BIN: ${{ github.workspace }}/code/_build/native/release/build/cmd/jsonmend/jsonmend.exe
+        run: python3 -m unittest discover -s tests
+
       - name: Ground truth evaluation (must exit 0)
         working-directory: code
         run: |
@@ -119,6 +131,15 @@ jobs:
           bash static/demo/build.sh
           git diff --exit-code -- static/demo/jsonmend.js
 
+      - name: npm package bundle is in sync
+        run: |
+          bash code/npm/build.sh
+          git diff --exit-code -- code/npm/vendor/jsonmend.js
+
+      - name: npm package tests
+        working-directory: code/npm
+        run: node --test
+
       - name: Public interface files are in sync
         working-directory: code
         run: |
@@ -138,6 +159,38 @@ jobs:
       - name: Self-healing agent loop example (end to end)
         working-directory: code
         run: moon run examples/agent_loop --target native --release
+
+  windows:
+    name: Windows (native build, protocol and MCP conformance)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the MoonBit toolchain
+        shell: pwsh
+        run: |
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$HOME\.moon\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build the CLI
+        working-directory: code
+        shell: pwsh
+        run: moon build cmd/jsonmend --target native --release
+
+      - name: CLI smoke
+        working-directory: code
+        shell: pwsh
+        run: |
+          $J = ".\_build\native\release\build\cmd\jsonmend\jsonmend.exe"
+          '{"a":1,}' | & $J
+          & $J --version
+
+      - name: Protocol and MCP conformance
+        working-directory: code
+        shell: pwsh
+        run: |
+          python tests/conformance/run_conformance.py --cli .\_build\native\release\build\cmd\jsonmend\jsonmend.exe
 
   differential:
     name: Differential and benchmark

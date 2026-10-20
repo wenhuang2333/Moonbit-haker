@@ -83,6 +83,75 @@ pub fn snapshot_text(input : String, upto : Int32) -> String {
 }
 
 ///|
+/// The safety profile named by a string, or `None` when it is unknown/empty.
+fn web_policy(name : String) -> @mend.SafetyPolicy? {
+  match name {
+    "permissive" => Some(@mend.SafetyPolicy::permissive())
+    "interactive" => Some(@mend.SafetyPolicy::interactive())
+    "execution" => Some(@mend.SafetyPolicy::for_execution())
+    "agent" => Some(@mend.SafetyPolicy::for_agent())
+    "strict" => Some(@mend.SafetyPolicy::strict())
+    _ => None
+  }
+}
+
+///|
+/// Options for a profile name; the default profile when the name is empty or
+/// unknown.
+fn web_options(policy : String) -> @mend.Options {
+  match web_policy(policy) {
+    Some(p) => @mend.Options::default().with_policy(p)
+    None => @mend.Options::default()
+  }
+}
+
+///|
+/// Repair under a named safety profile.
+pub fn repair_opts_text(input : String, policy : String) -> String {
+  @mend.repair(input, options=web_options(policy)).text catch {
+    e => "ERROR: " + e.to_string()
+  }
+}
+
+///|
+/// The full decision plan as JSON, with the library's declaration language.
+pub fn analyze_text(input : String, policy : String, schema : String) -> String {
+  let opts = web_options(policy)
+  let plan = if schema == "" {
+    @mend.analyze(input, options=opts)
+  } else {
+    let s = @mend.Schema::parse(schema) catch { _ => @mend.Schema::Any }
+    @mend.analyze(input, options=opts, schema=s)
+  }
+  plan.to_json()
+}
+
+///|
+/// The full decision plan as JSON, taking the JSON Schema subset a tool
+/// declaration already carries. An unsupported keyword is reported, never
+/// silently dropped.
+pub fn analyze_json_schema_text(
+  input : String,
+  policy : String,
+  schema_json : String,
+) -> String {
+  let mut err = ""
+  let parsed = Some(@mend.Schema::parse_json_schema(schema_json)) catch {
+    e => {
+      err = e.to_string()
+      None
+    }
+  }
+  match parsed {
+    Some(s) => {
+      let plan = @mend.analyze(input, options=web_options(policy), schema=s)
+      plan.to_json()
+    }
+    None => "{\"error\":\"" + escape(err) + "\"}"
+  }
+}
+
+///|
 /// The live streaming view: everything the browser page needs to render one
 /// frame of a model's output, as one JSON object (FR-35).
 ///
@@ -288,11 +357,30 @@ extern "js" fn js_register2(
 ) -> Unit = "globalThis.jsonmendRegister2"
 
 ///|
-/// Hand the demo entry points to the host page and print a banner.
+/// The same host hook, for a two-string entry point (`repair_opts`). The host
+/// function is untyped JavaScript, so one global hook serves both signatures.
+extern "js" fn js_register2s(
+  name : String,
+  f : (String, String) -> String,
+) -> Unit = "globalThis.jsonmendRegister2"
+
+///|
+/// The three-string form of the same hook (`analyze`).
+extern "js" fn js_register3s(
+  name : String,
+  f : (String, String, String) -> String,
+) -> Unit = "globalThis.jsonmendRegister3"
+
+///|
+/// Hand the entry points to the host page. No banner: the bundle is also
+/// imported as a library (npm, MCP hosts, tests), and a library that writes to
+/// stdout on import breaks line-oriented protocols.
 fn main {
   js_register1("repair", repair_text)
   js_register1("report", report_text)
   js_register2("snapshot", snapshot_text)
   js_register3("live", live_text)
-  println("jsonmend demo bundle ready")
+  js_register2s("repair_opts", repair_opts_text)
+  js_register3s("analyze", analyze_text)
+  js_register3s("analyze_json_schema", analyze_json_schema_text)
 }

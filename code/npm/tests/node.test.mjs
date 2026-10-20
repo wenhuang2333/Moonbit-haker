@@ -1,0 +1,111 @@
+// Node tests for the npm package. Run with `node --test test/`.
+//
+// The engine is the same MoonBit bundle the browser demo uses; these tests are
+// about the wrapper contract (module shape, profile handling, error mapping),
+// not about the repair rules, which have their own suite.
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import {
+  repair,
+  repairResult,
+  analyze,
+  report,
+  snapshot,
+  live,
+  version,
+} from "../index.mjs";
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+test("repair fixes quotes and a trailing comma", () => {
+  assert.equal(repair("{'a':1,}"), '{"a":1}');
+  assert.equal(repair('{"a":[1,2]}'), '{"a":[1,2]}');
+});
+
+test("a profile can refuse a repair instead of guessing", () => {
+  assert.throws(
+    () => repair('{"path":"/tmp/x"', { profile: "agent" }),
+    /E010/,
+  );
+  assert.equal(repair("{'a':1,}", { profile: "execution" }), '{"a":1}');
+});
+
+test("repairResult carries the decision fields", () => {
+  const r = repairResult("{'a':1,}", { profile: "execution" });
+  assert.equal(r.text, '{"a":1}');
+  assert.equal(r.exactness, "cosmetic");
+  assert.equal(r.executable, true);
+  assert.equal(r.decision, "cosmetic_repair");
+});
+
+test("analyze blocks an ambiguous repair", () => {
+  const plan = analyze('{"words":["a" "b"]}', { profile: "execution" });
+  assert.equal(plan.decision, "ambiguous");
+  assert.equal(plan.executable, false);
+  assert.equal(plan.execution, "blocked");
+  assert.equal(plan.error.code, "E011");
+  assert.match(plan.retry.prompt, /Re-emit/);
+});
+
+test("analyze accepts a JSON Schema tool declaration", () => {
+  const plan = analyze('{"query":"x","limit":0}', {
+    profile: "agent",
+    schemaJson: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        limit: { type: "integer", minimum: 1 },
+      },
+      required: ["query", "limit"],
+    },
+  });
+  assert.equal(plan.executable, false);
+  assert.equal(plan.schema_total, 2);
+  assert.equal(plan.schema_satisfied, 1);
+});
+
+test("an unsupported JSON Schema keyword is reported, not ignored", () => {
+  assert.throws(
+    () =>
+      analyze("{}", {
+        schemaJson: { $ref: "#/definitions/x" },
+      }),
+    /E070.*\$ref/,
+  );
+});
+
+test("report, snapshot and live keep their documented shapes", () => {
+  assert.equal(report('{"a":1}'), "-");
+  assert.match(report("{'a':1,}"), /^R003 1:2 /);
+  assert.match(snapshot('{"name":"Mo', 11), /Partial \| name$/);
+  const frame = live('{"query":"MoonBit","limit":10}', 12, "{!query:string}");
+  assert.equal(frame.consumed, 12);
+  assert.equal(frame.completeness, "Partial");
+});
+
+test("the CommonJS entry point works", () => {
+  const require = createRequire(import.meta.url);
+  const cjs = require("../index.cjs");
+  assert.equal(cjs.repair("{'a':1,}"), '{"a":1}');
+  assert.equal(typeof cjs.analyze, "function");
+});
+
+test("importing the package writes nothing to stdout", () => {
+  const entry = resolve(here, "..", "index.cjs");
+  const r = spawnSync(process.execPath, ["-e", `require(${JSON.stringify(entry)})`], {
+    encoding: "utf8",
+  });
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, "");
+  assert.equal(r.stderr, "");
+});
+
+test("the package reports the engine version", () => {
+  assert.equal(version, "1.1.0");
+});
