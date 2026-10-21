@@ -376,10 +376,34 @@ HTTP 客户端实现而非账号或网络。因此每次发布**先试官方路�
 
 1. 用 `moon package` 产出的已校验 zip 手工 POST：
    `curl -F token=<token> -F file=@<zip> https://mooncakes.io/api/v0/publish`；
-2. 用「重复提交得 409 Version … is duplicated」或包页 200 做二次校验；
+2. 用「重复提交得 409 Version … is duplicated」做二次校验；
 3. 把这次失败如实记录（这是临时通道，不改变发布的字节）。
 
 工具链升级后按第一条规则复测官方路径；确认修好后删掉本节的手工步骤。
+
+**关于二次校验**：**只有 409 可用**。mooncakes 没有版本查询 API
+（`/api/v0/packages/...` 返回 404），而包页 URL 对**任何**版本都返回 200——
+连 `9.9.9` 也一样，所以「页面能打开」什么都不能证明。唯一能证明「这个版本存在」
+的办法是重新 POST 同一个版本，平台回答 409。
+
+#### 本仓库的实测结果
+
+| mooncakes 版本 | 第一次 POST | 第二次 POST（复核） | 结论 |
+| --- | --- | --- | --- |
+| `0.7.0` | 200 `{"status":"ok"}` | 409 duplicated | 存在 |
+| `0.8.0` | （上一轮发布） | 409 `…is duplicated with an existing version (0.8.0)` | 存在 |
+| `0.8.1` | 200 `{"status":"ok"}` | 409 `…is duplicated with an existing version (0.8.1)` | 存在 |
+
+**产物可复现**：0.8.1 的包由 `v1.1.1` 标签重建得到，把 `moon.mod` 与 CLI 的
+`--version` 字符串改写为 `0.8.1` 之外**不改一个字节**，两次独立重建得到**同一个
+sha256**：
+
+```
+size   : 819750 bytes
+sha256 : 874bba92a0ba69ec5f0069b45a7bb843cb532461356c9190a8a543bc33d6da43
+```
+
+重建脚本是 `test/verify_mooncakes.sh`（一次性脚本，按工作区约定不入库）。
 
 ### 7.2 只能在 GitHub 页面上完成的动作（agent 沙箱够不到）
 
