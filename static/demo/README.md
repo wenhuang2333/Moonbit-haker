@@ -6,11 +6,13 @@
 
 | 文件 | 内容 |
 | --- | --- |
-| `live.html` | 实时演示：四条真实场景逐帧重放，同一帧里显示模型流、实时结构、成员就绪、`syntax ready` / `schema ready` 两个比例与拒绝时的重试提示 |
+| `live.html` | 实时演示：四条真实场景逐帧重放，同一帧里显示模型流、实时结构、成员就绪、`syntax ready` / `schema ready` 两个比例与拒绝时的重试提示；第五个标签页是**接入面**——五种接入方式的配置行，外加「粘贴工具 `inputSchema` → 当场看这道门怎么判」的面板 |
 | `mcp.html` | 接入演示：`claude mcp add jsonmend -- jsonmend mcp` 配置、真实 `jsonmend_analyze` 的 E010 拒绝与重试、工具 `inputSchema` 直连 |
+| `mcp-claude-session.txt` | **真实 Claude Code 会话**的逐字节事件流（`claude --output-format stream-json`）：会话 id、时间戳、模型名、工具入参、工具返回、`retry.prompt` 与原始 JSON 行 |
+| `mcp-claude-demo.gif` / `mcp-claude-poster.png` | 上面那段真实会话的动画与封面帧（由 `test/record_claude_mcp.py` 渲染） |
 | `index.html` | 交互演示：一次性修复、修复记录、流式快照滑块 |
 | `jsonmend.js` | MoonBit → JavaScript 产物（由 `bash static/demo/build.sh` 生成，CI 校验它与源码同步） |
-| `mcp-demo.gif` / `mcp-demo.png` | MCP 会话实录（真实 `jsonmend mcp` 的响应；由 `test/render_mcp_gif.py` 渲染） |
+| `mcp-demo.gif` / `mcp-demo.png` | MCP server 响应实录（真实 `jsonmend mcp` 的响应；由 `test/render_mcp_gif.py` 渲染） |
 | `screenshot.png` / `mcp-screenshot.png` | `index.html` / `mcp.html` 的静态截图（README 用） |
 
 ## 本地打开（一条命令）

@@ -108,6 +108,59 @@
         background: transparent;
       }
       .retry h2 { color: var(--warn); }
+      /* `hidden` has to win over the display rules above it. */
+      [hidden] { display: none !important; }
+      .paneltitle {
+        font-size: .78rem;
+        letter-spacing: .02em;
+        color: var(--muted);
+        margin: 1.4rem 0 .4rem;
+      }
+      .panelnote { color: var(--muted); margin: 0 0 .7rem; }
+      .surfaces { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+      @media (max-width: 760px) { .surfaces { grid-template-columns: 1fr; } }
+      .surface { min-height: 0; }
+      .surface.wide { grid-column: 1 / -1; }
+      /* The stage panels shout their labels in caps; these are product names
+         (npm, pip, stdio, MoonBit), so they keep their own casing. */
+      .surface h2 {
+        text-transform: none;
+        letter-spacing: .01em;
+        font-size: .82rem;
+        font-weight: 600;
+        color: var(--fg);
+        margin: 0 0 .5rem;
+      }
+      .cmdlbl { color: var(--muted); font-size: .78rem; margin: .55rem 0 .2rem; }
+      pre.cmd {
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: .45rem .55rem;
+        font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      pre.plan { max-height: 13rem; overflow: auto; }
+      .surface p { margin: .55rem 0 0; font-size: .86rem; }
+      .surface p.foot { color: var(--muted); font-size: .8rem; }
+      .card h2.sub { margin-top: .7rem; }
+      textarea, select {
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: var(--fg);
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: .45rem .5rem;
+      }
+      textarea { width: 100%; min-height: 5.5rem; resize: vertical; }
+      select { padding: .3rem .4rem; }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+        align-items: center;
+        margin-top: .55rem;
+      }
+      .row label { color: var(--muted); font-size: .8rem; }
       .meta { color: var(--muted); font-size: .82rem; margin-top: .5rem; }
       footer { margin-top: 1.6rem; color: var(--muted); font-size: .82rem; }
       code { font: 12px ui-monospace, Menlo, monospace; }
@@ -127,7 +180,7 @@
 
       <div class="tabs" id="tabs"></div>
 
-      <div class="grid">
+      <div class="grid" id="stage-grid">
         <section class="card stream">
           <h2>LLM stream</h2>
           <pre id="stream">—</pre>
@@ -154,6 +207,64 @@
 
       <p class="meta" id="meta">—</p>
 
+      <section id="surfaces" hidden>
+        <h2 class="paneltitle">接入面 · 五种接入方式，同一个引擎</h2>
+        <p class="panelnote">
+          每一条都从仓库检出直接跑：<code>claude mcp add</code> 一行、<code>jsonmend serve</code>
+          一个长驻进程、两个语言包按仓库路径安装。npm 与 PyPI 上的
+          <code>jsonmend</code> 名字已被无关项目占用，本仓库的包名是
+          <code>jsonmend-moonbit</code>，<b>尚未发布到任何注册表</b>，所以下面写的是仓库路径。
+        </p>
+        <div class="surfaces" id="surface-list"></div>
+        <p class="meta">
+          安全默认：库默认 <code>permissive</code>（显示通道该尽量修）；任何<b>执行</b>路径必须显式传
+          <code>profile="agent"</code> 或 <code>"execution"</code>，否则这道门只是建议。
+        </p>
+
+        <h2 class="paneltitle">粘一个工具的 inputSchema，当场看这道门怎么判</h2>
+        <p class="panelnote">
+          左边就是工具声明里已有的 <code>inputSchema</code>，右边是模型这次写出来的参数；
+          两个值直接喂给页面里这份 <code>jsonmend.js</code>，不是预写的结果。
+        </p>
+        <div class="grid">
+          <section class="card">
+            <h2>Tool declaration (JSON Schema)</h2>
+            <textarea id="tool-schema" spellcheck="false"></textarea>
+            <h2 class="sub">Model output</h2>
+            <textarea id="model-args" spellcheck="false"></textarea>
+            <div class="row">
+              <label for="policy">policy</label>
+              <select id="policy">
+                <option value="agent">agent</option>
+                <option value="execution">execution</option>
+                <option value="interactive">interactive</option>
+                <option value="permissive">permissive</option>
+                <option value="strict">strict</option>
+              </select>
+              <button id="run-analyze">试一下</button>
+            </div>
+            <div class="row">
+              <button data-preset="truncated">预设：截断的参数 → E010 拒绝</button>
+              <button data-preset="whole">预设：补齐的参数 → 放行</button>
+              <button data-preset="ref">预设：不支持的关键字 → E070</button>
+            </div>
+          </section>
+          <section class="card">
+            <h2>Decision</h2>
+            <div class="bar" id="plan-bar">
+              <span>decision <b id="p-decision">—</b></span>
+              <span>executable <b id="p-executable">—</b></span>
+              <span>exactness <b id="p-exactness">—</b></span>
+              <span>ambiguity <b id="p-ambiguity">—</b></span>
+              <span class="verdict" id="p-verdict">—</span>
+            </div>
+            <pre id="p-retry" hidden></pre>
+            <pre class="plan" id="p-plan">—</pre>
+          </section>
+        </div>
+        <p class="meta" id="plan-meta">—</p>
+      </section>
+
       <footer>
         页面里的每一帧都来自同一个 <code>@mend.PartialParser</code> 与
         <code>@mend.analyze</code>，用 MoonBit 编译成的
@@ -176,7 +287,13 @@
     <script src="./jsonmend.js"></script>
     <script>
       const $ = (id) => document.getElementById(id);
-      const live = globalThis.jsonmend.live;
+      // The bundle is optional. The page is a static file: it is opened from
+      // file:// as well as over HTTP, and jsonmend.js may be missing or
+      // blocked. The static content — the four scenario tabs and the access
+      // surfaces — must still render, so nothing here may throw.
+      const engine = globalThis.jsonmend || null;
+      const live =
+        engine && typeof engine.live === "function" ? engine.live : null;
 
       // Each scenario is a self-healing loop: the model's answers, in order.
       // The third one is the point of the whole page: the gate accepts a
@@ -215,7 +332,95 @@
         },
       ];
 
-      const state = { index: 0, attempt: 0, upto: 0, timer: null, paused: false };
+      // The five ways in, each with the exact line a judge can copy. Every
+      // command here was run from a repository checkout; the two packages are
+      // installed by path because they are not on a registry.
+      const surfaces = [
+        {
+          id: "mcp",
+          title: "MCP · 模型主动调用",
+          cmd: "claude mcp add jsonmend -- jsonmend mcp",
+          note:
+            'Claude Code、Cursor、Codex CLI、Gemini CLI、Cline、Windsurf 都能发现：jsonmend_analyze / jsonmend_repair / jsonmend_validate / jsonmend_readiness 四个工具，由模型自己决定何时调用。',
+          label: "Cursor / Cline / Windsurf 的 mcp.json",
+          extra: '{"mcpServers":{"jsonmend":{"command":"jsonmend","args":["mcp"]}}}',
+        },
+        {
+          id: "stdio",
+          title: "stdio 协议 · 宿主应用",
+          cmd: "jsonmend serve",
+          note:
+            "每行一个请求 JSON、每行一个响应 JSON 的长驻协议 v1：任何能起子进程的语言都能用，高频调用与流式场景的首选。",
+          label: "一行请求",
+          extra: '{"id":1,"method":"hello"}',
+        },
+        {
+          id: "npm",
+          title: "npm · Node / TypeScript 宿主",
+          cmd: "npm install ./code/npm",
+          note:
+            '装完 import { analyze } from "jsonmend-moonbit"，在执行工具参数前过闸；与这个页面里跑的是同一份引擎。',
+          label: "用法",
+          extra: 'import { analyze, repair } from "jsonmend-moonbit";',
+          foot: "包名 jsonmend-moonbit，尚未发布到 npm 仓库，按仓库路径安装。",
+        },
+        {
+          id: "pip",
+          title: "pip · Python 宿主（+ HTTP）",
+          cmd: "pip install ./code/python",
+          note:
+            "from jsonmend import Client：Client 复用同一个 jsonmend serve 进程，executable 为 false 时把 retry.prompt 原样回灌模型；装完还带 jsonmend-mcp 与 jsonmend-http。",
+          label: "HTTP facade（n8n / Dify / Coze / 网关）",
+          extra: "jsonmend-http --port 8080",
+          foot: "包名 jsonmend-moonbit，尚未发布到 PyPI 仓库，按仓库路径安装。",
+        },
+        {
+          id: "moonbit",
+          title: "MoonBit 库 · 进程内",
+          cmd: "moon add zhanshishan/jsonmend",
+          note:
+            "不想起子进程时直接用库：PartialParser 逐个码元喂，analyze 给出同一份执行门判断。",
+          label: "用法",
+          extra: "let p = @jsonmend.PartialParser::new()",
+          foot: "mooncakes 上是 0.8.1（平台只接受 0.x.y），与 1.1.1 除版本字符串外逐字节相同。",
+          wide: true,
+        },
+      ];
+
+      // The panel below the surfaces: a tool declaration in, the gate's
+      // decision out. The two presets are the two interesting shapes — a
+      // declaration the engine understands, and one it refuses to guess at.
+      const presets = {
+        truncated: {
+          schema: {
+            type: "object",
+            properties: { amount: { type: "number" }, currency: { type: "string" } },
+            required: ["amount"],
+          },
+          args: '{"amount":100,"currency":"USD"',
+        },
+        whole: {
+          schema: {
+            type: "object",
+            properties: { amount: { type: "number" }, currency: { type: "string" } },
+            required: ["amount"],
+          },
+          args: '{"amount":100,"currency":"USD"}',
+        },
+        ref: {
+          schema: { $ref: "#/$defs/Invoice" },
+          args: '{"amount":100}',
+        },
+      };
+
+      const state = {
+        index: 0,
+        attempt: 0,
+        upto: 0,
+        timer: null,
+        paused: false,
+        surfaces: false,
+      };
       const frames = (text) => {
         const out = [];
         const step = Math.max(1, Math.round(text.length / 90));
@@ -230,13 +435,24 @@
         scenarios.forEach((s, i) => {
           const b = document.createElement("button");
           b.textContent = s.tab;
-          b.setAttribute("aria-pressed", String(i === state.index));
+          b.setAttribute("aria-pressed", String(!state.surfaces && i === state.index));
           b.onclick = () => {
+            state.surfaces = false;
             state.index = i;
             restart();
           };
           tabs.appendChild(b);
         });
+        // The fifth tab is not a scenario: it lists the ways in and lets a
+        // judge paste a tool declaration to watch the gate decide.
+        const sb = document.createElement("button");
+        sb.textContent = "接入面";
+        sb.setAttribute("aria-pressed", String(state.surfaces));
+        sb.onclick = () => {
+          state.surfaces = true;
+          showSurfaces();
+        };
+        tabs.appendChild(sb);
       }
 
       function paint(frame, attemptText) {
@@ -304,7 +520,203 @@
         }
       }
 
+      // ---- the access surfaces -------------------------------------------------
+
+      // One copyable command line, with a copy button next to it.
+      function copyLine(text, id) {
+        const pre = document.createElement("pre");
+        pre.className = "cmd";
+        pre.id = id;
+        pre.textContent = text;
+        const row = document.createElement("div");
+        row.className = "row";
+        const b = document.createElement("button");
+        b.textContent = "复制";
+        b.setAttribute("data-copy", id);
+        row.appendChild(b);
+        return [pre, row];
+      }
+
+      function renderSurfaces() {
+        const list = $("surface-list");
+        list.textContent = "";
+        surfaces.forEach((s) => {
+          const card = document.createElement("div");
+          card.className = "card surface" + (s.wide ? " wide" : "");
+          const h = document.createElement("h2");
+          h.textContent = s.title;
+          card.appendChild(h);
+          copyLine(s.cmd, "cmd-" + s.id).forEach((n) => card.appendChild(n));
+          if (s.extra) {
+            const lbl = document.createElement("div");
+            lbl.className = "cmdlbl";
+            lbl.textContent = s.label;
+            card.appendChild(lbl);
+            copyLine(s.extra, "extra-" + s.id).forEach((n) => card.appendChild(n));
+          }
+          const p = document.createElement("p");
+          p.textContent = s.note;
+          card.appendChild(p);
+          if (s.foot) {
+            const f = document.createElement("p");
+            f.className = "foot";
+            f.textContent = s.foot;
+            card.appendChild(f);
+          }
+          list.appendChild(card);
+        });
+      }
+
+      // Copy without a clipboard permission (file:// has none in some
+      // browsers): select the line instead, so the judge can copy it by hand.
+      $("surface-list").addEventListener("click", async (ev) => {
+        const button = ev.target.closest("[data-copy]");
+        if (!button) return;
+        const node = $(button.dataset.copy);
+        let ok = false;
+        try {
+          await navigator.clipboard.writeText(node.textContent);
+          ok = true;
+        } catch (_) {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          const sel = globalThis.getSelection();
+          if (sel) {
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+        }
+        button.textContent = ok ? "已复制" : "已选中，请手动复制";
+        setTimeout(() => (button.textContent = "复制"), 1600);
+      });
+
+      // ---- the gate, on a declaration a judge pastes in -------------------------
+
+      function setPreset(name) {
+        const p = presets[name];
+        if (!p) return;
+        $("tool-schema").value = JSON.stringify(p.schema, null, 2);
+        $("model-args").value = p.args;
+        runAnalyze();
+      }
+
+      function runAnalyze() {
+        const policy = $("policy").value;
+        const planOut = $("p-plan");
+        const retry = $("p-retry");
+        const verdict = $("p-verdict");
+        const reset = () => {
+          $("p-decision").textContent = "—";
+          $("p-executable").textContent = "—";
+          $("p-exactness").textContent = "—";
+          $("p-ambiguity").textContent = "—";
+        };
+        if (!engine || typeof engine.analyze_json_schema !== "function") {
+          reset();
+          verdict.textContent = "引擎未加载";
+          verdict.className = "verdict bad";
+          retry.hidden = true;
+          planOut.textContent = "jsonmend.js 没有加载，这一栏需要它；上面的接入面照着抄即可。";
+          $("plan-meta").textContent = "—";
+          return;
+        }
+        let plan;
+        try {
+          plan = JSON.parse(
+            engine.analyze_json_schema(
+              $("model-args").value,
+              policy,
+              $("tool-schema").value,
+            ),
+          );
+        } catch (e) {
+          reset();
+          verdict.textContent = "分析失败";
+          verdict.className = "verdict bad";
+          retry.hidden = true;
+          planOut.textContent = String(e);
+          $("plan-meta").textContent = "—";
+          return;
+        }
+        if (plan.error && !plan.decision) {
+          // The declaration itself cannot be used. An unsupported JSON Schema
+          // keyword is reported, never silently dropped.
+          reset();
+          $("p-decision").textContent = "声明无法解析";
+          verdict.textContent = "REFUSED (E070)";
+          verdict.className = "verdict bad";
+          retry.hidden = true;
+          planOut.textContent = plan.error;
+          $("plan-meta").textContent =
+            "不支持的 JSON Schema 键会被报出来，而不是被静默丢掉。";
+          return;
+        }
+        $("p-decision").textContent = plan.decision;
+        $("p-executable").textContent = String(plan.executable);
+        $("p-exactness").textContent = plan.exactness;
+        $("p-ambiguity").textContent = plan.ambiguity || "none";
+        if (plan.executable) {
+          verdict.textContent = "EXECUTION: READY";
+          verdict.className = "verdict ok";
+        } else {
+          verdict.textContent = "EXECUTION: BLOCKED";
+          verdict.className = "verdict bad";
+        }
+        if (plan.retry && plan.retry.prompt) {
+          retry.hidden = false;
+          retry.textContent = plan.retry.prompt;
+        } else {
+          retry.hidden = true;
+          retry.textContent = "";
+        }
+        planOut.textContent = JSON.stringify(plan, null, 2);
+        $("plan-meta").textContent =
+          "policy " +
+          policy +
+          " · " +
+          plan.label +
+          (plan.schema_total
+            ? " · schema " + plan.schema_satisfied + "/" + plan.schema_total
+            : "") +
+          (plan.error ? " · " + plan.error.code : "") +
+          (plan.executable
+            ? " · 宿主可以执行"
+            : " · 把 retry.prompt 原样回灌模型");
+      }
+
+      for (const b of document.querySelectorAll("[data-preset]")) {
+        b.addEventListener("click", () => setPreset(b.dataset.preset));
+      }
+      $("tool-schema").addEventListener("input", runAnalyze);
+      $("model-args").addEventListener("input", runAnalyze);
+      $("policy").addEventListener("change", runAnalyze);
+      $("run-analyze").addEventListener("click", runAnalyze);
+
+      function showStage() {
+        $("stage-grid").hidden = false;
+        $("bar").hidden = false;
+        $("meta").hidden = false;
+        $("surfaces").hidden = true;
+      }
+
+      function showSurfaces() {
+        clearTimeout(state.timer);
+        state.paused = true;
+        $("stage-grid").hidden = true;
+        $("bar").hidden = true;
+        $("retry").hidden = true;
+        $("meta").hidden = true;
+        $("surfaces").hidden = false;
+        renderTabs();
+        runAnalyze();
+      }
+
       function tick() {
+        if (!live) {
+          $("meta").textContent =
+            "引擎 bundle（jsonmend.js）没有加载：流式场景不可用，「接入面」一栏仍然可以照着抄。";
+          return;
+        }
         const scenario = scenarios[state.index];
         const text = scenario.attempts[state.attempt];
         const steps = frames(text);
@@ -340,10 +752,13 @@
         state.paused = false;
         $("retry").hidden = true;
         $("prompt").textContent = "—";
+        showStage();
         renderTabs();
         tick();
       }
 
+      renderSurfaces();
+      setPreset("truncated");
       renderTabs();
       restart();
     </script>
