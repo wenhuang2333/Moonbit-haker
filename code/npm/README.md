@@ -12,7 +12,7 @@ npm install ./code/npm   # from the repository root
 > registry publication under that name.
 
 ```js
-import { analyze, repair } from "jsonmend";
+import { analyze, repair } from "jsonmend-moonbit";
 
 // The gate: decide before executing tool arguments.
 const plan = analyze(modelOutput, {
@@ -57,7 +57,7 @@ dropped.
 draws: `consumed`, `total`, `completeness`, `snapshot`, `open_path`, `members`,
 and (with a schema) `syntax_ready`, `schema_ready`, `settled_ready`,
 `execution_ready`. It is stateless, so a caller can re-render on every frame;
-for a token-by-token feed use the CLI protocol (`jsonmend serve --stdio`) or
+for a token-by-token feed use the CLI protocol (`jsonmend serve`) or
 the MoonBit `PartialParser`.
 
 ## Scope

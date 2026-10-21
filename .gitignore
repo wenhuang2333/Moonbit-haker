@@ -30,6 +30,8 @@ dist/
 __pycache__/
 *.pyc
 .venv/
+build/
+*.egg-info/
 
 # 环境变量与密钥（敏感信息严禁上传）
 .env

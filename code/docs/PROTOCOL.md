@@ -1,4 +1,4 @@
-# JSONMend protocol v1 (`jsonmend serve --stdio`)
+# JSONMend protocol v1 (`jsonmend serve`)
 
 This is the wire contract behind the Python client, the npm package's future
 streaming path, the HTTP facade, and any integration that cannot link the

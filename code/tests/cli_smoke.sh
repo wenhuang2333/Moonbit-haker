@@ -75,6 +75,14 @@ STDIN='{"a":1,}' check "--strict rejects repairs" 5 '' "E010" -- --strict
 STDIN='' check "empty input" 3 '' "E001" --
 STDIN='hello world' check "no JSON value" 3 '' "E002" --
 STDIN='{"a":1}' check "unknown option" 2 '' "未知选项" -- --bogus
+# The command forms the documents use must actually work. `serve --stdio`
+# was printed all over the release notes while the CLI rejected it, and
+# `jsonmend repair` was read as a filename; both are now real, and these
+# cases keep them real.
+STDIN='{"id":1,"method":"hello"}' check_has "serve speaks the protocol" 0 '"protocol":1' out -- serve
+STDIN='{"id":1,"method":"hello"}' check_has "serve --stdio alias" 0 '"protocol":1' out -- serve --stdio
+STDIN='{"a":1,}' check "repair subcommand" 0 '{"a":1}' "" -- repair
+STDIN='{"a":1}' check "--stdio needs serve" 2 '' "只对" -- --stdio
 STDIN='{"a":1}' check "--help exit code" 0 '' "" -- --help
 STDIN='{"a":1} {"b":2}' check "multi-root default" 0 '{"a":1}' "R016" -- --report
 STDIN='{"a":1} {"b":2}' check "--multi-root array" 0 '[{"a":1},{"b":2}]' "" -- --multi-root array
@@ -130,6 +138,37 @@ check_doc_version "package README.zh version" "code/README.zh.md" \
 # evolution table. Same rule: it must not drift from moon.mod.
 check_doc_version "condensed doc version" "产品文档-精简版.md" \
   's/^> \*\*版本\*\*：\([0-9.]*\).*$/\1/p'
+
+# Every `jsonmend <word>` the documents tell a reader to type must be a
+# subcommand the CLI actually has. Two counterexamples shipped: the release
+# notes advertised `jsonmend serve --stdio`, which the CLI rejected with
+# "unknown option", and `jsonmend repair`, which it read as a filename and
+# failed with "cannot read repair". No gate compared the documents with the
+# CLI's own vocabulary, so both looked correct in a diff and were wrong on a
+# judge's machine. The vocabulary is taken from `--help` itself, so a
+# subcommand that disappears also fails here.
+CLI_SUBCOMMANDS="$("$BIN" --help 2>&1 | sed -n 's/^jsonmend \([a-z][a-z-]*\).*/\1/p' | sort -u)"
+DOC_SUBCOMMANDS="$(
+  for f in README.md code/README.md code/README.zh.md code/docs/ONEPAGE.md \
+           code/docs/PROTOCOL.md code/docs/INTEGRATIONS.md code/docs/PITCH.md \
+           产品文档-精简版.md; do
+    [ -f "$REPO/$f" ] || continue
+    grep -oE '(^|`)jsonmend [a-z][a-z0-9-]*([^a-zA-Z0-9._-]|$)' "$REPO/$f" 2>/dev/null
+  done | sed -E 's/^.*jsonmend //; s/[^a-z0-9-].*$//' | sort -u
+)"
+unknown=""
+for w in $DOC_SUBCOMMANDS; do
+  printf '%s\n' "$CLI_SUBCOMMANDS" | grep -qx "$w" || unknown="$unknown $w"
+done
+if [ -z "$unknown" ]; then
+  pass=$((pass + 1))
+  printf 'ok   %-34s %s\n' "documented subcommands exist" "$(echo $DOC_SUBCOMMANDS)"
+else
+  fail=$((fail + 1))
+  printf 'FAIL %-34s the documents name%s but the CLI has no such subcommand\n' \
+    "documented subcommands exist" "$unknown"
+  printf '     the CLI has: %s\n' "$(echo $CLI_SUBCOMMANDS | tr '\n' ' ')"
+fi
 
 # --indent
 out="$(printf '%s' '{"a":[1,2]}' | "$BIN" --indent 2)"

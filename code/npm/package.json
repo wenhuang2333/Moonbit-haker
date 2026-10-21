@@ -1,6 +1,6 @@
 {
   "name": "jsonmend-moonbit",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Streaming JSON repair and an execution gate for LLM tool calls, powered by the MoonBit engine.",
   "license": "Apache-2.0",
   "type": "commonjs",

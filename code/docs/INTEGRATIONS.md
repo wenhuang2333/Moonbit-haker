@@ -6,7 +6,7 @@ need the gate. The distinction that matters:
 - **MCP** is a tool the *model* can call. It is the widest discovery surface
   (Claude Code, Cursor, Codex CLI, Gemini CLI, Cline, Windsurf, Zed, …) but the
   model decides when to use it.
-- **`serve --stdio` / the language packages** are for the *host*: the
+- **`serve` / the language packages** are for the *host*: the
   application that receives a tool call and is about to execute it. This is
   where JSONMend's value is largest, because the gate runs whether or not the
   model remembered to ask.
@@ -129,7 +129,7 @@ npm install ./code/npm
 ```
 
 ```js
-import { analyze, repair } from "jsonmend";
+import { analyze, repair } from "jsonmend-moonbit";
 
 const plan = analyze(rawArguments, {
   profile: "agent",

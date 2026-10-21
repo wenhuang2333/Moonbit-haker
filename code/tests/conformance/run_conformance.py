@@ -97,6 +97,55 @@ class Connection:
                 pass
 
 
+def check_reported_versions(binary: str) -> list[str]:
+    """The versions the protocol advertises must be the versions we publish.
+
+    `hello` reports the engine version and the mooncakes registry version as
+    two separate strings. Both are hardcoded in the source, so both can drift
+    from what is actually released -- and a client that trusts them is misled.
+    This check pins them to the two places that define the release: the
+    version in `code/moon.mod` and the channel table in the repository
+    README. It is the check that would have caught the drift itself.
+    """
+    failures: list[str] = []
+    mod_path = HERE.parents[1] / "moon.mod"
+    engine = ""
+    for line in mod_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("version"):
+            engine = line.split("=", 1)[1].strip().strip('"')
+            break
+    if not engine:
+        return [f"cannot read the version from {mod_path}"]
+
+    readme = HERE.parents[2] / "README.md"
+    registry = ""
+    for line in readme.read_text(encoding="utf-8").splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) >= 2 and cells[0] == f"`v{engine}`":
+            registry = cells[1].strip("`")
+            break
+    if not registry:
+        return [f"README.md has no channel-table row for v{engine}"]
+
+    connection = Connection(binary, "serve")
+    try:
+        connection.send({"id": 1, "method": "hello"})
+        response = connection.read()
+    finally:
+        connection.close()
+    result = response.get("result", {}) if isinstance(response, dict) else {}
+    if result.get("engine") != engine:
+        failures.append(
+            f"hello reports engine {result.get('engine')!r} but code/moon.mod says {engine!r}"
+        )
+    if result.get("registry") != registry:
+        failures.append(
+            f"hello reports registry {result.get('registry')!r} but the README channel "
+            f"table maps v{engine} to {registry!r}"
+        )
+    return failures
+
+
 def run_serve_case(binary: str, case: dict[str, Any]) -> list[str]:
     failures: list[str] = []
     connection = Connection(binary, "serve")
@@ -250,6 +299,16 @@ def main() -> int:
             print(f"     {failure}")
     else:
         print("ok   mcp")
+
+    version_failures = check_reported_versions(binary)
+    total += 1
+    if version_failures:
+        failed += 1
+        print("FAIL reported versions")
+        for failure in version_failures:
+            print(f"     {failure}")
+    else:
+        print("ok   reported versions")
 
     print(f"\n{total - failed}/{total} conformance groups passed")
     return 0 if failed == 0 else 1

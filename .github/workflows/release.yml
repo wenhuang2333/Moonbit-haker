@@ -1,10 +1,15 @@
 # Release artifacts (O-13): a tag produces a GitHub Release with the native CLI
-# for Linux and macOS, the wasm-gc probe, the browser demo bundle and their
-# checksums.
+# for Linux, macOS and Windows, the wasm-gc probe, the browser demo bundle and
+# their checksums.
 #
 # The CLI is built on the runner whose operating system it targets, because a
 # MoonBit native build links against the host toolchain. Everything is packaged
 # in one final job so that a single `SHA256SUMS` covers every asset.
+#
+# Two rules keep the release honest, and both are enforced by a step rather
+# than by review: every file the packaging step puts in `dist/` is attached to
+# the release, and the published asset set is compared against the published
+# `SHA256SUMS` after the release exists.
 
 name: Release
 
@@ -165,6 +170,26 @@ jobs:
           fi
           wc -l "$RUNNER_TEMP/notes.md"
 
+      # The upload list used to be written out by hand. When the Windows
+      # target was added to `dist/`, the list was not updated with it, so
+      # v1.1.0 shipped a SHA256SUMS that named a file the release did not
+      # carry -- a checksum file that sends a reader to download something
+      # that is not there. The list is now derived from `dist/`, and this step
+      # asserts that `dist/` holds exactly the expected six files *before*
+      # anything is published: a release that does not match its own
+      # checksums must never become public.
+      - name: Check the release contents before publishing
+        run: |
+          set -euo pipefail
+          want="SHA256SUMS jsonmend-demo.js jsonmend-linux-x86_64 jsonmend-macos-arm64 jsonmend-probe.wasm jsonmend-windows-x86_64.exe"
+          actual="$(cd dist && ls -1 | sort | tr '\n' ' ' | sed 's/ $//')"
+          sorted="$(printf '%s\n' $want | sort | tr '\n' ' ' | sed 's/ $//')"
+          if [ "$actual" != "$sorted" ]; then
+            echo "::error::dist/ holds '$actual' but the release must hold '$sorted'"
+            exit 1
+          fi
+          echo "release contents: $actual"
+
       # `gh release create` is not idempotent, and a tag can be re-pointed at a
       # fixed commit, so replace any release that already exists for this tag.
       - name: Publish the release
@@ -174,11 +199,36 @@ jobs:
         run: |
           set -euo pipefail
           gh release delete "$GITHUB_REF_NAME" --yes --cleanup-tag=false || true
+          # The upload list is `dist/*` -- derived from what was actually
+          # packaged, not written out again by hand. The step above has
+          # already asserted what `dist/` holds, so the glob cannot pick up a
+          # stray file.
           gh release create "$GITHUB_REF_NAME" \
             --title "JSONMend $GITHUB_REF_NAME" \
             --notes-file "$RUNNER_TEMP/notes.md" \
-            dist/jsonmend-linux-x86_64 \
-            dist/jsonmend-macos-arm64 \
-            dist/jsonmend-probe.wasm \
-            dist/jsonmend-demo.js \
-            dist/SHA256SUMS
+            dist/*
+
+      # A checksum file that names a file the release does not carry is worse
+      # than no checksum file: it sends a reader to verify something they
+      # cannot download, and it makes a broken release look signed. v1.1.0
+      # shipped a SHA256SUMS that listed the Windows binary while the release
+      # attached only five files, because the upload list was not updated when
+      # the Windows matrix entry was added.
+      #
+      # This gate compares the published asset set against the published
+      # SHA256SUMS, and proves that the published SHA256SUMS is the file that
+      # was just uploaded. `code/tests/release_assets.sh` is the same script
+      # contributors run locally, so a release cannot pass here and fail there.
+      - name: Verify the published assets match SHA256SUMS
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ ! -f code/tests/release_assets.sh ]; then
+            echo "::error::code/tests/release_assets.sh is missing from the checkout; the asset gate cannot run"
+            exit 1
+          fi
+          bash code/tests/release_assets.sh "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --sums-file dist/SHA256SUMS

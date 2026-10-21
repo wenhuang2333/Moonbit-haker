@@ -5,10 +5,10 @@
 | | |
 | --- | --- |
 | 模块 | `zhanshishan/jsonmend` |
-| 版本 | 1.1.0 |
+| 版本 | 1.1.1 |
 | 许可证 | Apache-2.0 |
 | 首选后端 | `wasm`（同时支持 `native` 与 `js`） |
-| 预编译产物 | [Release `v1.1.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.1.0)——Linux CLI、wasm 探针、浏览器包、`SHA256SUMS` |
+| 预编译产物 | [Release `v1.1.1`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.1.1)——Linux / macOS arm64 / Windows 三个 CLI、wasm 探针、浏览器包、`SHA256SUMS` |
 | 发行渠道 | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
 
 ## 特性
@@ -103,7 +103,7 @@ try {
 | 接入面 | 用途 |
 | --- | --- |
 | `moon add zhanshishan/jsonmend` | MoonBit 项目（本包） |
-| `jsonmend serve --stdio` | 任意语言；版本化 JSONL（[docs/PROTOCOL.md](docs/PROTOCOL.md)） |
+| `jsonmend serve` | 任意语言；版本化 JSONL（[docs/PROTOCOL.md](docs/PROTOCOL.md)） |
 | `jsonmend mcp` | Claude Code、Cursor、Codex CLI、Gemini CLI、Cline、Windsurf：四个工具 |
 | `npm install ./code/npm` / `pip install ./code/python` | Node 与 Python 宿主 |
 | `jsonmend-http`（Python 包） | n8n、Dify、Coze、网关 |
@@ -419,7 +419,7 @@ moon run examples/agent_loop --target native --release   # 自愈闭环
 | 属性与模糊测试（TC-P-01…TC-P-06） | 8 组 × 400 例 | 通过，无反例 |
 | 安全档位 / 修复计划 / 骨架（0.5.0 新增） | 34 条（7 + 22 + 5） | 通过 |
 | 独立第三方语料（`nst/JSONTestSuite`） | 318 个文件（95 `y_` / 188 `n_` / 35 `i_`） | `y_` 误修 2/95（重复键），`n_` 有效值 165/188 vs `json_repair` 166/188、`jsonrepair` 144/188（[docs/EVAL_INDEPENDENT.md](docs/EVAL_INDEPENDENT.md)） |
-| 骨架就绪表 | 7 个场景 | 4 个存在落差（最大 713‰），3 个两层同时到达末尾（[docs/READINESS.md](docs/READINESS.md)） |
+| 骨架就绪表 | 10 个场景 | 6 个存在落差（713‰–908‰），4 个两层同时到达末尾（[docs/READINESS.md](docs/READINESS.md)） |
 | 公共面（逐个 R 码与 E 码） | 22 + 12 个码的断言 | 通过 |
 | 选项策略与字节输入 | 10 例 | 通过 |
 | 命令行冒烟（退出码 0/1/2/3/4/5/70） | 62 项断言，含 `explain` 14 条 | 通过 |

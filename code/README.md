@@ -5,10 +5,10 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 | | |
 | --- | --- |
 | Module | `zhanshishan/jsonmend` |
-| Version | 1.1.0 |
+| Version | 1.1.1 |
 | License | Apache-2.0 |
 | Preferred target | `wasm` (also builds for `native` and `js`) |
-| Prebuilt binaries | [Release `v1.1.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.1.0) — Linux CLI, wasm probe, browser bundle, `SHA256SUMS` |
+| Prebuilt binaries | [Release `v1.1.1`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.1.1) — Linux, macOS arm64 and Windows CLIs, wasm probe, browser bundle, `SHA256SUMS` |
 | Registry | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
 
 ## Features
@@ -91,7 +91,7 @@ The library is the engine; four delivery surfaces wrap it without changing the s
 | Surface | Use |
 | --- | --- |
 | `moon add zhanshishan/jsonmend` | MoonBit projects (this package) |
-| `jsonmend serve --stdio` | any language; versioned JSONL ([docs/PROTOCOL.md](docs/PROTOCOL.md)) |
+| `jsonmend serve` | any language; versioned JSONL ([docs/PROTOCOL.md](docs/PROTOCOL.md)) |
 | `jsonmend mcp` | Claude Code, Cursor, Codex CLI, Gemini CLI, Cline, Windsurf: four tools |
 | `npm install ./code/npm` / `pip install ./code/python` | Node and Python hosts |
 | `jsonmend-http` (Python package) | n8n, Dify, Coze, gateways |
@@ -412,7 +412,7 @@ moon run examples/agent_loop --target native --release
 | Chunked paths against the ground-truth corpus | 1200 cases × chunk 1/3/7/random | 1200/1200 each, 0 regressions |
 | Safety profiles, repair plans, schemas (new in 0.5.0) | 34 tests (7 + 22 + 5) | pass |
 | Independent third-party corpus (`nst/JSONTestSuite`) | 318 files (95 `y_` / 188 `n_` / 35 `i_`) | `y_` false repairs 2/95 (both duplicate keys), `n_` valid values 165/188 vs `json_repair` 166/188 and `jsonrepair` 144/188 ([docs/EVAL_INDEPENDENT.md](docs/EVAL_INDEPENDENT.md)) |
-| Schema readiness table | 7 scenarios | 4 with a gap (up to 713‰), 3 where both fractions arrive at the end ([docs/READINESS.md](docs/READINESS.md)) |
+| Schema readiness table | 10 scenarios | 6 with a gap (713‰–908‰), 4 where both fractions arrive at the end ([docs/READINESS.md](docs/READINESS.md)) |
 | Public surface (every `R` code and `E` code) | 22 + 12 codes checked field by field | pass |
 | Ground-truth evaluation (protocol frozen first) | 1200 cases (19 mutation families + 1 control × 60) | recovery **100.00%**, 0 mislabelled, 4/4 pre-registered criteria PASS |
 | Command line smoke (exit codes 0/1/2/3/4/5/70) | 62 assertions, 14 of them `explain` | pass |

@@ -195,7 +195,7 @@ fn run() -> Unit {
     }
     Version => {
       // Keep in sync with `version` in moon.mod; cli_smoke.sh checks it.
-      println("jsonmend 1.1.0")
+      println("jsonmend 1.1.1")
       quit(0)
     }
     Llm => {

@@ -1,4 +1,8 @@
-// `jsonmend serve --stdio` — the long-lived, versioned protocol (PROTOCOL.md).
+// `jsonmend serve` — the long-lived, versioned protocol (PROTOCOL.md).
+//
+// `--stdio` is accepted as an explicit alias: stdio is the only transport,
+// so the flag selects nothing. It exists so that the command line printed in
+// the documentation works verbatim.
 //
 // One request per line on stdin, one response per line on stdout, UTF-8. The
 // response echoes the client's `id`. stdout carries protocol bytes and nothing
@@ -19,14 +23,14 @@ const PROTOCOL_VERSION : Int32 = 1
 ///|
 /// The engine version this build reports. Kept in one place so the protocol,
 /// `--version` and the tests cannot drift.
-const ENGINE_VERSION : String = "1.1.0"
+const ENGINE_VERSION : String = "1.1.1"
 
 ///|
 /// The mooncakes registry version that corresponds to `ENGINE_VERSION`
 /// (mooncakes currently only accepts `0.x.y`). The two numbers are different
 /// channels of the same bytes; `hello` reports both so a client never has to
 /// guess which one it is looking at.
-const REGISTRY_VERSION : String = "0.8.0"
+const REGISTRY_VERSION : String = "0.8.1"
 
 ///|
 /// Largest request line accepted. A request larger than this is answered with

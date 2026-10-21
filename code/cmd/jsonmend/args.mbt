@@ -67,8 +67,9 @@ fn help_text() -> String {
     "  --batch             逐行读取 {\"id\",\"input\"} JSON，逐行输出结果 JSON",
     "                      与 --chunk N 同用可把每条输入按 N 字节分块喂入",
     "", "jsonmend explain [选项] [文件]", "  打印完整分析：修复了什么、为什么、风险多大、能不能执行；拒绝时给可直接回灌模型的提示。",
-    "  退出码与 jsonmend 相同（可执行 0，拒绝 5）。", "", "jsonmend readiness [选项] [文件]",
-    "  打印字段就绪曲线：每个顶级字段在输入消耗到多少时已定稿。",
+    "  退出码与 jsonmend 相同（可执行 0，拒绝 5）。", "", "jsonmend repair [选项] [文件]",
+    "  修复并输出：省略子命令时的默认动作。写出这个子命令名，只为让命令与文档一致。",
+    "", "jsonmend readiness [选项] [文件]", "  打印字段就绪曲线：每个顶级字段在输入消耗到多少时已定稿。",
     "  --step N            每 N 个码元观察一次，默认按长度自适应",
     "", "jsonmend llm [选项] [文件]", "  把模型的事件流喂给 provider 适配器，每个工具调用输出一行结果 JSON。",
     "  --provider NAME     anthropic（默认）或 openai", "  --sse               输入是 SSE 文本（默认按每行一个事件 JSON 读取）",
@@ -208,10 +209,24 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
       o.action = Readiness
     } else if i == 1 && a == "explain" {
       o.action = Explain
+    } else if i == 1 && a == "repair" {
+      // `repair` is what the CLI does when no subcommand is given; naming it
+      // makes the command the documents already use (`jsonmend repair`) real
+      // instead of a filename lookup that fails with "cannot read repair".
+      o.action = Run
     } else if i == 1 && a == "serve" {
       o.action = Serve
     } else if i == 1 && a == "mcp" {
       o.action = Mcp
+    } else if a == "--stdio" {
+      // `serve` speaks stdio and nothing else. `--stdio` is accepted so that
+      // the command line printed in the documentation works verbatim: it
+      // selects nothing, because there is no other transport to switch to.
+      // It is only meaningful together with `serve`.
+      match o.action {
+        Serve => ()
+        _ => err = "`--stdio` 只对 `jsonmend serve` 有意义"
+      }
     } else if a == "-h" || a == "--help" {
       o.action = Help
     } else if a == "--version" {

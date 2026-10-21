@@ -6,6 +6,8 @@ import json
 import unittest
 
 from jsonmend import Client, JsonMendError, find_binary
+from version import engine_version, registry_version
+
 
 
 class ClientTests(unittest.TestCase):
@@ -19,11 +21,19 @@ class ClientTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.client.close()
 
+    def test_package_version_matches_the_engine_version(self) -> None:
+        # The package declares its version; the declaration must be the engine
+        # version. A literal here went stale once (1.1.0 while the package was
+        # 1.1.1), so the check reads the declaration instead of pinning one.
+        import jsonmend
+
+        self.assertEqual(jsonmend.__version__, engine_version())
+
     def test_hello_reports_both_version_channels(self) -> None:
         hello = self.client.hello()
         self.assertEqual(hello["name"], "jsonmend")
-        self.assertEqual(hello["engine"], "1.1.0")
-        self.assertEqual(hello["registry"], "0.8.0")
+        self.assertEqual(hello["engine"], engine_version())
+        self.assertEqual(hello["registry"], registry_version())
         self.assertEqual(hello["protocol"], 1)
         self.assertIn("analyze", hello["capabilities"])
 

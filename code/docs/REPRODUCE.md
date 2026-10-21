@@ -389,8 +389,17 @@ HTTP 客户端实现而非账号或网络。因此每次发布**先试官方路�
    `#2`（发布证据）均已关闭，闭环示例见 `docs/GITHUB.md`。
 2. **手动触发一次 `nightly.yml`**：Actions 页 → 左侧选 `Nightly` → `Run workflow`；
    此后由 `schedule` 自动运行（首次定时运行已 success）。
-3. **确认 Release 页**：`release.yml` 在 `v*` 标签上构建 5 个资产
-   （Linux CLI、macOS arm64 CLI、wasm 探针、浏览器包、`SHA256SUMS`）。
+3. **确认 Release 页**：`release.yml` 在 `v*` 标签上构建 **6 个资产**
+   （Linux CLI、macOS arm64 CLI、Windows CLI、wasm 探针、浏览器包、`SHA256SUMS`）。
+   发布后 job 会自动比对「已发布附件」与「已发布 `SHA256SUMS`」，不一致即失败；
+   本地查同一个东西：
+
+   ```bash
+   GH_TOKEN=<token> bash tests/release_assets.sh v1.1.1
+   ```
+
+   > v1.1.0 的附件少了 Windows 二进制（`SHA256SUMS` 里却有它），
+   > 这个脚本对 v1.1.0 会退出 1 并指出缺哪个文件——它是那类缺陷的检测器。
 
 ## 8. 已知的环境差异
 

@@ -5,7 +5,7 @@ same thing:
 
 | Channel | How it is checked |
 | --- | --- |
-| `jsonmend serve --stdio` | every case in `cases.jsonl`, over one connection per case |
+| `jsonmend serve` | every case in `cases.jsonl`, over one connection per case |
 | `jsonmend mcp` | the MCP half of the runner (tools, refusal, notification rule) |
 | Python package | `code/python/tests/` drives `Client`, which speaks the same protocol |
 | npm package | `code/npm/test/node.test.mjs` drives the same engine through the JS entry points |

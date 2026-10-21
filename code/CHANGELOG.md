@@ -5,6 +5,85 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.1] - 2026-10-21
+
+补丁版：**不改引擎行为**（`pkg.generated.mbti` 无变化），也不改任何已有命令的行为。
+修一个 1.1.0 的发布缺陷，补齐演示资产，并把文档里对不上的数字与命令改成可核对的。
+
+### 修复
+
+- **文档里的两条命令其实跑不通（评审视角发现的）**：
+  - `jsonmend serve --stdio` 在整个仓库里被写了十几次（README、`code/README*.md`、
+    ONEPAGE、PROTOCOL、INTEGRATIONS、CONFORMANCE、npm README、Python 包说明、
+    产品文档），**但 CLI 根本没有 `--stdio` 这个选项**——照抄会得到
+    `jsonmend: 未知选项 --stdio`，退出码 2。而 `serve` 本身就是 stdio 协议
+    （`serve` 后面那个 `--stdio` 是多余的）。现在 CLI **接受** `--stdio` 作为
+    显式别名（它不切换任何东西，因为没有别的传输），文档统一改成最短的
+    `jsonmend serve`。**两种写法现在都能跑。**
+  - `jsonmend repair` 同理：它是「省略子命令时的默认动作」，但写成命令名会被当成
+    **文件名**，报 `无法读取 repair`。现在 `repair` 是真的子命令。
+- **新增门禁：文档提到的子命令必须真的存在**（`tests/cli_smoke.sh`）。
+  门禁把 `jsonmend --help` 里出现的子命令与文档里出现的 `jsonmend <子命令>`
+  做差集，差集非空就失败并打印双方清单。这两个缺陷之所以能一路发到评审面前，
+  就是因为**没有任何一步把文档的词汇表和 CLI 的词汇表对过**。
+- **Release 少挂了一个产物（1.1.0 的缺陷）**：`release.yml` 的 `cli` 矩阵新增了
+  `windows-latest`，打包步骤把 `jsonmend-windows-x86_64.exe` 放进 `dist/` 并写进
+  `SHA256SUMS`，但 `gh release create` 的**附件列表没有跟着更新**——于是
+  **v1.1.0 的 `SHA256SUMS` 列着一个 Release 里并不存在的文件**：想核对 Windows
+  校验和的人会去找一个下不到的东西，而 README 同时写着「三个 OS」。
+  1.1.1 的修法不止补一行：**附件列表改为从 `dist/` 推导**（`dist/*`，不再手写），
+  发布前新增一步断言 `dist/` 恰好是那 6 个文件，发布后再比对**已发布附件集合**与
+  **已发布 `SHA256SUMS`**，不一致就让 job 失败。附件集合与校验和集合不再靠人记。
+  Release 变成 **6 个资产**（3 个 CLI + wasm 探针 + 演示 bundle + `SHA256SUMS`），
+  `SHA256SUMS` 覆盖全部 5 个产物。
+- **本地可查同一件事**：`bash tests/release_assets.sh <tag>`——对 v1.1.0 会报
+  `missing: jsonmend-windows-x86_64.exe` 并退出 1，对 v1.0.0 通过。
+- **v1.1.0 的 Release 不追溯补挂**：标签与已发布资产不回头改，缺陷记录在这里。
+
+### 新增
+
+- **真实 Claude Code 会话**（`static/demo/mcp-claude-session.txt` + 动画 + 封面帧）：
+  Claude Code 2.1.301 连上 `jsonmend mcp`，把被 `max_tokens` 截断的工具参数交给
+  `jsonmend_analyze`，收到 **E010 拒绝**（`decision=lossy_repair`、`executable=false`、
+  带位置与上下文片段的 `retry.prompt`），模型改对后再调用一次即**放行**
+  （`decision=safe`、`executable=true`）。原始 `stream-json` 事件流**逐字节**附在
+  文本文件里，会话 id、时间戳、模型名、工具入参与返回都在，可逐条核对。
+- **`live.html` 第五个标签页「接入面」**：五种接入方式（MoonBit 库 / stdio 协议 /
+  MCP / npm / pip+HTTP）各自的配置行，外加一个「粘贴工具 `inputSchema` → 当场看
+  这道门怎么判」的面板。面板走 bundle 里**已有**的 `analyze_json_schema` 入口，
+  **无引擎改动、无新构建**；bundle 加载失败时该栏仍可照抄配置。
+- **`tests/claims.sh`（文档真值门禁）**：把 README / `code/README*.md` / ONEPAGE /
+  PITCH / 精简版里引用的数字，从**当场跑一遍的真实门禁**里重新推导一遍
+  （四个后端的测试数、CLI 断言数、一致性组数、npm/Python 测试数、覆盖率三套口径、
+  评测语料数与恢复率、差分用例数、就绪表场景数、产物体积），文档里出现旧数字
+  就让 CI 失败并指出是哪个文件。
+- 删掉一个残留的**草稿 Release `v0.4.0`**（正式的 `v0.4.0` 一直都在）。
+
+### 文档（数字校正）
+
+这些数字上一版就没跟上代码；评委可以逐条查，所以逐条改。
+
+- **骨架就绪表**：场景数 7 → **10**，存在落差的场景 4 → **6**（落差 713‰–908‰，
+  最大的一例是 992‰ 语法就绪 vs 84‰ 答案定稿），同步 README、`code/README.md`、
+  `code/README.zh.md`、ONEPAGE、精简版。
+- **产物体积**：wasm-gc 101.4 → **103.5 KiB**；native CLI 623.8 → **730.9 KiB**；
+  浏览器包 284.1 → **590.7 KiB**（1.1.0 加了 `serve`/`mcp`/JSON Schema 桥，
+  bundle 确实变大了，旧数字没跟上）。
+- **覆盖率**：README 补上覆盖率门自己的口径 **3818/4098 = 93.2%**；根包
+  3551/3777 = 94.0% 与 `llm` 337/391 = 86.2% 是 moon `Total` 的口径，
+  两者在文档里分别写明（两者都对，口径不同）。
+- **Release 资产数**：README 路线图由「五个预编译产物」改为「**6 个资产**」，
+  并写明 `SHA256SUMS` 覆盖全部 5 个产物。
+- 「骨架就绪表」在 `code/README.md` / `code/README.zh.md` 里的英文与中文两处
+  同步更新。
+
+### 渠道
+
+- GitHub `v1.1.1` ⟷ mooncakes `0.8.1`（平台只接受 `0.x.y`；patch 位一一对应，minor 位按发布序顺延（`1.0.x` ⟷ `0.7.x`、`1.1.x` ⟷ `0.8.x`））。
+- mooncakes `0.8.0` 的存在已用**重复提交得 409** 复核（方法见
+  `docs/REPRODUCE.md` §7.1；mooncakes 没有版本查询 API，文档页对任何路径都返
+  200，所以 409 是唯一可用的取证手段）。
+
 ## [1.1.0] - 2026-10-21
 
 ### 接入面（1.1.0 / 0.8.0）
@@ -39,6 +118,10 @@
 - **Windows 预编译**：`release.yml` 增加 `windows-latest`，产物
   `jsonmend-windows-x86_64.exe` 进入 Release 与 `SHA256SUMS`；CI 增加 Windows
   原生构建与协议/MCP 一致性任务。
+  **更正（1.1.1）**：Windows 二进制**构建成功**并进入了 `SHA256SUMS`，但
+  **没有真正挂到 Release 上**——发布步骤的附件列表没跟着更新。因此 v1.1.0 的
+  Release 只有 5 个附件，而 `SHA256SUMS` 列着 6 个名字。1.1.1 修好，见该版本
+  「修复」一节。
 - **一致性套件**：`code/tests/conformance/` 18 组用例（serve 17 + MCP 1），
   期望值是响应子集；CI 在 Linux/macOS/Windows 上运行同一套。
 

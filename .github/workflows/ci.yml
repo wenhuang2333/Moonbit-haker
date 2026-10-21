@@ -140,6 +140,15 @@ jobs:
         working-directory: code/npm
         run: node --test
 
+      - name: The numbers the documents quote are the numbers this build produces
+        working-directory: code
+        run: |
+          # A judge can check any figure in the README, and one wrong figure
+          # discredits the table next to it. This re-derives the headline
+          # numbers from the gates that run here and fails when a document
+          # still quotes an older one.
+          bash tests/claims.sh
+
       - name: Public interface files are in sync
         working-directory: code
         run: |

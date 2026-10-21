@@ -9,6 +9,8 @@ import urllib.error
 import urllib.request
 
 from jsonmend.http import create_server
+from version import engine_version, registry_version
+
 
 
 class HttpTests(unittest.TestCase):
@@ -46,7 +48,7 @@ class HttpTests(unittest.TestCase):
         status, body = self.get("/healthz")
         self.assertEqual(status, 200)
         self.assertTrue(body["ok"])
-        self.assertEqual(body["engine"], "1.1.0")
+        self.assertEqual(body["engine"], engine_version())
 
     def test_analyze(self) -> None:
         status, body = self.post(

@@ -38,7 +38,7 @@ plan.to_json()         // 机器通道：decision/exactness/value/retry/repairs
 | 接入面 | 命令 / 包 | 谁调用 |
 | --- | --- | --- |
 | MCP | `jsonmend mcp` | Claude Code / Cursor / Codex CLI / Gemini CLI / Cline / Windsurf |
-| 长驻协议 | `jsonmend serve --stdio` | 任意语言；`watch`/`llm` 流式 |
+| 长驻协议 | `jsonmend serve` | 任意语言；`watch`/`llm` 流式 |
 | 语言包 | `npm install ./code/npm` / `pip install ./code/python` | Node / Python 宿主 |
 | HTTP | `jsonmend-http --port 8080`（Python） | n8n / Dify / Coze / 网关 |
 
@@ -102,7 +102,7 @@ jsonmend --check broken.json ; echo $?     # 1 = 需要修复
 | 大模型适配 | 9 个夹具 × 双 provider，截断/转义切分/代理对切分/多路并发全部覆盖；另有 `ping`/未知事件/`error`/三种结束原因/文本流的文档转录用例 |
 | 公共面与选项 | 22 个 R 码 + 11 个 E 码逐一检查；策略枚举、规则开关、字节输入共 17 例 |
 | 安全档位与计划 | 34 条新测试：档位 7、计划 22、骨架 5；`analyze` 相对 `repair` 1.00–1.03×，加 `for_agent` 1.33×，加骨架 1.45× |
-| 骨架感知就绪 | 7 个场景：4 个存在落差（最小 1‰、最大 713‰），3 个两层同时到达末尾；`docs/READINESS.md` |
+| 骨架感知就绪 | 10 个场景：6 个存在落差（713‰–908‰），4 个两层同时到达末尾；`docs/READINESS.md` |
 | 独立语料 | `nst/JSONTestSuite` 318 文件：`y_` 误修 2/95（重复键），`n_` 有效值 165/188 vs `json_repair` 166/188、`jsonrepair` 144/188 |
 | 自愈闭环 | 4 个 episode：2 次重试后执行、1 次骨架不符回灌、1 次判定无改进后放弃 |
 | 覆盖率 | 根包 3551/3777 = 94.0%（含新增 `json_schema.mbt` 206/224 = 92.0%；`plan.mbt` 489/526、`schema.mbt` 794/840、`stream_readiness.mbt` 310/327），`llm` 包 337/391 = 86.2%；库门禁 3818/4098 = 93.2% |
@@ -114,7 +114,7 @@ jsonmend --check broken.json ; echo $?     # 1 = 需要修复
 | 跨后端 | wasm-gc / native / JS / wasm 四个 target 各 210/210 同一套测试（共 840 次） |
 | 吞吐 | native 35–39 MB/s（合法 JSON，1 KB–10 MB）；首个可见值出现在文档长度的 0.7%（中位数）；agent 场景（4 KB / 3 码元）0.08 µs/feed |
 | 内存 | 12.95 MB 输入 177.9 MB（13.7 ×）；同机 Node 10.6 ×、Python 14.3 ×，4 × 目标对建树实现不现实 |
-| 体积 | wasm-gc release 101.4 KiB（上限 150 KB）；native CLI 623.8 KiB；浏览器包 284.1 KiB |
+| 体积 | wasm-gc release 103.5 KiB（上限 150 KB）；native CLI 730.9 KiB；浏览器包 590.7 KiB |
 
 ## 与参照实现的关系
 

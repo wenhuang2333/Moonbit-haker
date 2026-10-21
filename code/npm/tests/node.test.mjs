@@ -7,6 +7,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -107,5 +108,16 @@ test("importing the package writes nothing to stdout", () => {
 });
 
 test("the package reports the engine version", () => {
-  assert.equal(version, "1.1.0");
+  // Read from `code/moon.mod` rather than pinning a literal: the version is
+  // hardcoded in the MoonBit sources, so a pinned literal goes red on every
+  // release. The test still fails when the bundle disagrees with the
+  // declaration -- which is the part worth checking.
+  const mod = readFileSync(resolve(here, "..", "..", "moon.mod"), "utf8");
+  const declared = mod.match(/^version\s*=\s*"([^"]+)"/m)[1];
+  assert.equal(version, declared);
+  // The wrapper reports the package version; the package version must be the
+  // engine version. Both are asserted against `moon.mod`, so a bump that
+  // misses either file is caught here instead of by a reader.
+  const pkg = JSON.parse(readFileSync(resolve(here, "..", "package.json"), "utf8"));
+  assert.equal(pkg.version, declared);
 });

@@ -135,5 +135,9 @@ module.exports = {
   report,
   snapshot,
   live,
-  version: "1.1.0",
+  // The engine version is the package version: one declaration, one source.
+  // A literal here went stale once already (it said 1.1.0 while the
+  // package was 1.1.1), and nothing noticed, because the test pinned the
+  // same stale literal.
+  version: require("./package.json").version,
 };

@@ -29,7 +29,7 @@ change.**
 | 0:50–1:30 | The difference | `execution` vs `permissive`: the same document is repaired for display and refused for execution; exactness + ambiguity + schema are one call |
 | 1:30–2:10 | The agent path | `mcp.html`: `claude mcp add jsonmend -- jsonmend mcp`; model args refused; retry; execute. Then `npm`/`pip`/`serve` as the host-side path |
 | 2:10–2:40 | The evidence | 210 tests on each of four backends; 1200-case preregistered eval at 100%; 402 differential cases with 202/202 explained; 18 protocol conformance groups; coverage gate 93.2% |
-| 2:40–3:00 | Why MoonBit | one engine → wasm-gc 101.4 KiB library, native CLI, browser bundle, protocol process; `moon info` freezes the public surface |
+| 2:40–3:00 | Why MoonBit | one engine → wasm-gc 103.5 KiB library, native CLI, browser bundle, protocol process; `moon info` freezes the public surface |
 
 Close on the sentence, not on a feature list.
 
@@ -62,7 +62,7 @@ refuse → feed back → re-emit → execute loop four times.
 - 18 protocol/MCP conformance groups, run on Linux, macOS and Windows.
 
 **"Why MoonBit?"**
-One source, four backends: a 101.4 KiB wasm-gc library, a native CLI, a
+One source, four backends: a 103.5 KiB wasm-gc library, a native CLI, a
 browser bundle, and a protocol process. No third-party runtime dependencies.
 The compiler-generated `.mbti` is committed and CI-checked, so the public API
 is a reviewable artifact — which is what makes the 1.0 compatibility promise
