@@ -36,6 +36,14 @@
 这是 JSONMend 与「JSON repair 库」的区别：**修得对只是入口，能不能执行才是产品。**
 `jsonmend mcp` 让 agent 直接调用它，`jsonmend serve` / npm / pip 让宿主在执行工具参数前过闸。
 
+> **60 秒动线**：① 读完上面一句话 → ② 打开
+> [live.html](https://wenhuang2333.github.io/Moonbit-haker/live.html)，看「截断 → E010 拒绝 →
+> 回灌重试 → 放行」逐帧重放 → ③ 一行接入 agent：`claude mcp add jsonmend -- jsonmend mcp`
+> → ④ 五个数字：**210** 条测试 × **4** 个后端各 210/210（共 840 次）· 真值评测 **1200** 条
+> 恢复率 **100.00%** · 差分 **402** 例 **202** 处差异全部归因（未解释 0）· 协议一致性
+> **19** 组 Linux/macOS/Windows 同跑 · wasm-gc 产物 **103.5 KiB** → ⑤ 亲手复现：
+> `cd code && moon test`——`.github/workflows/ci.yml` 跑的就是这一套。
+
 [English](#english) · [详细文档](#文档索引) · [演示页](#演示页) · [测试证据](#质量与证据)
 
 ```
@@ -301,10 +309,10 @@ Suggested retry:
 | 大模型适配器 | 9 个夹具 × 双 provider | 通过（含截断、转义切分、代理对切分、多路并发） |
 | 公共面与选项测试 | 22 个 R 码 + 12 个 E 码逐一检查 | 通过 |
 | 四个后端 | wasm-gc / native / JS / wasm（每条命令跑同一套测试） | 各 210/210 通过（共 840 次） |
-| 命令行冒烟 | 85 项断言（含全部退出码、`llm` 子命令、`explain` 的 14 条、6 项版本一致性与前言缓冲诊断） | 通过 |
-| **协议一致性** | 18 组 `serve`/MCP 用例（`tests/conformance/`） | 全部通过；Linux/macOS/Windows 同一套 |
+| 命令行冒烟 | 89 项断言（含全部退出码、`llm` 子命令、`explain` 的 14 条、6 项版本一致性与前言缓冲诊断） | 通过 |
+| **协议一致性** | 19 组 `serve`/MCP 用例（`tests/conformance/`） | 全部通过；Linux/macOS/Windows 同一套 |
 | **npm 包** | 10 个 Node 测试（ESM/CJS/类型/无 stdout 污染） | 通过 |
-| **Python 包** | 16 个测试（客户端 10 + HTTP 6） | 通过 |
+| **Python 包** | 17 个测试（客户端 11 + HTTP 6） | 通过 |
 | 示例对照 | 6 组输入/期望输出 | 逐字节一致 |
 | 差分测试（对照 `jsonrepair`、`json-repair`） | 402 条用例 | 202 处差异**全部有文档解释**，未解释 0 |
 | 库代码行覆盖率 | 根包 3551/3777、`llm` 包 337/391 | 94.0% / 86.2%；覆盖率门按「有未覆盖行的文件」口径计 3818/4098 = **93.2%** |
@@ -454,7 +462,7 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 | `code/cmd/jsonmend/` | 原生命令行前端（含 `llm`、`serve`、`mcp` 与 `--batch`） |
 | `code/npm/` | npm 包：包装浏览器 bundle，ESM/CJS/类型，Node 测试 |
 | `code/python/` | Python 包：stdio 客户端、HTTP facade、MCP 控制台入口 |
-| `code/tests/conformance/` | 协议与 MCP 的可执行规范（18 组用例） |
+| `code/tests/conformance/` | 协议与 MCP 的可执行规范（19 组用例） |
 | `code/bench/`、`code/tests/bench.sh` | 基准与产物体积探针 |
 | `code/examples/` | 浏览器演示入口（JS 后端）与示例输入/期望输出 |
 | `code/tests/diff/` | 差分测试框架与报告生成器 |
@@ -559,7 +567,7 @@ Release 的资产是否与 `SHA256SUMS` 一致，由 `code/tests/release_assets.
 - ~~演示页新增「模拟 LLM 流」标签~~：`static/demo/live.html` 已落地（含重试面板与三层 readiness），并已发布到 GitHub Pages。
 - ~~给骨架加约束~~：`minimum` / `maximum` / `enum` / `maxLength` / `minLength` / `pattern`（字符类子集）已在 0.7.0 落地，见本地文档 `code/docs/SPEC.md`。
 - ~~把 `semantic_readiness` 做成增量~~：`Delta.at` 落地后已与 `repair` 同量级（1.1–1.7×，见本地文档 `code/docs/BENCHMARK.md`）。
-- ~~Agent 接入面~~：`jsonmend serve`（协议 v1 + 18 组一致性用例）、`jsonmend mcp`（四个工具）、
+- ~~Agent 接入面~~：`jsonmend serve`（协议 v1 + 19 组一致性用例）、`jsonmend mcp`（四个工具）、
   npm / pip 包、Python HTTP facade、Windows 预编译**已在 1.1.0 / 0.8.0 发布**。
 - **无树「只出文本」模式**（`Options.want_value = false`）：目前**没有**该字段，引擎一律建树；内存指标未达标的根因。
 - **FR-16 事件/回调接口**：0.4.0 已实现为 `feed_with` / `feed_bytes_with`（`drain_deltas` 的薄封装）。

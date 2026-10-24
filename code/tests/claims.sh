@@ -117,20 +117,27 @@ else
   BIN="$CODE/_build/native/release/build/cmd/jsonmend/jsonmend.exe"
 fi
 cli_out="$(bash tests/cli_smoke.sh 2>&1 | tail -3)"
+# `skipped` counts the doc-version checks whose document is deliberately not
+# published (see cli_smoke.sh); the quoted figure is the passed count, which
+# is what a judge running the script on a published checkout sees printed.
 CLI_N="$(printf '%s' "$cli_out" | sed -n 's/^\([0-9]*\) passed.*/\1/p' | head -1)"
 [ -n "$CLI_N" ] && derive "cli_assertions" "$CLI_N" "bash tests/cli_smoke.sh"
+[ -n "$CLI_N" ] && require_in "$CLI_N 项断言" "$ROOT/README.md"
 
 conf_out="$(python3 tests/conformance/run_conformance.py --cli "$BIN" 2>&1 | tail -3)"
 CONF_N="$(printf '%s' "$conf_out" | sed -n 's#^\([0-9]*\)/\([0-9]*\) conformance.*#\1#p' | head -1)"
 [ -n "$CONF_N" ] && derive "conformance_groups" "$CONF_N" "python3 tests/conformance/run_conformance.py"
+[ -n "$CONF_N" ] && require_in "$CONF_N 组" "$ROOT/README.md"
 
 npm_out="$(cd "$CODE/npm" && node --test 2>&1 | grep -E '^ℹ (tests|pass|fail)' | tr '\n' ' ')"
 NPM_N="$(printf '%s' "$npm_out" | sed -n 's/.*tests \([0-9]*\).*/\1/p' | head -1)"
 [ -n "$NPM_N" ] && derive "npm_tests" "$NPM_N" "cd code/npm && node --test"
+[ -n "$NPM_N" ] && require_in "$NPM_N 个 Node 测试" "$ROOT/README.md"
 
 py_out="$(cd "$CODE/python" && python3 -m unittest discover -s tests 2>&1 | sed -n 's/^Ran \([0-9]*\) test.*/\1/p')"
 PY_N="$(printf '%s' "$py_out" | head -1)"
 [ -n "$PY_N" ] && derive "python_tests" "$PY_N" "cd code/python && python3 -m unittest discover -s tests"
+[ -n "$PY_N" ] && require_in "$PY_N 个测试" "$ROOT/README.md"
 
 # --- coverage ----------------------------------------------------------------
 # `moon coverage report -f summary` omits files that are fully covered from
@@ -210,8 +217,13 @@ fi
 # internal consistency.
 EVAL_REPORT="$CODE/docs/EVAL.md"
 if [ -f "$EVAL_REPORT" ]; then
-  EVAL_N="$(grep -oE 'N=[0-9]+ recovery=[0-9.]+%' "$EVAL_REPORT" | head -1 | sed 's/.*N=\([0-9]*\).*/\1/')"
-  EVAL_R="$(grep -oE 'N=[0-9]+ recovery=[0-9.]+%' "$EVAL_REPORT" | head -1 | sed 's/.*recovery=\([0-9.]*\)%.*/\1/')"
+  # The report is a generated Chinese markdown table (see run_eval.py); the
+  # totals sit in one row each under `## 1. 总体`. The patterns are anchored
+  # to the row labels: an earlier one-line English format stopped matching
+  # after the report was restructured, which silently un-gated these two
+  # figures for several releases -- a future reformat must fail loudly.
+  EVAL_N="$(sed -n 's/^| 用例数 N | \([0-9][0-9]*\) |$/\1/p' "$EVAL_REPORT" | head -1)"
+  EVAL_R="$(sed -n 's/^| 恢复率（value == truth） | \([0-9.]*\)%.*/\1/p' "$EVAL_REPORT" | head -1)"
   if [ -n "$EVAL_N" ]; then
     derive "eval_cases" "$EVAL_N" "code/docs/EVAL.md"
     require_in "$EVAL_N" "$ROOT/README.md" "$CODE/docs/ONEPAGE.md" "$CODE/docs/PITCH.md" "$ROOT/产品文档-精简版.md"
