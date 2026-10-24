@@ -26,7 +26,7 @@
 
 `E010` 是 `agent`/`execution` 档的硬拒绝：补右花括号会*发明内容*，所以门不替模型猜。
 注意第 4 步——**参数是 Claude 自己重发的**，门只给出提示；执行与否由宿主决定，这正是
-MCP 与 `serve --stdio` 的区别（见 [`code/docs/INTEGRATIONS.md`](../../../code/docs/INTEGRATIONS.md)）。
+MCP 与 `serve --stdio` 的区别（逐工具配方见 `code/docs/INTEGRATIONS.md`，本地文档）。
 
 ## 怎么录的（逐条命令）
 

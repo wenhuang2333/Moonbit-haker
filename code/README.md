@@ -91,7 +91,7 @@ The library is the engine; four delivery surfaces wrap it without changing the s
 | Surface | Use |
 | --- | --- |
 | `moon add zhanshishan/jsonmend` | MoonBit projects (this package) |
-| `jsonmend serve` | any language; versioned JSONL ([docs/PROTOCOL.md](docs/PROTOCOL.md)) |
+| `jsonmend serve` | any language; versioned JSONL (`docs/PROTOCOL.md`) |
 | `jsonmend mcp` | Claude Code, Cursor, Codex CLI, Gemini CLI, Cline, Windsurf: four tools |
 | `npm install ./code/npm` / `pip install ./code/python` | Node and Python hosts |
 | `jsonmend-http` (Python package) | n8n, Dify, Coze, gateways |
@@ -99,7 +99,7 @@ The library is the engine; four delivery surfaces wrap it without changing the s
 The execution gate is the same call everywhere: `analyze(text, profile="agent",
 schema_json=tool.inputSchema)` returns `executable`; when it is false,
 `retry.prompt` is the text to send back to the model. Recipes for each surface
-are in [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
+are in `docs/INTEGRATIONS.md`.
 
 ## Quick start
 
@@ -221,7 +221,7 @@ Invalid values (`max_depth <= 0`, `max_input_len <= 0`, `max_token_len <= 0`, `m
 
 ## Repair rules overview
 
-Every change is one record whose code is stable. The full dictionary, with examples and the requirement each rule implements, is in [docs/RULES.md](docs/RULES.md).
+Every change is one record whose code is stable. The full dictionary, with examples and the requirement each rule implements, is in `docs/RULES.md`.
 
 | Code | Name | Meaning |
 | --- | --- | --- |
@@ -267,7 +267,7 @@ A `Repair` carries `code : RepairCode`, `position : Position`, `severity : Sever
 | `E050` | `InvalidOption` | An option value is out of range, or a combination is invalid (`collect_deltas` with `KeepFirst`/`TrimToValid`). |
 | `E060` | `InvalidEvent` | `jsonmend/llm` received an event payload it cannot interpret. |
 
-`RepairCode::code`, `MendError::code`, and `MendError::to_string` produce the stable strings (`R005`, `E020`, and a one-line diagnostic respectively). The full reference is in [docs/ERRORS.md](docs/ERRORS.md).
+`RepairCode::code`, `MendError::code`, and `MendError::to_string` produce the stable strings (`R005`, `E020`, and a one-line diagnostic respectively). The full reference is in `docs/ERRORS.md`.
 
 ## Snapshot semantics
 
@@ -373,7 +373,7 @@ Exit codes:
 | `5` | Strict-mode violation (`E010`, including a `--max-loss` breach). |
 | `70` | Internal error (`E030`). |
 
-The browser demo lives in `examples/web`; the built page is `static/demo/index.html` and can be opened directly from disk. The package exports three plain `String`-in/`String`-out entry points — `repair_text`, `report_text`, and `snapshot_text` (value, completeness, and open path for a prefix) — and registers them on the host page through `globalThis.jsonmendRegister*`, so the page contains no second implementation. Rebuild the bundle with `bash static/demo/build.sh`; the steps and the headless check are in [docs/REPRODUCE.md](docs/REPRODUCE.md).
+The browser demo lives in `examples/web`; the built page is `static/demo/index.html` and can be opened directly from disk. The package exports three plain `String`-in/`String`-out entry points — `repair_text`, `report_text`, and `snapshot_text` (value, completeness, and open path for a prefix) — and registers them on the host page through `globalThis.jsonmendRegister*`, so the page contains no second implementation. Rebuild the bundle with `bash static/demo/build.sh`; the steps and the headless check are in `docs/REPRODUCE.md`.
 
 ## Testing
 
@@ -423,15 +423,15 @@ Cross-backend results are identical: 129 tests pass on wasm-gc, native and
 JavaScript. `.github/workflows/ci.yml` runs the same commands on every push, so
 the numbers above are re-derived rather than trusted. Reproduction steps,
 thresholds and the known shortfalls are in
-[docs/REPRODUCE.md](docs/REPRODUCE.md) and [docs/TRACEABILITY.md](docs/TRACEABILITY.md).
+`docs/REPRODUCE.md` and `docs/TRACEABILITY.md`.
 The evaluation protocol and its revision history are in
 [docs/EVAL_REGISTRATION.md](docs/EVAL_REGISTRATION.md) and
 [docs/EVAL.md](docs/EVAL.md); how AI tooling was used is in
-[docs/AI_USAGE.md](docs/AI_USAGE.md).
+`docs/AI_USAGE.md`.
 
 ## Differences from jsonrepair
 
-JSONMend is not a port of `jsonrepair` and does not aim for byte-identical output. Several differences are deliberate, documented policy choices: trailing content after the root value keeps the first value by default instead of merging it, Markdown fences are stripped by default, duplicate keys keep the last value, unfinished numbers are dropped from snapshots, and strict mode plus per-rule switches have no direct equivalent. The 0.3.0 changes did not move the report by a single byte: exactness labels and rule renumbering do not change any value. A differential harness runs `jsonrepair` (TypeScript/Node) and `json-repair` (Python) over a corpus of hand-written and mutated inputs, compares parsed values, and classifies every divergence. In the committed 0.3.0 report, all 202 divergences had a documented cause and none was unexplained. The method, the classification, and the reference-library versions are in [docs/DIVERGENCES.md](docs/DIVERGENCES.md); rule-to-requirement mapping is in [docs/TRACEABILITY.md](docs/TRACEABILITY.md).
+JSONMend is not a port of `jsonrepair` and does not aim for byte-identical output. Several differences are deliberate, documented policy choices: trailing content after the root value keeps the first value by default instead of merging it, Markdown fences are stripped by default, duplicate keys keep the last value, unfinished numbers are dropped from snapshots, and strict mode plus per-rule switches have no direct equivalent. The 0.3.0 changes did not move the report by a single byte: exactness labels and rule renumbering do not change any value. A differential harness runs `jsonrepair` (TypeScript/Node) and `json-repair` (Python) over a corpus of hand-written and mutated inputs, compares parsed values, and classifies every divergence. In the committed 0.3.0 report, all 202 divergences had a documented cause and none was unexplained. The method, the classification, and the reference-library versions are in [docs/DIVERGENCES.md](docs/DIVERGENCES.md); rule-to-requirement mapping is in `docs/TRACEABILITY.md`.
 
 ## Performance
 
@@ -466,12 +466,12 @@ These figures are observations, not a guarantee: throughput depends on the input
 shape, chunk size, snapshot frequency, and the toolchain version. Memory
 (13.7 × input; Node is 10.6 × and Python 14.3 × on the same file, so the 4 × budget itself is unrealistic) and artifact size are measured
 separately from the process. The full method, tables and decision records are in
-[docs/BENCHMARK.md](docs/BENCHMARK.md), and
-[docs/REPRODUCE.md](docs/REPRODUCE.md) explains how to rerun the benchmarks.
+`docs/BENCHMARK.md`, and
+`docs/REPRODUCE.md` explains how to rerun the benchmarks.
 
 ## Known limitations
 
-- **The `FR-16` event interface is a thin wrapper.** `feed_with` / `feed_bytes_with` iterate `drain_deltas`, and the callback runs inside `feed`, so a callback must not feed the same parser again. It is not a separate push interface (the reasoning is in [docs/ONEPAGE.md](docs/ONEPAGE.md)).
+- **The `FR-16` event interface is a thin wrapper.** `feed_with` / `feed_bytes_with` iterate `drain_deltas`, and the callback runs inside `feed`, so a callback must not feed the same parser again. It is not a separate push interface (the reasoning is in `docs/ONEPAGE.md`).
 - **Only `...` in a value position is dropped.** `R020` handles `[1,...,3]` and `{"a":1,...}`; an ellipsis anywhere else is not treated as a placeholder.
 - **A truncated literal prefix is completed regardless of the following character.** For example, a bare `tru` followed by an unexpected character is completed to `true` and the unexpected character is handled separately.
 - **`incomplete_number` and `pending_key` only affect snapshots.** They do not change `finish`: the final result trims the number (`R011`) and fills a dangling key with `null` (`R008`) under their own rules.
@@ -485,7 +485,7 @@ separately from the process. The full method, tables and decision records are in
 - **Incremental deltas are correct but not cheap.** Each change allocates one `Delta` plus a path array, so a 1 MB document produces ~195 000 records and takes 1.40–1.46 × the baseline. In the agent scenario (4 KB, 3-code-unit chunks) the whole stream is 0.115 ms, so the overhead is not on the critical path and the compact buffer is no longer the next thing to build.
 - **`--skip-prose` only skips prose before a container root.** A scalar root preceded by prose (`Sure!\n42`) still raises `E002`.
 - **Memory is 13.7 × the input** (177.9 MB for a 12.95 MB document). On the same input Node's `JSON.parse` is 10.6 × and Python's `json.loads` is 14.3 ×, so **a 4 × budget is not realistic for any tree-building parser**, Node included. Reaching it requires a "render text without building a tree" mode ([docs/MEMORY.md](docs/MEMORY.md)).
-- **The per-feed p99 is only an upper bound.** The runtime clock is millisecond-resolution and exposes no allocation counter, so the scenario benchmark reports an amortised µs/feed plus the count of feeds that reached the clock resolution ([docs/BENCHMARK.md](docs/BENCHMARK.md)).
+- **The per-feed p99 is only an upper bound.** The runtime clock is millisecond-resolution and exposes no allocation counter, so the scenario benchmark reports an amortised µs/feed plus the count of feeds that reached the clock resolution (`docs/BENCHMARK.md`).
 - **The readiness curve covers top-level members only.** A nested member (`{"arguments":{…}}`) is ready only when its container closes; the curve costs ~1.8 ms/KiB, and early stopping saves ~0 on flat records by construction.
 - **Text mode does not skip prose by default.** `--skip-prose` starts a value only at `{` or `[`, so it would skip a scalar root (`0`, `42`, `false`); prose followed by a scalar root still raises `E002`.
 - **The JS backend still allocates one `Position` per code unit.** The n/2n/4n ratio therefore reaches 2.3–2.8 against a 2.3 target. Absolute throughput is well above the 5 MB/s floor, so this is recorded as a decision rather than fixed.
@@ -521,4 +521,4 @@ JSONMend is released under the Apache License 2.0 (`license = "Apache-2.0"` in `
 - [jsonrepair](https://github.com/josdejong/jsonrepair) (TypeScript) and [json-repair](https://github.com/mangiucugna/json_repair) (Python) are used as behavioural oracles in the differential report. They are used only for comparison; no code from either project is vendored.
 - The MoonBit core library (`moonbitlang/core/json`, `moonbitlang/core/string`) provides the `Json` type and string handling.
 
-See [docs/ONEPAGE.md](docs/ONEPAGE.md) for a one-page project summary.
+See `docs/ONEPAGE.md` for a one-page project summary.

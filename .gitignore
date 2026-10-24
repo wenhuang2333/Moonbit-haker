@@ -7,10 +7,43 @@ _build/
 .mooncakes/
 moon.lock
 
-# 评审输入与本地报告（提交版是 docs/DIVERGENCES.md）
-优化.md
-JSONMend 优化完善与创新方向建议.md
-JSONMend 第五轮：优化、完善与扩展方向.md
+# ── 文档提交流程（2026-10-25 起生效的规则）────────────────────────────
+#
+# 只允许 README 类文件与「流水线读取的文件」进 GitHub，其余文档一律只在本地
+# 保留。用白名单而不是黑名单：新增一篇文档时默认**不上传**，要上传必须在这里
+# 显式放行。黑名单的默认是上传——漏一条就悄悄多传了一个文件。
+#
+# 放行的文档及理由：
+#   README.md / **/README.md / **/README.zh.md
+#                                 仓库首页；各子包 README 被 mooncakes、npm、
+#                                 PyPI 的包页直接读取，删了包页就空了
+#   code/CHANGELOG.md             release.yml 从它抽取每个版本的 Release 正文；
+#                                 属于发布元数据，不是说明文档
+#   code/docs/EVAL*.md            CI 跑出来的测量报告，由 run_eval.py、
+#   code/docs/READINESS.md        run_independent.py、run_readiness.py、
+#   code/docs/MEMORY.md           memory_baseline.py 直接写入，CI 还把它们
+#                                当 artifact 上传
+#   code/docs/DIVERGENCES.md      差分报告，run_diff.py 写入
+#   code/tests/eval/third_party/** 第三方语料的 README/PROVENANCE：许可证要求
+#                                 随代码一起分发，删了不合规
+#
+# 其余文档（code/docs/ 的设计文档、marks/、产品文档*.md、过程文档、
+# .github/ 模板、AGENTS.md）只在本地保留。
+*.md
+!README.md
+!**/README.md
+!**/README.zh.md
+!code/CHANGELOG.md
+!code/docs/EVAL.md
+!code/docs/EVAL_AMBIGUITY.md
+!code/docs/EVAL_INDEPENDENT.md
+!code/docs/EVAL_PATHS.md
+!code/docs/EVAL_REFERENCE.md
+!code/docs/EVAL_REGISTRATION.md
+!code/docs/READINESS.md
+!code/docs/MEMORY.md
+!code/docs/DIVERGENCES.md
+!code/tests/eval/third_party/**
 
 # 差分报告的本地副本（提交版是 docs/DIVERGENCES.md）
 code/tests/diff/report.md

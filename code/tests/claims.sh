@@ -22,6 +22,7 @@ CODE="$ROOT/code"
 export PATH="$HOME/.moon/bin:$PATH"
 
 FAIL=0
+SKIPPED=0
 DERIVED=()
 
 fail() {
@@ -47,18 +48,32 @@ DOCS=(
   "$ROOT/产品文档-精简版.md"
 )
 
-# require_in <literal> <doc-glob-or-file>...
+# require_in <literal> <doc-file>...
 # Fails when none of the given files contains the literal.
+#
+# Some of the documents are deliberately not published (see `.gitignore`): the
+# design docs and the delivery documents live only on the author's machine. On
+# a clean checkout those files are simply absent, so "none of them mentions the
+# figure" is not a defect there -- it is the expected state. What is still a
+# real failure is a document that *is* present and says something stale, so the
+# two cases are separated explicitly instead of letting absence read as drift.
 require_in() {
   local needle="$1"; shift
-  local found=0 f
+  local found=0 present=0 f
   for f in "$@"; do
     [ -f "$f" ] || continue
+    present=$((present + 1))
     if grep -qF -- "$needle" "$f"; then found=1; fi
   done
-  if [ "$found" -eq 0 ]; then
-    fail "no document mentions '$needle' (looked in: $*)"
+  if [ "$found" -eq 1 ]; then
+    return 0
   fi
+  if [ "$present" -eq 0 ]; then
+    SKIPPED=$((SKIPPED + 1))
+    printf 'skip %-28s not published (not in this checkout)\n' "'$needle'"
+    return 0
+  fi
+  fail "no document mentions '$needle' (looked in: $*)"
 }
 
 # require_absent_in <literal> <file>...
@@ -235,5 +250,11 @@ if [ "$FAIL" -gt 0 ]; then
   printf '\nclaims.sh: %s problem(s). The documents quote numbers that no longer\n' "$FAIL" >&2
   printf 'match what this repository produces. Fix the document, not the gate.\n' >&2
   exit 1
+fi
+if [ "$SKIPPED" -gt 0 ]; then
+  printf '\nclaims.sh: OK — every figure checked in the published documents matches a freshly\n'
+  printf 'derived one. %s figure(s) were skipped because the only document that quotes them\n' "$SKIPPED"
+  printf 'is not published and therefore not in this checkout; they are checked locally.\n'
+  exit 0
 fi
 printf '\nclaims.sh: OK — every checked figure in the documents matches a freshly derived one.\n'

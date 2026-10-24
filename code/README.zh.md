@@ -103,14 +103,14 @@ try {
 | 接入面 | 用途 |
 | --- | --- |
 | `moon add zhanshishan/jsonmend` | MoonBit 项目（本包） |
-| `jsonmend serve` | 任意语言；版本化 JSONL（[docs/PROTOCOL.md](docs/PROTOCOL.md)） |
+| `jsonmend serve` | 任意语言；版本化 JSONL（`docs/PROTOCOL.md`） |
 | `jsonmend mcp` | Claude Code、Cursor、Codex CLI、Gemini CLI、Cline、Windsurf：四个工具 |
 | `npm install ./code/npm` / `pip install ./code/python` | Node 与 Python 宿主 |
 | `jsonmend-http`（Python 包） | n8n、Dify、Coze、网关 |
 
 执行门在所有接入面上是同一个调用：`analyze(text, profile="agent",
 schema_json=tool.inputSchema)` 返回 `executable`；为 false 时把 `retry.prompt`
-原样回灌模型。逐工具配方见 [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)。
+原样回灌模型。逐工具配方见 `docs/INTEGRATIONS.md`。
 
 ## 流式示例
 
@@ -214,7 +214,7 @@ execute : {"city":["Paris","London"]}
 
 ## 修复规则一览
 
-每次修改都对应一条编号稳定的记录。含示例与需求映射的完整字典见 [docs/RULES.md](docs/RULES.md)。
+每次修改都对应一条编号稳定的记录。含示例与需求映射的完整字典见 `docs/RULES.md`。
 
 | 编号 | 名称 | 含义 |
 | --- | --- | --- |
@@ -265,7 +265,7 @@ execute : {"city":["Paris","London"]}
 | `E060` | `InvalidEvent` | `jsonmend/llm` 收到无法解释的事件负载。 |
 | `E070` | `SchemaError` | 骨架声明本身写错（括号不闭合、未知类型、成员重复）；CLI 退出码 2。 |
 
-`RepairCode::code`、`MendError::code` 和 `MendError::to_string` 分别给出稳定字符串（如 `R005`）、错误编号（如 `E020`）和单行诊断信息。完整参考见 [docs/ERRORS.md](docs/ERRORS.md)。
+`RepairCode::code`、`MendError::code` 和 `MendError::to_string` 分别给出稳定字符串（如 `R005`）、错误编号（如 `E020`）和单行诊断信息。完整参考见 `docs/ERRORS.md`。
 
 ## 快照语义
 
@@ -380,7 +380,7 @@ jsonmend llm [选项] [文件]
 | `5` | 严格模式违规（`E010`，含 `--max-loss` 超限）。 |
 | `70` | 内部错误（`E030`）。 |
 
-浏览器演示的源码位于 `examples/web`，构建好的页面是 `static/demo/index.html`，可以直接用浏览器打开。该包导出三个「字符串进、字符串出」的入口：`repair_text`、`report_text` 和 `snapshot_text`（返回某个前缀的值、完整性与打开路径），并通过 `globalThis.jsonmendRegister*` 注册到宿主页面，因此页面内没有第二份实现。重新生成 bundle 用 `bash static/demo/build.sh`；构建步骤与无头校验见 [docs/REPRODUCE.md](docs/REPRODUCE.md)。
+浏览器演示的源码位于 `examples/web`，构建好的页面是 `static/demo/index.html`，可以直接用浏览器打开。该包导出三个「字符串进、字符串出」的入口：`repair_text`、`report_text` 和 `snapshot_text`（返回某个前缀的值、完整性与打开路径），并通过 `globalThis.jsonmendRegister*` 注册到宿主页面，因此页面内没有第二份实现。重新生成 bundle 用 `bash static/demo/build.sh`；构建步骤与无头校验见 `docs/REPRODUCE.md`。
 
 ## 测试
 
@@ -431,12 +431,12 @@ moon run examples/agent_loop --target native --release   # 自愈闭环
 而不是一次性记录。0.4.0 的 `ci.yml` 与 `release.yml` 运行记录见仓库 Actions 页，
 `release.yml` 在 `v0.5.0` 标签上产出 [Release `JSONMend v0.5.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.5.0)
 （Linux CLI、wasm 探针、演示 bundle、`SHA256SUMS`）。
-复现步骤、阈值与两项已知未达标项见 [docs/REPRODUCE.md](docs/REPRODUCE.md)
-与 [docs/TRACEABILITY.md](docs/TRACEABILITY.md)。
+复现步骤、阈值与两项已知未达标项见 `docs/REPRODUCE.md`
+与 `docs/TRACEABILITY.md`。
 
 ## 与 jsonrepair 的差异
 
-JSONMend 不是 `jsonrepair` 的移植，也不追求逐字节一致的输出。若干差异是有意为之、且已文档化的策略选择：根值之后的尾随内容默认保留第一个值而不是合并，Markdown 围栏默认去除，重复键默认保留最后一个值，未完成的数字在快照中默认不出现，严格模式与逐规则开关也没有直接对应物。差分工具在手工编写与自动变异的语料上同时运行 `jsonrepair`（TypeScript/Node）与 `json-repair`（Python），比较解析后的值，并对每一处差异分类。0.3.0 与 0.4.0 的改动都没有让这份报告变动一个字节：精确度标签、`R022` 判据与规则编号调整都不改变任何取值。0.4.0 另加了一份**同语料上的并列对照**：1200 条里 JSONMend 的静默错值为 0，`jsonrepair` 为 122、`json_repair` 为 189（`docs/EVAL_REFERENCE.md`）。在 0.4.0 提交的那份差分报告中，202 处差异全部有文档化的成因，没有无法解释的差异。方法与分类结果、参照库版本见 [docs/DIVERGENCES.md](docs/DIVERGENCES.md)；规则与需求的映射见 [docs/TRACEABILITY.md](docs/TRACEABILITY.md)。
+JSONMend 不是 `jsonrepair` 的移植，也不追求逐字节一致的输出。若干差异是有意为之、且已文档化的策略选择：根值之后的尾随内容默认保留第一个值而不是合并，Markdown 围栏默认去除，重复键默认保留最后一个值，未完成的数字在快照中默认不出现，严格模式与逐规则开关也没有直接对应物。差分工具在手工编写与自动变异的语料上同时运行 `jsonrepair`（TypeScript/Node）与 `json-repair`（Python），比较解析后的值，并对每一处差异分类。0.3.0 与 0.4.0 的改动都没有让这份报告变动一个字节：精确度标签、`R022` 判据与规则编号调整都不改变任何取值。0.4.0 另加了一份**同语料上的并列对照**：1200 条里 JSONMend 的静默错值为 0，`jsonrepair` 为 122、`json_repair` 为 189（`docs/EVAL_REFERENCE.md`）。在 0.4.0 提交的那份差分报告中，202 处差异全部有文档化的成因，没有无法解释的差异。方法与分类结果、参照库版本见 [docs/DIVERGENCES.md](docs/DIVERGENCES.md)；规则与需求的映射见 `docs/TRACEABILITY.md`。
 
 ## 性能
 
@@ -475,7 +475,7 @@ moon run bench --target js --release
 这些数字是观测值而非承诺：吞吐取决于输入形态、分块大小、快照频率与工具链版本。
 内存（12.95 MB 输入实测 177.9 MB，13.7 倍；同机 Node 10.6 倍、Python 14.3 倍，
 因此「4 倍」目标本身不现实）与产物大小另行测量。完整方法、表格与决策记录见
-[docs/BENCHMARK.md](docs/BENCHMARK.md)，复现步骤见 [docs/REPRODUCE.md](docs/REPRODUCE.md)。
+`docs/BENCHMARK.md`，复现步骤见 `docs/REPRODUCE.md`。
 
 ## 已知限制
 
@@ -484,7 +484,7 @@ moon run bench --target js --release
 - **覆盖率最低项在 `llm` 包**：`llm/text.mbt` 66/91 = 72.5%（文本流的错误分支只覆盖一半）；根包最低为 `api.mbt` 86/95 = 90.5%，`plan.mbt` 已达 489/526 = 93.0%。
 - **live 演示页只重放四个固定场景。** 它是「同一份数据在两种读法下的对比」演示，不是任意流的通用可视化；浏览器验证在本机用 Playwright 做过，CI 只跑帧级断言。
 - **`Options::for_text()` 是预设，不是无树引擎。** 它关掉修复记录与缩进，但值仍然建树；真正的「只出文本」模式（`want_value = false`）仍未实现，见路线图。
-- **`FR-16` 事件接口是薄封装。** `feed_with` / `feed_bytes_with` 只是 `drain_deltas` 的迭代器形式，回调在 `feed` 内部运行，因此回调里不能再次喂同一个解析器；它不是独立的推送接口（理由见 [docs/ONEPAGE.md](docs/ONEPAGE.md)）。
+- **`FR-16` 事件接口是薄封装。** `feed_with` / `feed_bytes_with` 只是 `drain_deltas` 的迭代器形式，回调在 `feed` 内部运行，因此回调里不能再次喂同一个解析器；它不是独立的推送接口（理由见 `docs/ONEPAGE.md`）。
 - **省略号的判定位于键位与值位之前。** `R020` 处理 `[1,...,3]`、`{"a":1,...}`，键位置的独立 `...` 也会被删除（`{...}` → `{}`，`{"a":...}` → `{}`）；`....`、`..` 与字符串内部的 `...` 不是省略号。
 - **残缺字面量前缀会无视后一个字符直接补全。** 例如裸词 `tru` 后跟意外字符时，会先补成 `true`，意外字符另行处理。
 - **`incomplete_number` 与 `pending_key` 只影响快照。** 它们不改变 `finish`：最终结果按各自的规则裁剪数字（`R011`）、把悬空键填为 `null`（`R008`）。
@@ -535,4 +535,4 @@ JSONMend 以 Apache License 2.0 发布（`code/moon.mod` 中 `license = "Apache-
 - [jsonrepair](https://github.com/josdejong/jsonrepair)（TypeScript）与 [json-repair](https://github.com/mangiucugna/json_repair)（Python）在差分报告中作为行为参照。它们仅用于对照，未内嵌任何代码。
 - MoonBit 核心库（`moonbitlang/core/json`、`moonbitlang/core/string`）提供 `Json` 类型与字符串处理。
 
-项目一页说明见 [docs/ONEPAGE.md](docs/ONEPAGE.md)。
+项目一页说明见 `docs/ONEPAGE.md`。

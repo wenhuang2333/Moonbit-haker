@@ -139,7 +139,7 @@ for v in s.push_event("{\"type\":\"content_block_delta\",...}") {
 
 ## Agent 接入
 
-四种接入面，按「谁来决定使用」区分。完整配方见 [code/docs/INTEGRATIONS.md](code/docs/INTEGRATIONS.md)。
+四种接入面，按「谁来决定使用」区分。完整配方见本地文档 `code/docs/INTEGRATIONS.md`。
 
 | 接入面 | 命令 / 包 | 适合 | 谁调用 |
 | --- | --- | --- | --- |
@@ -286,7 +286,7 @@ Suggested retry:
 | 多后端 | wasm-gc / native / JavaScript / wasm 四个后端测试结果一致；CLI 为 native |
 | 无外部运行时依赖 | 只用 MoonBit 标准库 |
 
-完整选项表见 [code/README.zh.md](code/README.zh.md#选项)，规则细节见 [code/docs/RULES.md](code/docs/RULES.md)。
+完整选项表见 [code/README.zh.md](code/README.zh.md#选项)，规则细节见本地文档 `code/docs/RULES.md`。
 
 ## 质量与证据
 
@@ -442,7 +442,7 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
   要三套构建与三套测试；
 - **零第三方依赖**：无正则、无外部解析器，wasm-gc 产物只含引擎与 core 的必要部分；
 - **工具链自带覆盖率与基准**：`moon coverage report` 与 `moon build --release` 就是
-  质量证据链的一部分（见 [code/docs/REPRODUCE.md](code/docs/REPRODUCE.md)）。
+  质量证据链的一部分（复现步骤见本地文档 `code/docs/REPRODUCE.md`）。
 
 ## 仓库结构
 
@@ -467,13 +467,13 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 
 - **`semantic_readiness` 已与 `repair` 同量级**：约 116–170 µs / 4.9 KiB（`repair` 的 1.1–1.7 倍，随负载浮动）——0.5.0 时代的 32.7–34.3 倍随 `Delta.at` 折算一并消失。热路径仍推荐增量观察器（`SemanticWatcher` / `FieldTracker`），它不做快照。
 - **骨架约束是字符类子集，不是正则**：0.7.0 起支持 `minimum`/`maximum`/`exclusiveMinimum`/`exclusiveMaximum`/`minLength`/`maxLength`/`enum`/`pattern`，
-  但 `pattern` 只接受 `[...]`，没有 `*`/`+`/`?`/`|`/锚点/分组，也没有 `$ref`/`oneOf`/`format`（见 [code/docs/SPEC.md](code/docs/SPEC.md)）。
+  但 `pattern` 只接受 `[...]`，没有 `*`/`+`/`?`/`|`/锚点/分组，也没有 `$ref`/`oneOf`/`format`（见本地文档 `code/docs/SPEC.md`）。
 - **`plan.mbt` 覆盖率 489/526 = 93.0%**，已不再是短板（最低的是 `llm/text.mbt` 66/91 = 72.5%）。
 - **live 演示页只重放四个固定场景**，浏览器验证在本机用 Playwright 做过，CI 只跑帧级断言。
 - **`Options::for_text()` 是预设，不是无树引擎**：关掉记录与缩进，但值仍然建树。
 - FR-16 事件/回调接口已实现为 `feed_with` / `feed_bytes_with`（`drain_deltas` 的薄封装，0.4.0）：回调在 `feed` 内运行，回调里不能再次喂同一个解析器。
 - 快照的 `incomplete_number` / `pending_key` 策略只影响快照，最终结果仍会补全。
-- **增量流的吞吐是基线耗时的 1.39–1.51 倍（native）**，未达到「不低于基线 90%」的目标：每条变更都要分配一个 `Delta` 与一份路径数组，见 [code/docs/BENCHMARK.md](code/docs/BENCHMARK.md#增量流的开销未达标项)。
+- **增量流的吞吐是基线耗时的 1.39–1.51 倍（native）**，未达到「不低于基线 90%」的目标：每条变更都要分配一个 `Delta` 与一份路径数组，见本地文档 `code/docs/BENCHMARK.md`。
 - 前言重放只在「干净」时被接受，所以**在取到值之前需要任何修复的文档仍被拒绝**：标量根前言（`Sure!\n42`）**有意拒绝**（前言在哪里结束不可判定），
   围栏**标量**根在 `skip_prose` 打开时（`explain` 的默认）被拒，而 `repair` 默认关闭它、接受并输出 `true`；围栏对象/数组两种模式都通过。
 - 前言超过 `max_prose_buffer`（64 KiB）时引擎放弃重放并回退 `E002`（`prose_overflow`），CLI 的全文回退仍能救回。
@@ -485,34 +485,50 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 - `Json` 数值遵循 core 的表示，大整数可能损失精度，但修复后的文本保留原数字。
 - 恢复策略是启发式的，不是某个标准的合规实现。
 
-完整清单见 [code/README.zh.md](code/README.zh.md#已知限制) 与 [code/docs/TRACEABILITY.md](code/docs/TRACEABILITY.md)。
+完整清单见 [code/README.zh.md](code/README.zh.md#已知限制) 与本地文档 `code/docs/TRACEABILITY.md`。
 
 ## 文档索引
 
+**随仓库发布的文档**（在 GitHub 上可以直接打开）：
+
 | 文档 | 内容 |
 | --- | --- |
-| [产品文档-精简版.md](产品文档-精简版.md) | **现行状态**交付版（490 行）：产品面 + 最新实测 + 问题清单 + 演进表 + Agent 接入面 |
-| [产品文档.md](产品文档.md) | 完整历史档案（2 856 行）：逐轮快照、问题与决策，一字未删 |
-| [code/docs/SPEC.md](code/docs/SPEC.md) | **规范**：三档就绪、delta 契约、精确度格、四个执行字段、骨架文法，逐条编号 `SR-n` |
-| [code/docs/PROTOCOL.md](code/docs/PROTOCOL.md) | **协议 v1**：`serve` 的帧、方法、错误、版本与限制 |
-| [code/docs/CONFORMANCE.md](code/docs/CONFORMANCE.md) | 一致性套件：用例格式、覆盖范围、如何新增 |
-| [code/docs/INTEGRATIONS.md](code/docs/INTEGRATIONS.md) | 逐工具接入配方：MCP、Python、Node、HTTP、流式、安全默认 |
-| [code/docs/PITCH.md](code/docs/PITCH.md) | 3 分钟陈述脚本、评委问答卡、演示核对清单 |
-| [code/README.zh.md](code/README.zh.md) / [code/README.md](code/README.md) | 中文 / 英文完整说明：API、选项、CLI、测试 |
-| [code/docs/RULES.md](code/docs/RULES.md) | 22 条修复规则：触发条件、级别、消息模板、示例 |
-| [code/docs/ERRORS.md](code/docs/ERRORS.md) | 12 个错误码、严格模式升级、退出码、失效模式 |
-| [code/docs/EVAL_REGISTRATION.md](code/docs/EVAL_REGISTRATION.md) | 真值评测的预登记协议（数据集、判据、修订记录） |
+| [code/README.zh.md](code/README.zh.md) / [code/README.md](code/README.md) | 中文 / 英文完整说明：API、选项、CLI、测试、已知限制 |
 | [code/docs/EVAL.md](code/docs/EVAL.md) | 真值评测结果（生成物） |
 | [code/docs/EVAL_INDEPENDENT.md](code/docs/EVAL_INDEPENDENT.md) | 独立第三方语料 `nst/JSONTestSuite` 的对照结果（生成物） |
-| [code/docs/READINESS.md](code/docs/READINESS.md) | 骨架就绪表：七个场景的语法/骨架两层分数（生成物） |
-| [code/docs/AI_USAGE.md](code/docs/AI_USAGE.md) | AI 使用说明：用在何处、哪些判断不外包、如何核验 |
-| [code/docs/DIVERGENCES.md](code/docs/DIVERGENCES.md) | 与两个参照实现的逐类差异与归因 |
-| [code/docs/BENCHMARK.md](code/docs/BENCHMARK.md) | 吞吐、线性、流式、内存、体积 |
-| [code/docs/REPRODUCE.md](code/docs/REPRODUCE.md) | 从零复现全部结论 |
-| [code/docs/ONEPAGE.md](code/docs/ONEPAGE.md) | 一页项目说明 |
-| [code/docs/TRACEABILITY.md](code/docs/TRACEABILITY.md) | 需求 → 用例 → 证据 追踪矩阵 |
-| [code/CHANGELOG.md](code/CHANGELOG.md) | 版本变更 |
-| [code/CONTRIBUTING.md](code/CONTRIBUTING.md) | 开发环境、测试命令、新增规则的流程 |
+| [code/docs/EVAL_REGISTRATION.md](code/docs/EVAL_REGISTRATION.md) | 真值评测的预登记协议（数据集、判据、修订记录） |
+| [code/docs/EVAL_PATHS.md](code/docs/EVAL_PATHS.md) · [code/docs/EVAL_AMBIGUITY.md](code/docs/EVAL_AMBIGUITY.md) | 分块/适配器路径、对抗歧义两个专项评测（生成物） |
+| [code/docs/EVAL_REFERENCE.md](code/docs/EVAL_REFERENCE.md) | 与参照实现的逐例对照（生成物） |
+| [code/docs/READINESS.md](code/docs/READINESS.md) | 骨架就绪表：十个场景的语法/骨架两层分数（生成物） |
+| [code/docs/MEMORY.md](code/docs/MEMORY.md) | 各模式内存占用基线（生成物） |
+| [code/docs/DIVERGENCES.md](code/docs/DIVERGENCES.md) | 与两个参照实现的逐类差异与归因（生成物） |
+| [code/CHANGELOG.md](code/CHANGELOG.md) | 版本变更（每个 Release 的正文由它抽出） |
+| [code/npm/README.md](code/npm/README.md) · [code/python/README.md](code/python/README.md) | 语言包接入说明（npm / PyPI 包页读的就是它们） |
+| [static/demo/README.md](static/demo/README.md) · [static/demo/mcp-claude/README.md](static/demo/mcp-claude/README.md) | 演示页与真实 Claude Code 会话的说明 |
+
+**本地文档**（设计文档与交付文档，只在作者本机保留；不随仓库发布）：
+
+| 文档 | 内容 |
+| --- | --- |
+| `产品文档-精简版.md` | **现行状态**交付版：产品面 + 最新实测 + 问题清单 + 演进表 + 接入面 |
+| `产品文档.md` | 完整历史档案：逐轮快照、问题与决策，一字未删 |
+| `code/docs/SPEC.md` | **规范**：三档就绪、delta 契约、精确度格、四个执行字段、骨架文法，逐条编号 `SR-n` |
+| `code/docs/PROTOCOL.md` | **协议 v1**：`serve` 的帧、方法、错误、版本与限制 |
+| `code/docs/CONFORMANCE.md` | 一致性套件：用例格式、覆盖范围、如何新增 |
+| `code/docs/INTEGRATIONS.md` | 逐工具接入配方：MCP、Python、Node、HTTP、流式、安全默认 |
+| `code/docs/PITCH.md` | 3 分钟陈述脚本、评委问答卡、演示核对清单 |
+| `code/docs/RULES.md` | 22 条修复规则：触发条件、级别、消息模板、示例 |
+| `code/docs/ERRORS.md` | 12 个错误码、严格模式升级、退出码、失效模式 |
+| `code/docs/BENCHMARK.md` | 吞吐、线性、流式、内存、体积 |
+| `code/docs/REPRODUCE.md` | 从零复现全部结论 |
+| `code/docs/TRACEABILITY.md` | 需求 → 用例 → 证据 追踪矩阵 |
+| `code/docs/ONEPAGE.md` | 一页项目说明 |
+| `code/docs/AI_USAGE.md` | AI 使用说明：用在何处、哪些判断不外包、如何核验 |
+| `code/CONTRIBUTING.md` | 开发环境、测试命令、新增规则的流程 |
+
+> 为什么分两类：设计文档与交付文档属于过程材料，按项目约定不随代码仓库发布
+> （`.gitignore` 用白名单管文档，新文档默认不上传）。**代码、测试与**上面第一张
+> 表里的**测量结果**全部随仓库发布——判据与数据不会只留在某个人手里。
 
 ## 发布通道与版本映射
 
@@ -526,7 +542,7 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 | `v1.0.0` | `0.7.0` | 公开面冻结版；行为与 1.1.x 相同（除新增接入面） |
 | `v1.0.1` | `0.7.1` | 补丁通道（未使用） |
 
-发布顺序（详见 [code/docs/REPRODUCE.md](code/docs/REPRODUCE.md) 的发布清单）：
+发布顺序（详见本地文档 `code/docs/REPRODUCE.md` 的发布清单）：
 **先 `moon publish --dry-run` 探测平台限制，再打标签**——标签一旦推送不再移动。
 `ci_smoke` 里有断言保证本表第一行与 `code/moon.mod` 的版本不漂移。
 Release 的资产是否与 `SHA256SUMS` 一致，由 `code/tests/release_assets.sh` 检查。
@@ -537,12 +553,12 @@ Release 的资产是否与 `SHA256SUMS` 一致，由 `code/tests/release_assets.
 - **mooncakes.io**：`zhanshishan/jsonmend` 0.3.0 … **0.8.1** 已发布。1.1.1 在 mooncakes 上对应
   **0.8.1**（平台只接受 `0.x.y`），两者除版本字符串外逐字节相同。
   1.0.0/1.1.x 的 GitHub 标签代表「公开面已冻结」的承诺；渠道对应关系见
-  [产品文档-精简版.md](产品文档-精简版.md) §11.1c。
+  `产品文档-精简版.md` §11.1c（本地文档）。
   0.7.0 的 CLI 上传路径曾失败（`receiver is gone`），改用同一份已校验产物 POST 官方端点成功；
   0.8.0/0.8.1 的复测结果见 `code/docs/REPRODUCE.md` §7.1。
 - ~~演示页新增「模拟 LLM 流」标签~~：`static/demo/live.html` 已落地（含重试面板与三层 readiness），并已发布到 GitHub Pages。
-- ~~给骨架加约束~~：`minimum` / `maximum` / `enum` / `maxLength` / `minLength` / `pattern`（字符类子集）已在 0.7.0 落地，见 [code/docs/SPEC.md](code/docs/SPEC.md)。
-- ~~把 `semantic_readiness` 做成增量~~：`Delta.at` 落地后已与 `repair` 同量级（1.1–1.7×，见 [code/docs/BENCHMARK.md](code/docs/BENCHMARK.md)）。
+- ~~给骨架加约束~~：`minimum` / `maximum` / `enum` / `maxLength` / `minLength` / `pattern`（字符类子集）已在 0.7.0 落地，见本地文档 `code/docs/SPEC.md`。
+- ~~把 `semantic_readiness` 做成增量~~：`Delta.at` 落地后已与 `repair` 同量级（1.1–1.7×，见本地文档 `code/docs/BENCHMARK.md`）。
 - ~~Agent 接入面~~：`jsonmend serve`（协议 v1 + 18 组一致性用例）、`jsonmend mcp`（四个工具）、
   npm / pip 包、Python HTTP facade、Windows 预编译**已在 1.1.0 / 0.8.0 发布**。
 - **无树「只出文本」模式**（`Options.want_value = false`）：目前**没有**该字段，引擎一律建树；内存指标未达标的根因。
@@ -551,9 +567,9 @@ Release 的资产是否与 `SHA256SUMS` 一致，由 `code/tests/release_assets.
   目标是把增量流的开销从 1.39–1.51 倍压到 1.10 倍以内（NFR-PERF-05）。
 - **JSONL 流式模式**：每行闭合即交付一个值（对方是整批缓冲，这里是增量）。
 - ~~围栏里的标量根~~：**不是独立缺陷**。前言重放只在「干净」时才被接受，所以**在取到值之前需要任何修复的文档仍被拒绝**；
-  围栏对象/数组不受影响，围栏**标量**根在 `skip_prose` 打开时（`explain` 的默认）被拒，而 `repair` 默认关闭它、接受并输出 `true`（见 [产品文档-精简版.md](产品文档-精简版.md#11-现行问题清单)）。
+  围栏对象/数组不受影响，围栏**标量**根在 `skip_prose` 打开时（`explain` 的默认）被拒，而 `repair` 默认关闭它、接受并输出 `true`（见本地文档 `产品文档-精简版.md` §11 现行问题清单）。
   两种 `E002` 现在可区分：缓冲溢出时 CLI 在 stderr 打一行提示，库调用方读 `PartialParser::prose_overflow()`，
-  也可用 `--max-prose-buffer N` 调大；完整规则与例表见 [code/docs/ERRORS.md](code/docs/ERRORS.md) 的 E002 条目。
+  也可用 `--max-prose-buffer N` 调大；完整规则与例表见本地文档 `code/docs/ERRORS.md` 的 E002 条目。
 - JS 后端位置分配重构：把「当前位置」（三个 `Int32`）与「历史位置」（不可变 `Position`）分离，
   消除每码元一次的对象分配，把 4n/2n 从 2.4–2.5 拉回 ≤2.3。
 - 快照增量子树缓存（`Frame.dirty` 已存在但未使用）：把「每 1024 码元一次快照」的 2 倍惩罚降下来。

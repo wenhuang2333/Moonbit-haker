@@ -5,6 +5,25 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布] - 2026-10-25
+
+### 仓库
+
+- **文档提交流程改为白名单**：`.gitignore` 现在默认忽略所有 `*.md`，逐条放行
+  README 类文件、`code/CHANGELOG.md` 与流水线自己写入的测量报告
+  （`code/docs/EVAL*`、`READINESS.md`、`MEMORY.md`、`DIVERGENCES.md`）以及
+  第三方语料的 README/PROVENANCE。其余文档（`code/docs/` 的设计文档、`marks/`、
+  产品文档、过程文档、`.github/` 模板、`AGENTS.md`）**只在本地保留**。
+  用白名单而不是黑名单：新增一篇文档时默认不上传，要上传必须显式放行；
+  黑名单的默认是上传，漏一条就多传一个。
+- **不随仓库发布的文档不会被删除**：本次只把 42 篇文档移出 Git 索引，磁盘上
+  一个字节都没动，`git status` 里它们只是不再出现。
+- **README 与各子包 README 里指向这些文档的链接改成行内代码**，避免出现 404。
+  README 的「文档索引」拆成两张表：随仓库发布的、只在本地保留的，并说明分类依据。
+- **门禁对「文档不存在」与「文档写错」区分对待**：`cli_smoke.sh` 与 `claims.sh`
+  在这一类文档缺席时打印 `skip … is not published`，在文档存在但数字/版本对不上
+  时仍然失败。干净检出（CI）与作者本机两种状态下都能过，且都不掩盖真问题。
+
 ## [1.1.1] - 2026-10-21
 
 补丁版：**不改引擎行为**（`pkg.generated.mbti` 无变化），也不改任何已有命令的行为。

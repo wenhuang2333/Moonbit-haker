@@ -15,6 +15,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 pass=0
 fail=0
+skipped=0
 
 # check_has <name> <expected exit> <needle> <out|err> -- <args...>
 # Like `check`, but asserts that one substring appears on the chosen stream,
@@ -116,6 +117,15 @@ fi
 REPO="$(cd "$ROOT/.." && pwd)"
 check_doc_version() {
   local label="$1" file="$2" expr="$3" got
+  # Some documents are deliberately not published (see `.gitignore`): they live
+  # only on the author's machine, so a clean checkout has no such file. Absence
+  # is the expected state there, not drift -- but a file that *is* present and
+  # states the wrong version is still a failure.
+  if [ ! -f "$REPO/$file" ]; then
+    skipped=$((skipped + 1))
+    printf 'skip %-34s %s is not published\n' "$label" "$file"
+    return 0
+  fi
   got="$(sed -n "$expr" "$REPO/$file" | head -1)"
   if [ "$got" = "$MOD_VERSION" ]; then
     pass=$((pass + 1)); printf 'ok   %-34s %s=%s\n' "$label" "$file" "$got"
@@ -509,5 +519,11 @@ else
     "channel map matches moon.mod" "$MAP_VERSION" "$MOD_VERSION"
 fi
 
-printf '\n%d passed, %d failed\n' "$pass" "$fail"
+if [ "$skipped" -gt 0 ]; then
+  printf '\n%d passed, %d failed, %d skipped (document not published)\n' \
+    "$pass" "$fail" "$skipped"
+else
+  printf '\n%d passed, %d failed\n' "$pass" "$fail"
+fi
+
 [ "$fail" = 0 ]
