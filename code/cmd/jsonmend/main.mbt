@@ -146,6 +146,9 @@ fn options_of(o : CliOpts, agent_protocol? : Bool) -> @mend.Options {
     quote_lookahead: o.quote_lookahead,
     max_repairs: o.max_repairs,
     max_prose_buffer: o.max_prose_buffer,
+    max_input_len: o.max_input_len,
+    max_depth: o.max_depth,
+    max_token_len: o.max_token_len,
     max_loss: o.max_loss,
     reject_ambiguous: o.reject_ambiguous,
     // `--check` answers with the records and the exit code; rendering the

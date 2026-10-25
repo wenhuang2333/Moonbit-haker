@@ -605,7 +605,7 @@
         </div>
         <p class="band-sub">
           每条规则都能当场触发：点「试用」把它自己的样本送进工作台，修复记录里就会出现这条码。
-          规则在单次从左到右扫描中即时生效，不回溯、不二次遍历；同一位置可能命中多条，按编号顺序各产生一条记录。
+          规则在单次从左到右扫描中即时生效，不回溯、不二次遍历；同一位置可能命中多条，按扫描顺序各产生一条记录（实现按扫描顺序登记，不按编号重排）。
           <code>Info</code> 只改记法（<code>Cosmetic</code>），<code>Warning</code> 发明或丢弃了信息（<code>Lossy</code>）。
         </p>
 
@@ -783,7 +783,7 @@
           { "n": "1200", "label": "条真值评测 · 恢复率 100.00%" },
           { "n": "402", "label": "例差分 · 202 处差异全部归因" },
           { "n": "19", "label": "组协议一致性同跑" },
-          { "n": "103.5 KiB", "label": "wasm-gc 产物" }
+          { "n": "108.1 KiB", "label": "wasm-gc 产物" }
         ],
         "policies": [
           { "id": "permissive", "label": "permissive", "hint": "默认：能修就修，允许有损与第二种读法（显示通道）。" },
@@ -895,7 +895,7 @@
             { "flag": "--check", "cmds": ["repair"], "desc": "只检查不输出；需要修复时退出码 1" },
             { "flag": "--report", "cmds": ["repair"], "desc": "把修复记录写到标准错误" },
             { "flag": "--explain", "cmds": ["repair"], "desc": "逐条解释修复并打印精确度小结" },
-            { "flag": "--json", "cmds": ["explain", "readiness"], "desc": "打印机器可读的 JSON 计划" },
+            { "flag": "--json", "cmds": ["explain"], "desc": "与 explain 同用：打印机器可读的 JSON 计划（readiness 上无额外效果）" },
             { "flag": "--policy", "arg": "execution", "cmds": ["repair", "explain", "readiness", "serve"], "desc": "安全档位：permissive/interactive/execution/agent/strict" },
             { "flag": "--schema", "arg": "{!query:string,!limit:integer}", "cmds": ["repair", "explain", "readiness"], "desc": "骨架声明，检查必填成员、类型与值约束" },
             { "flag": "--skip-prose", "cmds": ["repair", "explain", "llm"], "desc": "跳过 JSON 之前的说明文字" },
@@ -904,7 +904,7 @@
             { "flag": "--retry-hint", "cmds": ["repair", "explain"], "desc": "拒绝时打印可直接回灌模型的提示" },
             { "flag": "--indent", "arg": "2", "cmds": ["repair"], "desc": "输出缩进空格数，默认紧凑输出" },
             { "flag": "--multi-root", "arg": "array", "cmds": ["repair"], "desc": "多个根值：first/array/error" },
-            { "flag": "--chunk", "arg": "64", "cmds": ["repair", "explain", "readiness"], "desc": "每次喂 N 个码元，验证流式路径" },
+            { "flag": "--chunk", "arg": "64", "cmds": ["repair"], "desc": "仅与 --batch 同用：把每条输入按 N 个码元分块喂入" },
             { "flag": "--batch", "cmds": ["repair"], "desc": "逐行读 {id,input} JSON，逐行输出结果" },
             { "flag": "--step", "arg": "8", "cmds": ["readiness"], "desc": "每 N 个码元观察一次" },
             { "flag": "--provider", "arg": "anthropic", "cmds": ["llm"], "desc": "anthropic（默认）或 openai" },
@@ -1613,10 +1613,36 @@
           const plan = frame.schema || frame.plan;
           const verdict = $("st-verdict");
           clear(verdict);
-          if (frame.execution_ready) {
+          // `execution_ready` is the engine's "you know enough to stop"
+          // signal, not "the value may be executed": a truncated string is
+          // settled and schema-complete, yet the gate refuses E010 because
+          // closing it would invent content. Show the two answers separately.
+          if (frame.execution_ready && plan && plan.executable) {
             verdict.className = "verdict ok";
             verdict.appendChild(el("span", "", "EXECUTION: READY"));
-            verdict.appendChild(el("span", "sub", "已可以停止生成并执行"));
+            verdict.appendChild(
+              el("span", "sub", "已定稿；可以停止生成并执行"),
+            );
+          } else if (
+            frame.execution_ready &&
+            plan &&
+            !plan.executable &&
+            frame.completeness !== "Complete"
+          ) {
+            // All declared members are final, but the prefix is not closed, so
+            // the gate refuses to execute it as-is. Stopping the generation and
+            // executing the raw prefix are two different decisions.
+            verdict.className = "verdict warn";
+            verdict.appendChild(el("span", "", "STOP GENERATION: READY"));
+            verdict.appendChild(
+              el(
+                "span",
+                "sub",
+                "声明成员已定稿；当前前缀未闭合，执行门拒绝：" +
+                  (plan.error ? plan.error.code + " " : "") +
+                  plan.label,
+              ),
+            );
           } else if (plan && plan.decision === "ambiguous") {
             verdict.className = "verdict bad";
             verdict.appendChild(el("span", "", "EXECUTION: BLOCKED"));
@@ -1634,8 +1660,10 @@
             plan &&
             plan.retry &&
             plan.retry.prompt &&
-            !frame.execution_ready &&
-            (frame.completeness === "Complete" || plan.decision === "ambiguous")
+            !plan.executable &&
+            (frame.completeness === "Complete" ||
+              frame.execution_ready ||
+              plan.decision === "ambiguous")
           ) {
             retry.hidden = false;
             $("st-retry-text").textContent = plan.retry.prompt;
@@ -1678,7 +1706,11 @@
             " / " +
             frame.seen +
             (frame.open_path ? " · open_path " + frame.open_path : "") +
-            (frame.execution_ready ? " · 可以停止生成" : "");
+            (frame.execution_ready
+              ? plan && plan.executable
+                ? " · 已定稿：可以停止生成并执行"
+                : " · 已定稿：可以停止生成，但执行门拒绝"
+              : "");
           $("st-range").max = String(len);
           $("st-range").value = String(upto);
         }

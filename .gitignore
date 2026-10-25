@@ -48,6 +48,10 @@ moon.lock
 # 差分报告的本地副本（提交版是 docs/DIVERGENCES.md）
 code/tests/diff/report.md
 
+# 本地文档与截图目录（工作区约定：marks/ 只在本地保留）。`*.md` 已被上面的
+# 白名单挡掉，但截图不是 .md，漏一条就会把本地素材带进仓库。
+marks/
+
 # 覆盖率产物
 *.coverage
 moonbit_coverage_*

@@ -134,9 +134,18 @@ fn run_explain(o : CliOpts) -> Unit {
   let text = read_stdin_or_file(o.path)
   let schema = schema_of(o)
   let opts = options_of(o, agent_protocol=true)
+  // `--json` already carries the value, so the rendered text is a second copy
+  // of the whole document that a machine consumer does not need. It is dropped
+  // unless `--with-text` asks for it; the text block below always renders it,
+  // because `Repaired:` is the point of that format.
+  let plan_opts = if o.json_out && !o.with_text {
+    { ..opts, want_text: false, }
+  } else {
+    opts
+  }
   let plan = match schema {
-    Some(s) => @mend.analyze(text, options=opts, schema=s)
-    None => @mend.analyze(text, options=opts)
+    Some(s) => @mend.analyze(text, options=plan_opts, schema=s)
+    None => @mend.analyze(text, options=plan_opts)
   }
   if o.json_out {
     println(plan.to_json())

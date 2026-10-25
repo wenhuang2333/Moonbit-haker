@@ -522,3 +522,139 @@ test "drains after every code unit still replay" {
     msg="per-unit final replay",
   )
 }
+
+///|
+/// Feed `input` in random chunks to two parsers, one draining materialised
+/// deltas and one draining views, and require the two streams to agree on every
+/// field and on every decoded path. The view API is allowed to skip building a
+/// path; it is not allowed to change the stream.
+fn dv_check(
+  input : String,
+  opts : Options,
+  r : TcLcg,
+  tag : String,
+) -> Unit raise {
+  let views = PartialParser::new(options=opts) catch { _ => return }
+  let mats = PartialParser::new(options=opts) catch { _ => return }
+  for c in tc_chunks(r, input, 5) {
+    let ok = try {
+      views.feed(c)
+      mats.feed(c)
+      true
+    } catch {
+      _ => false
+    }
+    if !ok {
+      return
+    }
+    let vs = views.drain_views()
+    let ds = mats.drain_deltas()
+    if vs.length() != ds.length() {
+      println(tag + " input: " + input)
+      assert_eq(
+        tag + " view count",
+        ds.length().to_string() + " got " + vs.length().to_string(),
+      )
+    }
+    for k = 0; k < vs.length(); k = k + 1 {
+      let v = vs[k]
+      let d = ds[k]
+      let got = v.op.name() +
+        "@" +
+        v.at.to_string() +
+        " " +
+        views.delta_pointer(v) +
+        " " +
+        dj_render(v.value) +
+        " |" +
+        v.text
+      let want = d.op.name() +
+        "@" +
+        d.at.to_string() +
+        " " +
+        d.pointer() +
+        " " +
+        dj_render(d.value) +
+        " |" +
+        d.text
+      if got != want {
+        println(tag + " input: " + input)
+        assert_eq(tag + " view delta", want + " got " + got)
+      }
+      let segs = views.delta_path(v)
+      assert_eq(segs.length(), d.path.length(), msg=tag + " path length")
+      for j = 0; j < segs.length(); j = j + 1 {
+        assert_eq(segs[j] == d.path[j], true, msg=tag + " path segment")
+      }
+    }
+  }
+}
+
+///|
+test "views carry the same stream as materialised deltas" {
+  // Every profile, every corpus: `for_each_delta` and `drain_views` must be
+  // indistinguishable from `drain_deltas` apart from the path staying in the
+  // arena. The replay check above proves the materialised side; this proves the
+  // arena decodes to exactly the same paths.
+  let mut seen = 0
+  for input in tc_valid_docs(20261026L, 120) {
+    for row in dj_profiles() {
+      let (_name, opts) = row
+      dv_check(input, opts, tc_lcg(909L), "P-D3")
+      seen = seen + 1
+    }
+  }
+  for input in tc_fuzz_inputs(8080L, 120) {
+    for row in dj_profiles() {
+      let (_name, opts) = row
+      dv_check(input, opts, tc_lcg(606L), "P-D4")
+      seen = seen + 1
+    }
+  }
+  assert_eq(seen > 0, true, msg="corpus is not empty")
+}
+
+///|
+test "for_each_delta visits the same stream, and needs collect_deltas" {
+  let text = "{\"a\":[1,{\"b\":\"xy\"}],\"c\":true}"
+  let walk = PartialParser::new(options=Options::for_llm())
+  let mats = PartialParser::new(options=Options::for_llm())
+  walk.feed(text)
+  mats.feed(text)
+  let visited : Array[String] = []
+  walk.for_each_delta(fn(v) {
+    visited.push(v.op.name() + " " + walk.delta_pointer(v))
+  })
+  let ds = mats.drain_deltas()
+  assert_eq(visited.length(), ds.length(), msg="visited count")
+  for k = 0; k < ds.length(); k = k + 1 {
+    assert_eq(
+      visited[k],
+      ds[k].op.name() + " " + ds[k].pointer(),
+      msg="visited delta",
+    )
+  }
+  // A second walk without new input sees nothing: the log was cleared.
+  let second : Array[String] = []
+  walk.for_each_delta(fn(v) { second.push(v.op.name()) })
+  assert_eq(second.length(), 0, msg="log cleared after the walk")
+  // Without `collect_deltas`, both view entry points refuse with E050.
+  let plain = PartialParser::new()
+  plain.feed("{\"a\":1}")
+  let refused = try {
+    ignore(plain.drain_views())
+    false
+  } catch {
+    InvalidOption(_) => true
+    _ => false
+  }
+  assert_eq(refused, true, msg="drain_views needs collect_deltas")
+  let refused_walk = try {
+    plain.for_each_delta(fn(_v) { () })
+    false
+  } catch {
+    InvalidOption(_) => true
+    _ => false
+  }
+  assert_eq(refused_walk, true, msg="for_each_delta needs collect_deltas")
+}

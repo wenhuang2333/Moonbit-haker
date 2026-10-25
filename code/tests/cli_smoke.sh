@@ -510,6 +510,34 @@ fi
 STDIN='{"a":1}' check "--max-prose-buffer accepted" 0 '{"a":1}' "" -- --max-prose-buffer 1024
 STDIN='{}' check "--max-prose-buffer rejects 0" 2 '' "正整数" -- --max-prose-buffer 0
 
+# The resource limits are settable from the command line, in both directions:
+# the library defaults are the starting point and the caller may tighten or
+# loosen them. Each one has to actually bite, not just be accepted.
+STDIN='[[[1]]]' check "--max-depth bites" 4 '' "E020" -- --max-depth 2
+STDIN='[[[1]]]' check "--max-depth loosens" 0 '[[[1]]]' "" -- --max-depth 4
+STDIN='{"a":1}' check "--max-input-len bites" 4 '' "E021" -- --max-input-len 4
+STDIN='{"a":"xyzw"}' check "--max-token-len bites" 4 '' "E022" -- --max-token-len 3
+STDIN='{}' check "--max-depth rejects out of range" 2 '' "1048576" -- --max-depth 99999999
+# A digit string long enough to wrap a 32 bit accumulator must be rejected, not
+# accepted as a negative limit.
+STDIN='{}' check "--max-input-len rejects a wrapped value" 2 '' "正整数字面量" -- --max-input-len 99999999999
+
+# `explain --json` carries the value and, by default, no second copy of the
+# rendered text; `--with-text` asks for it back. The text block always renders
+# `Repaired:` because that is its whole point.
+out="$(printf '%s' '{"a":1,}' | "$BIN" explain --json)"
+if printf '%s' "$out" | grep -q '"text":""' && printf '%s' "$out" | grep -q '"value":{"a":1}'; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "explain --json omits text"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "explain --json omits text" "$out"
+fi
+out="$(printf '%s' '{"a":1,}' | "$BIN" explain --json --with-text)"
+if printf '%s' "$out" | grep -qF -- '"text":"{\"a\":1}"'; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "explain --json --with-text"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "explain --json --with-text" "$out"
+fi
+
 # The channel map in README.md names the released version; if the row and
 # code/moon.mod drift apart, the mapping table is lying. The first
 # `| `vX.Y.Z` |` row wins, so the table must keep the newest release first.

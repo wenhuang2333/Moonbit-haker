@@ -38,9 +38,11 @@ priv struct Frame {
   mut last_comma : Position
   synthetic : Bool
   mut dirty : Bool
-  /// Full delta path of this container (FR-18); empty unless delta tracking is
-  /// on, in which case it is the path at which the container was announced.
-  mut path : Array[PathSegment]
+  /// Arena index of this container's own delta path (FR-18); `-1` unless delta
+  /// tracking is on, in which case it is the path at which the container was
+  /// announced. An index rather than an array: recording a change must not copy
+  /// a path per change.
+  mut path_id : Int32
   /// Whether a `Set` delta was emitted for this container.
   mut announced : Bool
 }
@@ -106,7 +108,15 @@ priv struct Engine {
   mut pending_quote_pos : Position
   mut fence_start : Position
   mut fence_body : Bool
-  mut pos : Position
+  /// Current position, kept as three integers rather than a `Position`.
+  /// The scanner advances once per code unit, so allocating a `Position` there
+  /// made the JS backend allocate once per code unit and the cost of the run
+  /// grow with the live heap (n/2n/4n drifted above 2.3). Historical positions
+  /// — token starts, error sites, the last comma — stay frozen `Position`
+  /// values and are produced by `Engine::position`.
+  mut pos_offset : Int32
+  mut pos_line : Int32
+  mut pos_column : Int32
   mut tok : Tok
   mut tok_start : Position
   mut root : Json?
@@ -150,8 +160,9 @@ priv struct Engine {
   /// scalar (`42 is the answer`): the latter drops the tail, and must stay
   /// refused. Kept even when records are not collected.
   mut saw_dropped_content : Bool
-  /// Deltas recorded since the last `drain_deltas` (FR-18).
-  mut deltas : Array[Delta]
+  /// The delta log (FR-18): parallel arrays of the recorded changes plus the
+  /// path arena they index. See `delta.mbt`.
+  dlog : DeltaLog
   /// Code units of the string being scanned already reported as `AppendText`.
   mut delta_str_reported : Int32
   /// Cursor into `parts` for the next `AppendText` tail. Without it every
@@ -162,13 +173,27 @@ priv struct Engine {
 }
 
 ///|
-/// Advance a position by one code unit. Only LF starts a new line (BR-20).
-fn advance(p : Position, u : UInt16) -> Position {
+/// Advance the current position by one code unit. Only LF starts a new line
+/// (BR-20). Updating three integers is the whole cost: nothing is allocated.
+fn Engine::advance(self : Engine, u : UInt16) -> Unit {
+  self.pos_offset = self.pos_offset + 1
   if u.to_int() == 0x0A {
-    { offset: p.offset + 1, line: p.line + 1, column: 1, }
+    self.pos_line = self.pos_line + 1
+    self.pos_column = 1
   } else {
-    { offset: p.offset + 1, line: p.line, column: p.column + 1, }
+    self.pos_column = self.pos_column + 1
   }
+}
+
+///|
+/// Freeze the current position into a `Position`.
+///
+/// Every position that has to outlive the scan — a token start, an error site,
+/// the last comma of a container — is materialised through this and stored as
+/// an immutable value, so advancing cannot rewrite it. The scanner itself calls
+/// it only where such a value is actually needed, not per code unit.
+fn Engine::position(self : Engine) -> Position {
+  { offset: self.pos_offset, line: self.pos_line, column: self.pos_column, }
 }
 
 ///|
@@ -196,7 +221,7 @@ fn new_frame(kind : FrameKind, start : Position, synthetic : Bool) -> Frame {
     last_comma: start,
     synthetic,
     dirty: false,
-    path: [],
+    path_id: -1,
     announced: false,
   }
 }
@@ -291,7 +316,9 @@ fn Engine::make(opts : Options) -> Engine {
     pending_quote_pos: start,
     fence_start: start,
     fence_body: false,
-    pos: start,
+    pos_offset: 0,
+    pos_line: 1,
+    pos_column: 1,
     tok: TIdle,
     tok_start: start,
     root: None,
@@ -319,7 +346,7 @@ fn Engine::make(opts : Options) -> Engine {
     exactness: Exact,
     ambiguous: false,
     saw_dropped_content: false,
-    deltas: [],
+    dlog: DeltaLog::new(),
     delta_str_reported: 0,
     delta_part_idx: 0,
     delta_part_off: 0,
@@ -327,9 +354,9 @@ fn Engine::make(opts : Options) -> Engine {
   if opts.multi_root is AsArray {
     let f = new_frame(FArr, start, true)
     if opts.collect_deltas {
-      f.path = []
+      f.path_id = root_path
       f.announced = true
-      e.push_delta(Set, [], Some(Json::array([])), "")
+      e.push_delta(Set, root_path, Some(Json::array([])), "")
     }
     e.stack.push(f)
   }
@@ -421,7 +448,7 @@ fn Engine::feed_str(self : Engine, s : String) -> Unit raise MendError {
             j = j + 1
           }
           // never consume code units beyond max_input_len (E021)
-          while j > i && self.pos.offset + (j - i) > self.opts.max_input_len {
+          while j > i && self.pos_offset + (j - i) > self.opts.max_input_len {
             j = j - 1
           }
           if j > i {
@@ -470,19 +497,16 @@ fn Engine::push_run(
   if self.parts_len > self.opts.max_token_len {
     raise TokenLimit(self.opts.max_token_len, self.tok_start.offset)
   }
-  self.pos = {
-    offset: self.pos.offset + len,
-    line: self.pos.line,
-    column: self.pos.column + len,
-  }
+  self.pos_offset = self.pos_offset + len
+  self.pos_column = self.pos_column + len
   self.snap_stamp = self.snap_stamp + 1
 }
 
 ///|
 /// Feed one UTF-16 code unit.
 fn Engine::step(self : Engine, u : UInt16) -> Unit raise MendError {
-  if self.pos.offset >= self.opts.max_input_len {
-    raise SizeLimit(self.opts.max_input_len, self.pos.offset)
+  if self.pos_offset >= self.opts.max_input_len {
+    raise SizeLimit(self.opts.max_input_len, self.pos_offset)
   }
   // Keep what the prelude sees. `step` is the single funnel for both `feed_str`
   // and `feed_bytes`, so the buffer is the same however the caller split the
@@ -494,19 +518,18 @@ fn Engine::step(self : Engine, u : UInt16) -> Unit raise MendError {
       self.prose_overflow = true
     }
   }
-  let p = self.pos
   match self.tok {
-    TIdle => self.step_idle(u, p)
-    TStr(kind, is_key) => self.step_str(u, p, kind, is_key)
-    TStrPending(kind, is_key) => self.step_str_pending(u, p, kind, is_key)
-    TBare(kind) => self.step_bare(u, p, kind)
-    TSlash => self.step_slash(u, p)
+    TIdle => self.step_idle(u)
+    TStr(kind, is_key) => self.step_str(u, kind, is_key)
+    TStrPending(kind, is_key) => self.step_str_pending(u, kind, is_key)
+    TBare(kind) => self.step_bare(u, kind)
+    TSlash => self.step_slash(u)
     TLineComment => if u.to_int() == 0x0A { self.tok = TIdle }
-    TBlockComment => self.step_block(u, p)
-    TFence(count) => self.step_fence(u, p, count)
+    TBlockComment => self.step_block(u)
+    TFence(count) => self.step_fence(u, count)
     TFenceLine => if u.to_int() == 0x0A { self.finish_fence_line() }
   }
-  self.pos = advance(p, u)
+  self.advance(u)
   self.snap_stamp = self.snap_stamp + 1
 }
 
@@ -536,7 +559,7 @@ fn Engine::feed_bytes(self : Engine, bs : Bytes) -> Unit raise MendError {
             }
             j = j + 1
           }
-          while j > i && self.pos.offset + (j - i) > self.opts.max_input_len {
+          while j > i && self.pos_offset + (j - i) > self.opts.max_input_len {
             j = j - 1
           }
           if j > i {

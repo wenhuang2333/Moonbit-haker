@@ -105,7 +105,10 @@ for t in wasm wasm-gc js native; do
   n="$(total_tests "$t")"
   [ -n "$n" ] || { fail "could not read the test count for $t"; continue; }
   derive "tests_$t" "$n" "moon test --target $t"
-  require_in "$n/210" "$ROOT/README.md" "$CODE/docs/ONEPAGE.md" "$CODE/docs/PITCH.md" \
+  # The denominator is the suite size itself, read from the runner rather than
+  # written here: the documents quote "<n>/<n> per backend", and a hard-coded
+  # denominator would go stale the moment a test is added.
+  require_in "$n/$n" "$ROOT/README.md" "$CODE/docs/ONEPAGE.md" "$CODE/docs/PITCH.md" \
     "$ROOT/产品文档-精简版.md" "$CODE/README.md" "$CODE/README.zh.md"
 done
 

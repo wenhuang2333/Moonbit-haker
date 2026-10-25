@@ -417,7 +417,7 @@ moon run examples/agent_loop --target native --release
 | Ground-truth evaluation (protocol frozen first) | 1200 cases (19 mutation families + 1 control × 60) | recovery **100.00%**, 0 mislabelled, 4/4 pre-registered criteria PASS |
 | Command line smoke (exit codes 0/1/2/3/4/5/70) | 62 assertions, 14 of them `explain` | pass |
 | Differential corpus against `jsonrepair` / `json-repair` | 402 cases | 202 divergences, all documented, 0 unexplained |
-| Line coverage of the library | 3585/3817 lines (root), 337/391 (`llm`) | 93.9% / 86.2% (`moon coverage` cannot instrument the `cmd` package, which calls `quit()`; within the root package the weakest file is `api.mbt` at 89.5%, and across the library `llm/text.mbt` at 72.5%) |
+| Line coverage of the library | 3717/3952 lines (root), 337/391 (`llm`) | 94.0% / 86.2% (`moon coverage` cannot instrument the `cmd` package, which calls `quit()`; within the root package the weakest file is `llm/text.mbt` at 72.5% across the library and `hint.mbt` at 90.7% inside the root package) |
 
 Cross-backend results are identical: 129 tests pass on wasm-gc, native and
 JavaScript. `.github/workflows/ci.yml` runs the same commands on every push, so

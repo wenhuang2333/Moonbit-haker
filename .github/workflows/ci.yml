@@ -249,6 +249,20 @@ jobs:
         working-directory: code
         run: bash tests/bench.sh native
 
+      - name: Scaling and delta ratchets (must exit 0)
+        working-directory: code
+        run: |
+          # NFR-PERF-01 and NFR-PERF-05 as ratios measured here, so the gate
+          # travels between machines. The JavaScript scaling figure is printed
+          # by `tests/bench.sh js` and quoted in the documents, but it is not
+          # gated: a shared runner's GC timing moves it by more than the
+          # regressions the gate would exist to catch.
+          bash tests/scaling.sh
+
+      - name: Benchmark, JavaScript (informational)
+        working-directory: code
+        run: bash tests/bench.sh js
+
       - uses: actions/upload-artifact@v4
         with:
           name: differential-report

@@ -1,6 +1,6 @@
 # 内存基线：按模式与跨实现对照（NFR-PERF-04）
 
-由 `code/tests/memory_baseline.py` 在 2026-10-25 19:54 CST 生成。
+由 `code/tests/memory_baseline.py` 在 2026-10-25 21:38 CST 生成。
 
 | 环境 | 值 |
 | --- | --- |
@@ -15,13 +15,13 @@
 | 模式 | 工作负载 | 指标 | 峰值 | 相对输入 | 备注 |
 | --- | --- | --- | --- | --- | --- |
 | repair() | 值树 + 渲染输出 | 峰值 RSS | 177.8 MB | 13.7 × |  |
-| analyze() | 计划（explain --json），不渲染值 | 峰值 RSS | 326.2 MB | 25.2 × |  |
+| analyze() | 计划（explain --json），不渲染值 | 峰值 RSS | 176.8 MB | 13.7 × |  |
 | streaming feed | 默认 64 KiB 分块（主路径，渲染输出） | 峰值工作集（峰值 RSS） | 177.8 MB | 13.7 × |  |
 | streaming readiness | 字段就绪事件流（readiness） | 峰值工作集（峰值 RSS） | 202.7 MB | 15.7 × |  |
-| text-only (llm --text) | 文本增量 → TextStream → PartialParser | 峰值工作集（峰值 RSS） | 500.5 MB | 33.7 × | 事件文件 15552749 B（文档的 1.15 ×） |
+| text-only (llm --text) | 文本增量 → TextStream → PartialParser | 峰值工作集（峰值 RSS） | 336.1 MB | 22.7 × | 事件文件 15552749 B（文档的 1.15 ×） |
 | no-tree | 完全不建值树 | — | 未测得 | — | 0.6.0 无此模式：`Options::for_text()` 仍走建树解析，未测得 |
 
-`analyze()` 比 `repair()` 高（326.2 MB vs 177.8 MB，1.83 ×）：计划模式并不更省，因为它同样建值树，还额外保留修复后的文本并渲染整份机器可读计划。
+`analyze()` 与 `repair()` 的比值是 0.99 ×（176.8 MB vs 177.8 MB）。计划同样建值树，两者的差别只在于它是否再渲染一整份输出：比值接近 1 说明这个通道没有多留一份全文。1.3.0 起 `explain --json` 默认不带 `text`（`--with-text` 才带上），所以这一比值从「比 repair 高」变成了与 repair 同量级。
 
 每个模式的「相对输入」都是**峰值 RSS ÷ 该模式实际读入的字节数**。
 `text-only (llm --text)` 这一行的分母是事件文件（15552749 B），
@@ -31,15 +31,15 @@
 
 | 实现 | 峰值 RSS | 相对输入 | 相对 Node | 备注 |
 | --- | --- | --- | --- | --- |
-| python3 json.loads + json.dumps | 185.1 MB | 14.3 × | 1.35 × | tracemalloc 峰值 66.7 MB，即 RSS 的 64% 是解释器与 GC 空闲 |
-| node JSON.parse + JSON.stringify | 137.5 MB | 10.6 × | 1.00 × |  |
+| python3 json.loads + json.dumps | 183.2 MB | 14.1 × | 1.33 × | tracemalloc 峰值 66.7 MB，即 RSS 的 64% 是解释器与 GC 空闲 |
+| node JSON.parse + JSON.stringify | 137.4 MB | 10.6 × | 1.00 × |  |
 | jsonmend repair（本表第一行） | 177.8 MB | 13.7 × | 1.29 × | 同一份文档，同一次运行 |
 
 ## 三、两条声明目标：声明了，本次未达成 / 未测得
 
 | 目标 | 状态 | 依据 |
 | --- | --- | --- |
-| text-only ≤ 4 × 输入 | 33.7 × 事件文件（目标 ≤ 4 × 输入，未据此判定达成） | 该数值里含事件文件本身的 15552749 B（文档的 1.15 ×）与 `read_all` 的整段缓冲，只能作为上界，不能用来宣称纯文本路径达标 |
+| text-only ≤ 4 × 输入 | 22.7 × 事件文件（目标 ≤ 4 × 输入，未据此判定达成） | 该数值里含事件文件本身的 15552749 B（文档的 1.15 ×）与 `read_all` 的整段缓冲，只能作为上界，不能用来宣称纯文本路径达标 |
 | no-tree ≤ 2 × 输入 | 未达成（模式不存在） | `Options::for_text()` 仍然建值树，0.6.0 没有关闭建树的入口，因此这条目标只能声明、不能测 |
 
 这两条目标来自 0.6.0 冻结的内存策略。本文件只报告状态：不把「流式路径的峰值恰好低于 4 ×」当成达标，因为该峰值包含整段输入缓冲（见下一节），也不把尚未实现的 no-tree 写成达标。

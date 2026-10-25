@@ -173,8 +173,14 @@ pub extend DeltaOp with Eq::{not_equal, equal}
 ///|
 /// Render a path as an RFC 6901 JSON Pointer, e.g. `/items/0/name`.
 pub fn Delta::pointer(self : Delta) -> String {
+  pointer_of_path(self.path)
+}
+
+///|
+/// Render a segment list as an RFC 6901 JSON Pointer.
+fn pointer_of_path(segs : Array[PathSegment]) -> String {
   let sb = StringBuilder()
-  for seg in self.path {
+  for seg in segs {
     sb.write_char('/')
     match seg {
       Key(k) =>
@@ -185,6 +191,28 @@ pub fn Delta::pointer(self : Delta) -> String {
     }
   }
   sb.to_string()
+}
+
+///|
+/// One delta as the log records it (FR-18).
+///
+/// This is the shape that does not pay for a path: a change is a few words in
+/// the engine's log, and the path is an index into the log's arena until the
+/// caller asks for it. Decode it with `PartialParser::delta_path` or
+/// `PartialParser::delta_pointer`, which is where the arena lives. Everything
+/// else — the operation, the moment, the value, the appended text — is exactly
+/// what the equivalent `Delta` carries.
+///
+/// A view stays valid for as long as the parser it came from: the arena is
+/// append-only, so a later drain cannot invalidate an earlier path.
+pub(all) struct DeltaView {
+  op : DeltaOp
+  /// See `Delta::at`; the same number, produced the same way.
+  at : Int32
+  value : Json?
+  text : String
+  /// Arena index of this delta's path. Opaque: decode it through the parser.
+  priv path_id : Int32
 }
 
 ///|
@@ -322,12 +350,68 @@ pub fn PartialParser::feed_bytes_with(
 pub fn PartialParser::drain_deltas(
   self : PartialParser,
 ) -> Array[Delta] raise MendError {
+  self.require_deltas()
+  self.engine.drain_deltas()
+}
+
+///|
+/// The deltas recorded since the previous drain, as `DeltaView`s (FR-18).
+///
+/// Same operations in the same order as `drain_deltas`, without building a
+/// `Delta` and a path array per change: each view is a few words, and its path
+/// stays in the log's arena until `delta_path` / `delta_pointer` decodes it.
+/// This is the shape to use when the consumer does not need the path at all (an
+/// event loop driving a view), and the shape to use when it does and can decode
+/// it once per delta.
+pub fn PartialParser::drain_views(
+  self : PartialParser,
+) -> Array[DeltaView] raise MendError {
+  self.require_deltas()
+  self.engine.drain_views()
+}
+
+///|
+/// Visit every delta recorded since the previous drain, in order, without
+/// building an array of them (FR-16). The same stream as `drain_views`, so the
+/// callback sees exactly what a `Delta`-based loop would.
+///
+/// The callback runs while the parser is inside `feed`; it must not feed the
+/// parser again.
+pub fn PartialParser::for_each_delta(
+  self : PartialParser,
+  on : (DeltaView) -> Unit,
+) -> Unit raise MendError {
+  self.require_deltas()
+  self.engine.for_each_delta(on)
+}
+
+///|
+/// Decode the path of a view, outermost segment first. The only allocation is
+/// the returned array, so a caller that does not need the path pays nothing.
+pub fn PartialParser::delta_path(
+  self : PartialParser,
+  view : DeltaView,
+) -> Array[PathSegment] {
+  self.engine.dlog.segments(view.path_id)
+}
+
+///|
+/// Decode the path of a view as an RFC 6901 JSON Pointer.
+pub fn PartialParser::delta_pointer(
+  self : PartialParser,
+  view : DeltaView,
+) -> String {
+  self.engine.dlog.pointer_of(view.path_id)
+}
+
+///|
+/// Raise `E050` unless the parser records deltas.
+fn PartialParser::require_deltas(self : PartialParser) -> Unit raise MendError {
   if !self.engine.opts.collect_deltas {
     raise InvalidOption(
-      "drain_deltas requires collect_deltas: use Options::for_llm()",
+      "delta collection requires collect_deltas: use Options::for_llm()",
     )
   }
-  self.engine.drain_deltas()
 }
 
 ///|

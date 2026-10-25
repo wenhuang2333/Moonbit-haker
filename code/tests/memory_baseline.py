@@ -321,9 +321,11 @@ def main() -> int:
 
         if modes[0]["peak"] and modes[1]["peak"]:
             lines.append(
-                "`analyze()` 比 `repair()` 高（%.1f MB vs %.1f MB，%.2f ×）：计划模式并不更省，"
-                "因为它同样建值树，还额外保留修复后的文本并渲染整份机器可读计划。"
-                % (modes[1]["peak"], modes[0]["peak"], modes[1]["peak"] / modes[0]["peak"])
+                "`analyze()` 与 `repair()` 的比值是 %.2f ×（%.1f MB vs %.1f MB）。计划同样建值树，"
+                "两者的差别只在于它是否再渲染一整份输出：比值接近 1 说明这个通道没有多留一份全文。"
+                "1.3.0 起 `explain --json` 默认不带 `text`（`--with-text` 才带上），"
+                "所以这一比值从「比 repair 高」变成了与 repair 同量级。"
+                % (modes[1]["peak"] / modes[0]["peak"], modes[1]["peak"], modes[0]["peak"])
             )
             lines.append("")
         lines.append("每个模式的「相对输入」都是**峰值 RSS ÷ 该模式实际读入的字节数**。")

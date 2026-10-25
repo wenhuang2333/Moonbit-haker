@@ -42,6 +42,28 @@ fn median5(f : () -> Unit) -> Double {
 }
 
 ///|
+/// Median of five *single* calls, after one warm-up call.
+///
+/// `median5` divides a round's elapsed time by the number of calls it managed,
+/// which degrades to a single sample as soon as one call exceeds
+/// `min_round_ms` — i.e. on exactly the large inputs the scaling check uses. A
+/// single garbage collection pause then lands in the result unopposed, which is
+/// what made `4n/2n` swing between 2.2 and 2.6 on the JavaScript backend while
+/// the cost per byte was in fact flat. Five independent calls, median out,
+/// costs five times one call and removes that bias.
+fn median5_single(f : () -> Unit) -> Double {
+  f()
+  let times : Array[Double] = []
+  for i = 0; i < 5; i = i + 1 {
+    let t0 = @env.now()
+    f()
+    times.push(@env.now().to_double() - t0.to_double())
+  }
+  times.sort()
+  times[2]
+}
+
+///|
 /// Throughput in MB/s of `bytes` bytes in `ms` milliseconds.
 fn mbps(bytes : Int32, ms : Double) -> Double {
   if ms <= 0.0 {
@@ -199,13 +221,16 @@ fn bench_throughput(kind : String, input : String) -> Unit {
 
 ///|
 /// TC-B-01: n, 2n, 4n must stay within 2.3x per doubling.
+///
+/// Measured with `median5_single`, because at these sizes a round is one call
+/// (see that function for why a single sample is the wrong estimator here).
 fn bench_linearity() -> Unit {
   let base = make_valid(1048576)
   let double = make_valid(2097152)
   let quad = make_valid(4194304)
-  let t1 = median5(() => run_repair(base))
-  let t2 = median5(() => run_repair(double))
-  let t4 = median5(() => run_repair(quad))
+  let t1 = median5_single(() => run_repair(base))
+  let t2 = median5_single(() => run_repair(double))
+  let t4 = median5_single(() => run_repair(quad))
   println("linearity\tn\t" + round1(t1) + " ms")
   println("linearity\t2n\t" + round1(t2) + " ms\tratio " + round1(t2 / t1))
   println("linearity\t4n\t" + round1(t4) + " ms\tratio " + round1(t4 / t2))
@@ -268,23 +293,69 @@ fn run_deltas(input : String, chunk : Int32) -> Int32 {
 }
 
 ///|
+/// Streaming with delta tracking, consumed as views (`for_each_delta`): the
+/// same chunking, the same number of changes, but no `Delta` and no path array
+/// built per change. This is the shape NFR-PERF-05 is registered against.
+fn run_delta_views(input : String, chunk : Int32) -> Int32 {
+  let n = input.length()
+  try {
+    let parser = @mend.PartialParser::new(options={
+      ..@mend.Options::default(),
+      collect_deltas: true,
+    })
+    let counter : Array[Int32] = [0]
+    let mut i = 0
+    while i < n {
+      let to = if i + chunk < n { i + chunk } else { n }
+      parser.feed(input[i:to].to_owned())
+      parser.for_each_delta(fn(_v) { counter[0] = counter[0] + 1 })
+      i = to
+    }
+    ignore(parser.finish())
+    counter[0]
+  } catch {
+    _ => 0
+  }
+}
+
+///|
 /// I-2 acceptance: delta tracking must stay within 10% of the same chunking
 /// without it, and the replay of the deltas must reproduce the final value.
+///
+/// Two consumers are reported because they cost different amounts: the view
+/// stream (`for_each_delta`) is the registered NFR-PERF-05 arm, and the
+/// materialising `drain_deltas` arm is kept next to it so the price of the
+/// compatibility shape stays visible instead of hiding inside the metric.
 fn bench_deltas() -> Unit {
   let input = make_valid(1048576)
   for chunk in [1024, 65536] {
     let base = median5(() => run_stream(input, chunk, false))
-    let ms = median5(() => ignore(run_deltas(input, chunk)))
-    let deltas = run_deltas(input, chunk)
+    let views = median5(() => ignore(run_delta_views(input, chunk)))
+    let views_n = run_delta_views(input, chunk)
     println(
-      "deltas\tchunk " +
+      "deltas\tfor_each_delta chunk " +
       chunk.to_string() +
       "\t" +
-      round1(ms) +
+      round1(views) +
       " ms\t" +
-      round1(mbps(input.length(), ms)) +
+      round1(mbps(input.length(), views)) +
       " MB/s\t" +
-      round1(100.0 * ms / base) +
+      round1(100.0 * views / base) +
+      "% of baseline\t" +
+      views_n.to_string() +
+      " deltas",
+    )
+    let mats = median5(() => ignore(run_deltas(input, chunk)))
+    let deltas = run_deltas(input, chunk)
+    println(
+      "deltas\tdrain_deltas chunk " +
+      chunk.to_string() +
+      "\t" +
+      round1(mats) +
+      " ms\t" +
+      round1(mbps(input.length(), mats)) +
+      " MB/s\t" +
+      round1(100.0 * mats / base) +
       "% of baseline\t" +
       deltas.to_string() +
       " deltas",

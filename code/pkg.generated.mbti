@@ -124,6 +124,14 @@ pub fn DeltaOp::name(Self) -> String
 pub fn DeltaOp::not_equal(Self, Self) -> Bool
 pub impl Eq for DeltaOp
 
+pub(all) struct DeltaView {
+  op : DeltaOp
+  at : Int32
+  value : Json?
+  text : String
+  // private fields
+}
+
 pub(all) enum DuplicateKeys {
   KeepLast
   KeepFirst
@@ -269,12 +277,16 @@ pub struct PartialParser {
   // private fields
 }
 pub fn PartialParser::analyze(Self, input? : String, schema? : Schema) -> RepairPlan
+pub fn PartialParser::delta_path(Self, DeltaView) -> Array[PathSegment]
+pub fn PartialParser::delta_pointer(Self, DeltaView) -> String
 pub fn PartialParser::drain_deltas(Self) -> Array[Delta] raise MendError
+pub fn PartialParser::drain_views(Self) -> Array[DeltaView] raise MendError
 pub fn PartialParser::feed(Self, String) -> Unit raise MendError
 pub fn PartialParser::feed_bytes(Self, Bytes) -> Unit raise MendError
 pub fn PartialParser::feed_bytes_with(Self, Bytes, (Delta) -> Unit) -> Unit raise MendError
 pub fn PartialParser::feed_with(Self, String, (Delta) -> Unit) -> Unit raise MendError
 pub fn PartialParser::finish(Self) -> FinalResult raise MendError
+pub fn PartialParser::for_each_delta(Self, (DeltaView) -> Unit) -> Unit raise MendError
 pub fn PartialParser::new(options? : Options) -> Self raise MendError
 pub fn PartialParser::prose_overflow(Self) -> Bool
 pub fn PartialParser::snapshot(Self) -> Snapshot

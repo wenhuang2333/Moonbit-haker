@@ -25,6 +25,10 @@ struct CliOpts {
   mut quote_lookahead : Bool
   mut max_repairs : Int32
   mut max_prose_buffer : Int32
+  mut max_input_len : Int32
+  mut max_depth : Int32
+  mut max_token_len : Int32
+  mut with_text : Bool
   mut max_loss : @mend.Exactness
   mut reject_ambiguous : Bool
   mut retry_hint : Bool
@@ -54,6 +58,12 @@ fn help_text() -> String {
     "  --skip-prose        跳过 JSON 之前的说明文字", "  --quote-lookahead   启用引号歧义前瞻",
     "  --max-repairs N     最多记录多少条修复记录，默认 10000", "  --max-prose-buffer N",
     "                      跳过前言时最多缓存多少码元供结束回放（默认 65536），超过则按原样拒绝",
+    "  --max-input-len N   最多接受多少码元，超过报 E021 资源限制（默认 67108864）",
+    "  --max-depth N       容器最大嵌套深度，超过报 E020（默认 512）",
+    "  --max-token-len N   单个 token 的最大码元数，超过报 E022（默认 16777216）",
+    "                      这三个上限默认与库一致；调用方可以自己收紧或放宽",
+    "  --with-text         与 explain --json 同用时在计划里带上修复后的全文",
+    "                      （默认不带：机器可读的计划已有 value，全文是重复的一份）",
     "  --max-loss LEVEL    精确度上限：exact、cosmetic 或 lossy，默认 lossy",
     "  --for-execution     执行档：等价于 --max-loss cosmetic --reject-ambiguous",
     "  --reject-ambiguous  拒绝有第二种读法的修复，报 E011（退出码 5）",
@@ -114,6 +124,10 @@ fn parse_uint(s : String) -> Int32? {
 ///|
 /// Decimal non-negative integer with an explicit upper bound. `--chunk` and
 /// `--step` count code units, so their bound is far above 64.
+///
+/// The accumulator is checked against `limit` *before* each multiply, so a long
+/// digit string cannot wrap the accumulator and be accepted as a negative
+/// number.
 fn parse_uint_up_to(s : String, limit : Int32) -> Int32? {
   if s.length() == 0 {
     return None
@@ -124,10 +138,11 @@ fn parse_uint_up_to(s : String, limit : Int32) -> Int32? {
     if c < 0x30 || c > 0x39 {
       return None
     }
-    n = n * 10 + (c - 0x30)
-    if n > limit {
+    let digit = c - 0x30
+    if n > (limit - digit) / 10 {
       return None
     }
+    n = n * 10 + digit
   }
   Some(n)
 }
@@ -168,9 +183,39 @@ fn parse_max_loss(s : String) -> @mend.Exactness? {
 }
 
 ///|
+/// Payload of `--name value` or `--name=value`: the value and how many extra
+/// arguments it consumed. `name_len` is the length of the bare flag name.
+fn flag_value(
+  a : String,
+  name_len : Int32,
+  args : Array[String],
+  i : Int32,
+) -> (String, Int32) {
+  if a.length() == name_len {
+    if i + 1 < args.length() {
+      (args[i + 1], 1)
+    } else {
+      ("", 1)
+    }
+  } else {
+    (slice_tail(a, name_len + 1), 0)
+  }
+}
+
+///|
+/// Parse a payload as a positive code-unit limit.
+fn limit_of(value : String, limit : Int32) -> Int32? {
+  match parse_uint_up_to(value, limit) {
+    Some(n) => if n <= 0 { None } else { Some(n) }
+    None => None
+  }
+}
+
+///|
 /// Parse `args` (including argv[0]). The second element is a usage error, or
 /// the empty string.
 fn parse_args(args : Array[String]) -> (CliOpts, String) {
+  let d = @mend.Options::default()
   let o : CliOpts = {
     strict: false,
     check: false,
@@ -181,6 +226,10 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
     quote_lookahead: false,
     max_repairs: 10000,
     max_prose_buffer: 65536,
+    max_input_len: d.max_input_len,
+    max_depth: d.max_depth,
+    max_token_len: d.max_token_len,
+    with_text: false,
     max_loss: @mend.Lossy,
     reject_ambiguous: false,
     retry_hint: false,
@@ -437,6 +486,38 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
               "`"
         }
       }
+    } else if a == "--max-input-len" || a.has_prefix("--max-input-len=") {
+      let (value, extra) = flag_value(a, 15, args, i)
+      consumed = extra
+      match limit_of(value, 2147483647) {
+        Some(n) => o.max_input_len = n
+        None =>
+          err = "--max-input-len 需要正整数字面量，收到 `" +
+            value +
+            "`"
+      }
+    } else if a == "--max-depth" || a.has_prefix("--max-depth=") {
+      let (value, extra) = flag_value(a, 11, args, i)
+      consumed = extra
+      match limit_of(value, 1048576) {
+        Some(n) => o.max_depth = n
+        None =>
+          err = "--max-depth 需要 1 到 1048576 之间的整数，收到 `" +
+            value +
+            "`"
+      }
+    } else if a == "--max-token-len" || a.has_prefix("--max-token-len=") {
+      let (value, extra) = flag_value(a, 15, args, i)
+      consumed = extra
+      match limit_of(value, 2147483647) {
+        Some(n) => o.max_token_len = n
+        None =>
+          err = "--max-token-len 需要正整数字面量，收到 `" +
+            value +
+            "`"
+      }
+    } else if a == "--with-text" {
+      o.with_text = true
     } else if a == "--indent" || a.has_prefix("--indent=") {
       let value = if a == "--indent" {
         consumed = 1

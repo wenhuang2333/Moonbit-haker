@@ -5,6 +5,63 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布]
+
+结构性重构，目标是把三处「每条变更都付一次代价」的设计换成按 token / 按记录付费。
+默认行为不变：`repair`、`parse`、`snapshot`、`drain_deltas` 的输出与 1.2.0 逐字节
+一致，只有新增 API 与一处 CLI 默认值变化。下一版为 **1.3.0**（GitHub）↔ **0.10.0**
+（mooncakes）——新增公开 API 属 minor，不能当 1.2.x 补丁。
+
+### 引擎
+
+- **当前位置与历史位置分离**：`Engine.pos : Position` 改为 `pos_offset/pos_line/
+  pos_column` 三个整数，新增 `Engine::position()`（冻结成不可变 `Position`）与
+  `Engine::advance(u)`。`step_*` 处理器不再携带 `p : Position`，只在真正要记录
+  或报错时冻结一次：token 起点、错误点、逗号位置等历史位置仍是冻结的 `Position`，
+  绝不与当前游标共享。改造前每个码元构造一个 `Position`，JS 后端因此每码元分配
+  一个对象、代价随活跃堆增长；现在每 token / 每记录才物化一次。
+- **增量日志改为紧凑数组 + 路径 arena**：`DeltaLog` 用并行数组（`ops`/`ats`/
+  `path_ids`/`values`/`texts`）记录变更，路径是 arena 索引而不是一份
+  `Array[PathSegment]` 拷贝。`Frame.path` 改为 `Frame.path_id`。arena 本身也是
+  三组并行数组（不是「结构体数组」——带引用字段的结构体逐元素装箱，正是这里要
+  避免的分配），并带一个内容寻址的单条缓存：同一个槽位的两三次查询（开标记、
+  drain 时的文本刷新、落地）只做几次整数比较，不重复建节点。
+- **新增 `DeltaView` 与零路径分配的消费入口**：`PartialParser::drain_views()`、
+  `PartialParser::for_each_delta()`、`PartialParser::delta_path()`、
+  `PartialParser::delta_pointer()`。视图只带 `op`/`at`/`value`/`text`，路径留在
+  arena 里按需解码；不调用 `delta_path` 就没有路径分配。`drain_deltas()` 保留为
+  兼容层并如实标注其成本（每条变更物化一个 `Delta` 与一份路径数组），
+  `NFR-PERF-05` 的口径改登记到新入口上。
+- **`Options::validate` 未变**：`collect_deltas` 仍拒绝 `KeepFirst` 与
+  `TrimToValid`——这两条是流本身的语义约束，与记录方式无关。
+- **不变量保持**：输出合法 JSON、修复幂等、任意分块与一次性结果一致、任何字节
+  序列不 panic，全部由原有 212 条测试 × 4 后端继续强制；新增的两条测试断言
+  「视图流与物化流逐字段、逐路径解码一致」。
+
+### CLI
+
+- **资源上限可在命令行设置**：新增 `--max-input-len`、`--max-depth`、
+  `--max-token-len`（默认值与库一致：67108864 / 512 / 16777216）。此前只有库
+  API 能改这三个上限，命令行用户既收不紧也放不宽。数值解析改为「乘之前先比较」，
+  超长数字串不再回绕成负数被当成合法上限。
+- **`explain --json` 默认不再带修复后全文**：机器可读的计划里已有 `value`，全文
+  是第二份整篇拷贝；需要时用新增的 `--with-text` 取回。文本块的 `Repaired:` 行
+  不受影响，`serve`/MCP 的 `analyze` 契约也不变。
+- **命令行断言 94 → 102 条**：新增三个上限的「咬得住 / 放得开 / 越界拒绝 /
+  回绕拒绝」四条与 `--with-text` 正反两条。
+
+### 基准与门禁
+
+- **`median5_single`**：`median5` 按「一轮里的调用次数」摊时间，一旦单次调用超过
+  100 ms 就退化成**一个样本**——正是扩张性检查用的大输入，一次 GC 停顿就能独占
+  结果。新增按「五次独立单次调用的中位数」测量，JS `4n/2n` 由在 2.2–2.8 之间跳动
+  变为稳定值。
+- **新增 `tests/scaling.sh`**：把 `NFR-PERF-01`（native `2n/n`、`4n/2n` ≤ 2.3）与
+  `NFR-PERF-05`（native `for_each_delta` 开销 ≤ 160% 基线）做成 `best-of-N` 比值
+  棘轮，进 CI。比值按「先取各尺寸的最小时间、再求比」归约，而不是取比值的最小值：
+  两个被干扰放大的时间算出的比值可以落到 1 以下，取最小值会把这个假象留下来。
+  JS 的扩张性只打印、不做硬门禁（共享 runner 的 GC 时序抖动大于要防的回归）。
+
 ## [1.2.0] - 2026-10-25
 
 Minor 版：修 89 条可修标量根误拒、把 `R011` 按值是否改变分级、加速 CLI 字节路径与
