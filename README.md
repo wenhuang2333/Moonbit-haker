@@ -1,6 +1,6 @@
 # JSONMend — LLM JSON 的执行门（流式修复 · 纯 MoonBit）
 
-**版本**：1.1.1
+**版本**：1.2.0
 
 [![CI](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml/badge.svg)](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](code/LICENSE)
@@ -309,17 +309,17 @@ Suggested retry:
 | 大模型适配器 | 9 个夹具 × 双 provider | 通过（含截断、转义切分、代理对切分、多路并发） |
 | 公共面与选项测试 | 22 个 R 码 + 12 个 E 码逐一检查 | 通过 |
 | 四个后端 | wasm-gc / native / JS / wasm（每条命令跑同一套测试） | 各 210/210 通过（共 840 次） |
-| 命令行冒烟 | 89 项断言（含全部退出码、`llm` 子命令、`explain` 的 14 条、6 项版本一致性与前言缓冲诊断） | 通过 |
+| 命令行冒烟 | 94 项断言（含全部退出码、`llm` 子命令、`explain` 的 14 条、6 项版本一致性与前言缓冲诊断） | 通过 |
 | **协议一致性** | 19 组 `serve`/MCP 用例（`tests/conformance/`） | 全部通过；Linux/macOS/Windows 同一套 |
 | **npm 包** | 10 个 Node 测试（ESM/CJS/类型/无 stdout 污染） | 通过 |
 | **Python 包** | 17 个测试（客户端 11 + HTTP 6） | 通过 |
 | 示例对照 | 6 组输入/期望输出 | 逐字节一致 |
 | 差分测试（对照 `jsonrepair`、`json-repair`） | 402 条用例 | 202 处差异**全部有文档解释**，未解释 0 |
-| 库代码行覆盖率 | 根包 3551/3777、`llm` 包 337/391 | 94.0% / 86.2%；覆盖率门按「有未覆盖行的文件」口径计 3818/4098 = **93.2%** |
+| 库代码行覆盖率 | 根包 3585/3817、`llm` 包 337/391 | 93.9% / 86.2%；覆盖率门按「有未覆盖行的文件」口径计 3852/4138 = **93.1%** |
 | **独立第三方语料** | `nst/JSONTestSuite` 318 文件（MIT，commit `1ef36fa0`） | `y_` 误修 **2/95**（重复键），`n_` 有效值 **165/188** vs `json_repair` 166、`jsonrepair` 144 |
 | **骨架就绪表** | 10 个场景 | 6 个存在落差（最小 713‰、最大 **908‰**：992‰ 语法就绪 vs 84‰ 答案定稿），4 个两层同时到达末尾 |
 | **安全层单价** | 4.9 KiB × 20 次调用 | `analyze` = `repair` 的 1.00–1.03×，`for_agent` 1.33–1.36×，`+schema` 1.38–1.45× |
-| 吞吐（Apple M5，release，单机多次观测中位数） | 合法 JSON native 41–42 MB/s、JS 22–39 MB/s | 达标（阈值 20 / 5） |
+| 吞吐（Apple M5，release，单机多次观测中位数） | 合法 JSON native 38–40 MB/s、JS 19–33 MB/s | 达标（阈值 20 / 5） |
 | 首个可见值（流式） | 工具调用文档中位数 | 文档长度的 **0.7%** 处即可渲染，并同时拿到标签 |
 | 命令行吞吐（12.95 MB 输入，64 KB 分块） | 28.0 MB/s（峰值 RSS 231 MB） | 单次 `fread` 取代逐字节读后 +21% |
 | wasm-gc 产物体积 | 103.5 KiB | 达标（上限 150 KB） |
@@ -352,9 +352,14 @@ python3 tests/gen_llm_fixtures.py --check
 
 ![演示页](static/demo/screenshot.png)
 
-`static/demo/index.html` 由 MoonBit 的 JavaScript 后端产物直接驱动（`code/examples/web/main.mbt`
-把 `repair` / `report` / `snapshot` / `live` 注册到页面），**页面里没有第二份实现**。直接用浏览器打开即可，
-无需服务器；重新生成 bundle 用 `bash static/demo/build.sh`。
+`static/demo/index.html` 是交互控制台，由 MoonBit 的 JavaScript 后端产物直接驱动
+（`code/examples/web/main.mbt` 把 `repair` / `report` / `snapshot` / `live` /
+`analyze` / `analyze_json_schema` / `analyze_prose` / `readiness` / `deltas`
+注册到页面），**页面里没有第二份实现**，所有结论都在浏览器里现场算出来。七个板块：
+修复工作台（五种安全档位、skip-prose、计划 / 记录 / 回灌提示）、执行门（骨架声明与工具
+`inputSchema`）、流式重放（delta 事件流与 `syntax` / `schema` / `settled` 三个数字）、
+22 条修复规则一键试用与自检、字段就绪曲线、CLI 命令构造器与退出码表、六种接入方式。
+直接用浏览器打开即可，无需服务器；重新生成 bundle 用 `bash static/demo/build.sh`。
 
 [`static/demo/live.html`](static/demo/live.html) 是实时演示：四条真实场景逐帧重放
 （截断 → 重试 → 执行；歧义 → 重试 → 执行；唯一读法直接执行；长尾流 19% 处即可停），
@@ -481,11 +486,10 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 - **`Options::for_text()` 是预设，不是无树引擎**：关掉记录与缩进，但值仍然建树。
 - FR-16 事件/回调接口已实现为 `feed_with` / `feed_bytes_with`（`drain_deltas` 的薄封装，0.4.0）：回调在 `feed` 内运行，回调里不能再次喂同一个解析器。
 - 快照的 `incomplete_number` / `pending_key` 策略只影响快照，最终结果仍会补全。
-- **增量流的吞吐是基线耗时的 1.39–1.51 倍（native）**，未达到「不低于基线 90%」的目标：每条变更都要分配一个 `Delta` 与一份路径数组，见本地文档 `code/docs/BENCHMARK.md`。
-- 前言重放只在「干净」时被接受，所以**在取到值之前需要任何修复的文档仍被拒绝**：标量根前言（`Sure!\n42`）**有意拒绝**（前言在哪里结束不可判定），
-  围栏**标量**根在 `skip_prose` 打开时（`explain` 的默认）被拒，而 `repair` 默认关闭它、接受并输出 `true`；围栏对象/数组两种模式都通过。
-- 前言超过 `max_prose_buffer`（64 KiB）时引擎放弃重放并回退 `E002`（`prose_overflow`），CLI 的全文回退仍能救回。
-- 峰值内存约为输入的 18 倍（12.95 MB 对象数组 → 231.4 MB；纯数组 20 倍；单个 10 MB 字符串 38 倍），未达到「≤ 4 倍输入」的预算：只要保留完整 `Json` 树就无法达标，需要「只产出文本、不建树」的模式。
+- **增量流的吞吐是基线耗时的 1.39–1.51 倍（native）**，未达到「不低于基线 90%」的目标：每条变更都要分配一个 `Delta` 与一份路径数组，见本地文档 `code/docs/BENCHMARK.md`。1.1.x 起文本尾巴用游标推进，长字符串按小块 drain 不再重扫前缀（1 MiB / 64 码元：374 ms → 201 ms），但每条 `Delta` 的分配未变。
+- 前言重放接受「整段前言被读成一个值且没有 `R016`」的结果，所以 `'ok'`、`True`、`+1`、`42 // done`、围栏标量都能恢复；标量根前言（`Sure!\n42`）仍**有意拒绝**（前言在哪里结束不可判定），以标量开头但带尾巴的 `42 is the answer` 也仍拒绝（`R016`）。
+- 前言超过 `max_prose_buffer`（64 KiB）时引擎放弃重放并回退 `E002`（`prose_overflow`），CLI 的全文回退在「整份输入本来就是合法 JSON」时补位。
+- 峰值内存按 `repair()` 计约为输入的 13.7 倍（12.95 MB → 177.9 MB），未达到「≤ 4 倍输入」的预算：只要保留完整 `Json` 树就无法达标，需要「只产出文本、不建树」的模式。`--check` 不渲染输出，峰值降到 7.6 倍；CLI 的 ASCII 批量路径把单个 10 MB 字符串从 38 倍降到 9.4 倍。
 - 命令行仅支持 native 后端；解析器实例非线程安全，每个流用一个实例。
 - **`serve` / `mcp` 每条连接只支持一个 `watch` 流和一个 `llm` 流**（`hello` 的 `streams: 1`）：足够覆盖一次工具调用，但并发多流需要多条连接或等 v2 的 `stream_id`。
 - **JSON Schema 桥是受控子集**：`$ref`、`oneOf`/`anyOf`/`allOf`、`not`、`format`、`patternProperties`、`minItems` 等会报 `E070`；`additionalProperties: false` 也拒绝（骨架不封闭对象），`true` 是 no-op。
@@ -545,7 +549,8 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 
 | GitHub tag | mooncakes.io | 关系 |
 | --- | --- | --- |
-| `v1.1.1` | `0.8.1` | **当前发布**：补丁版；修好 1.1.0 的 Release 漏挂 Windows 产物，并补齐演示资产与文档数字。mooncakes 现阶段只接受 `0.x.y`：patch 位一一对应，minor 位按发布序顺延（`1.0.x` ↔ `0.7.x`、`1.1.x` ↔ `0.8.x`） |
+| `v1.2.0` | `0.9.0` | **当前发布**：minor 版；修 89 条标量根误拒、按值分级 `R011`、加速 CLI 字节路径与增量文本 drain，并让默认路径执行 `--schema`。mooncakes 现阶段只接受 `0.x.y`：patch 位一一对应，minor 位按发布序顺延（`1.0.x` ↔ `0.7.x`、`1.1.x` ↔ `0.8.x`、`1.2.x` ↔ `0.9.x`）。**0.9.0 尚未上传 mooncakes**，此处登记的是对应号 |
+| `v1.1.1` | `0.8.1` | 补丁版；修好 1.1.0 的 Release 漏挂 Windows 产物，并补齐演示资产与文档数字 |
 | `v1.1.0` | `0.8.0` | 接入面首发（`serve`/`mcp`/npm/pip/Windows + JSON Schema 桥）。**已知缺陷**：Release 的 `SHA256SUMS` 列了 `jsonmend-windows-x86_64.exe`，但该文件没有随 Release 发布——见 `code/CHANGELOG.md` 1.1.1 一节 |
 | `v1.0.0` | `0.7.0` | 公开面冻结版；行为与 1.1.x 相同（除新增接入面） |
 | `v1.0.1` | `0.7.1` | 补丁通道（未使用） |
@@ -557,10 +562,11 @@ Release 的资产是否与 `SHA256SUMS` 一致，由 `code/tests/release_assets.
 
 ## 路线图
 
-- **GitHub**：tag `v0.5.0` … `v1.1.1` 已推送，`release.yml` 产出 **6 个资产**：Linux CLI、macOS arm64 CLI、**Windows CLI**、wasm 探针、演示 bundle 与 `SHA256SUMS`（`SHA256SUMS` 覆盖全部 5 个产物，附件集合与它由 `code/tests/release_assets.sh` 校验）。
-- **mooncakes.io**：`zhanshishan/jsonmend` 0.3.0 … **0.8.1** 已发布。1.1.1 在 mooncakes 上对应
-  **0.8.1**（平台只接受 `0.x.y`），两者除版本字符串外逐字节相同。
-  1.0.0/1.1.x 的 GitHub 标签代表「公开面已冻结」的承诺；渠道对应关系见
+- **GitHub**：tag `v0.5.0` … `v1.2.0` 已推送，`release.yml` 产出 **6 个资产**：Linux CLI、macOS arm64 CLI、**Windows CLI**、wasm 探针、演示 bundle 与 `SHA256SUMS`（`SHA256SUMS` 覆盖全部 5 个产物，附件集合与它由 `code/tests/release_assets.sh` 校验）。
+- **mooncakes.io**：`zhanshishan/jsonmend` 0.3.0 … **0.8.1** 已发布。1.2.0 在 mooncakes 上对应
+  **0.9.0**（平台只接受 `0.x.y`），两者除版本字符串外逐字节相同；**0.9.0 尚未上传**，
+  发布后本段与渠道表会同步。
+  1.0.0/1.1.x/1.2.x 的 GitHub 标签代表「公开面已冻结」的承诺；渠道对应关系见
   `产品文档-精简版.md` §11.1c（本地文档）。
   0.7.0 的 CLI 上传路径曾失败（`receiver is gone`），改用同一份已校验产物 POST 官方端点成功；
   0.8.0/0.8.1 的复测结果见 `code/docs/REPRODUCE.md` §7.1。
@@ -574,10 +580,9 @@ Release 的资产是否与 `SHA256SUMS` 一致，由 `code/tests/release_assets.
 - **紧凑增量缓冲**：把 `op|path|text` 编码进一块可复用的缓冲，只在 `drain_deltas()` 时物化，
   目标是把增量流的开销从 1.39–1.51 倍压到 1.10 倍以内（NFR-PERF-05）。
 - **JSONL 流式模式**：每行闭合即交付一个值（对方是整批缓冲，这里是增量）。
-- ~~围栏里的标量根~~：**不是独立缺陷**。前言重放只在「干净」时才被接受，所以**在取到值之前需要任何修复的文档仍被拒绝**；
-  围栏对象/数组不受影响，围栏**标量**根在 `skip_prose` 打开时（`explain` 的默认）被拒，而 `repair` 默认关闭它、接受并输出 `true`（见本地文档 `产品文档-精简版.md` §11 现行问题清单）。
-  两种 `E002` 现在可区分：缓冲溢出时 CLI 在 stderr 打一行提示，库调用方读 `PartialParser::prose_overflow()`，
-  也可用 `--max-prose-buffer N` 调大；完整规则与例表见本地文档 `code/docs/ERRORS.md` 的 E002 条目。
+- ~~围栏里的标量根~~：**已在 1.1.x 解决**。前言重放现在接受「一个值 + 无 `R016`」的结果，围栏标量、单引号标量、`True` 等可修标量根都能恢复；
+  以标量开头但带尾巴的前言（`42 is the answer`）仍拒绝。缓冲溢出时可读 `PartialParser::prose_overflow()`，
+  或用 `--max-prose-buffer N` 调大；完整规则与例表见本地文档 `code/docs/ERRORS.md` 的 E002 条目。
 - JS 后端位置分配重构：把「当前位置」（三个 `Int32`）与「历史位置」（不可变 `Position`）分离，
   消除每码元一次的对象分配，把 4n/2n 从 2.4–2.5 拉回 ≤2.3。
 - 快照增量子树缓存（`Frame.dirty` 已存在但未使用）：把「每 1024 码元一次快照」的 2 倍惩罚降下来。
@@ -613,10 +618,10 @@ repaired, complete what is truncated, and record every change with a code and a 
 - **Guarantees enforced by property tests**: output is always valid JSON, repair is idempotent,
   and streaming is chunk invariant.
 - **Verified**: 126 golden cases, 21 streaming cases, 8 property groups × 400 cases,
-  210 tests on each of wasm-gc / native / JS / wasm, 85 CLI assertions (including six that keep every
+  210 tests on each of wasm-gc / native / JS / wasm, 94 CLI assertions (including six that keep every
   stated version equal to `moon.mod`), and a 402-case differential
   corpus against `jsonrepair` and `json-repair` in which every one of the 202 divergences has
-  a documented cause. Library line coverage 94.0%; native throughput 41–43 MB/s
+  a documented cause. Library line coverage 93.9%; native throughput 38–40 MB/s
   (single-machine observation; CI reruns the same benchmark script).
 - **Live demo**: <https://wenhuang2333.github.io/Moonbit-haker/live.html> (four scenarios, frame
   by frame, with the three readiness numbers and the refusal-to-retry panel).

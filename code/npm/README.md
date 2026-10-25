@@ -63,7 +63,7 @@ the MoonBit `PartialParser`.
 ## Scope
 
 This package wraps the same bundle as `static/demo/jsonmend.js`; it does not
-reimplement the engine. The version is the engine version (`1.1.0`). The
+reimplement the engine. The version is the engine version (`1.2.0`). The
 MoonBit package on mooncakes is `0.8.0` because the registry currently accepts
 only `0.x.y`; the bytes are the same.
 

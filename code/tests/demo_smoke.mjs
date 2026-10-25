@@ -41,8 +41,19 @@ new Function(readFileSync(bundle, "utf8"))();
 
 check(
   "bundle registers the demo and library entry points",
-  ["live", "repair", "report", "snapshot", "repair_opts", "analyze", "analyze_json_schema"]
-    .every((name) => typeof registered[name] === "function"),
+  [
+    "live",
+    "repair",
+    "report",
+    "snapshot",
+    "repair_opts",
+    "analyze",
+    "analyze_json_schema",
+    "analyze_prose",
+    "analyze_json_schema_prose",
+    "readiness",
+    "deltas",
+  ].every((name) => typeof registered[name] === "function"),
   true,
 );
 
@@ -76,6 +87,26 @@ check(
   JSON.parse(registered.analyze_json_schema("{}", "agent", JSON.stringify({ $ref: "#/x" }))).error.includes("E070"),
   true,
 );
+check(
+  "analyze refuses a malformed declaration instead of ignoring it",
+  JSON.parse(registered.analyze('{"a":1}', "agent", "{!query:string")).error.includes("E070"),
+  true,
+);
+check(
+  "analyze_prose refuses a malformed declaration",
+  JSON.parse(registered.analyze_prose('{"a":1}', "agent", "{!query:string")).error.includes("E070"),
+  true,
+);
+check(
+  "live refuses a malformed declaration",
+  JSON.parse(registered.live('{"a":1}', 7, "{!query:string")).error.includes("E070"),
+  true,
+);
+check(
+  "an empty declaration still means no skeleton",
+  JSON.parse(registered.analyze('{"a":1}', "agent", "")).schema_total,
+  0,
+);
 
 const report = registered.report("{'a':1,}");
 check("report lists one line per repair", report.split("\n").length, 2);
@@ -107,6 +138,64 @@ check("live frame checks the skeleton", done.schema.schema_satisfied + "/" + don
 const refused = JSON.parse(registered.live('{"words":["a" "b"]}', 19, "{!words:[string]}"));
 check("live frame carries the gate decision for a refusal", refused.schema.decision, "ambiguous");
 check("live frame carries a retry prompt for a refusal", refused.schema.retry.code, "E011");
+
+// The workbench's skip-prose switch: the same analysis with `skip_prose` on.
+const prose = JSON.parse(
+  registered.analyze_prose("Sure! Here is the JSON you asked for:\n{\"a\":1}", "permissive", ""),
+);
+check("analyze_prose accepts a prose prelude", prose.decision, "cosmetic_repair");
+check("analyze_prose records the prelude", prose.repairs[0].rule, "R021");
+check(
+  "analyze_prose leaves the default profile alone",
+  JSON.parse(registered.analyze("Sure! Here is the JSON you asked for:\n{\"a\":1}", "permissive", "")).error.code,
+  "E002",
+);
+check(
+  "analyze_json_schema_prose reads a tool declaration through prose",
+  JSON.parse(
+    registered.analyze_json_schema_prose(
+      "Here you go:\n{\"query\":\"x\"}",
+      "agent",
+      JSON.stringify({ type: "object", properties: { query: { type: "string" } }, required: ["query"] }),
+    ),
+  ).schema_satisfied,
+  1,
+);
+
+// The readiness curve: three document numbers plus the event stream.
+const readiness = JSON.parse(
+  registered.readiness(
+    JSON.stringify({ query: "MoonBit", limit: 10, note: "x".repeat(60) }),
+    "{!query:string,!limit:integer}",
+  ),
+);
+check("readiness reports the syntax fraction", readiness.syntax_permille, 990);
+check("readiness reports the settled fraction", readiness.settled_permille, 300);
+check("readiness reports the schema fraction", readiness.schema_permille, 300);
+check("readiness reports the verdict", readiness.verdict.ok, true);
+check(
+  "readiness lists the field events",
+  readiness.events.map((e) => e.event.kind + ":" + e.event.path).join(","),
+  "field_ready:query,field_ready:limit,root_ready:",
+);
+check("readiness lists the per-field positions", readiness.fields.length, 3);
+const rejected = JSON.parse(
+  registered.readiness('{"limit":-1,"tail":"' + "y".repeat(80) + '"}', "{!limit:integer(minimum:0)}"),
+);
+check("readiness publishes a value rejection", rejected.events[0].event.kind, "field_rejected");
+check("readiness publishes the mismatch", rejected.verdict.mismatched[0].expected, "integer >= 0");
+check("readiness refuses at the digit", rejected.settled_permille, 117);
+
+// The delta stream: what a streaming consumer subscribes to.
+const deltas = JSON.parse(registered.deltas('{"query":"Mo"}', 12));
+check("deltas reports how much was consumed", deltas.consumed, 12);
+check("deltas reports the whole stream", deltas.total, 14);
+check(
+  "deltas uses JSON Pointer paths",
+  deltas.deltas.map((d) => d.op + d.pointer).join(" "),
+  "set set/query append_text/query",
+);
+check("deltas carries the appended text", deltas.deltas[2].text, "Mo");
 
 if (failures > 0) {
   console.log(`\n${failures} demo check(s) failed`);

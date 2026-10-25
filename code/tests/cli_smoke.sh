@@ -89,6 +89,11 @@ STDIN='{"a":1} {"b":2}' check "multi-root default" 0 '{"a":1}' "R016" -- --repor
 STDIN='{"a":1} {"b":2}' check "--multi-root array" 0 '[{"a":1},{"b":2}]' "" -- --multi-root array
 STDIN='Here you go: {"a":1}' check "prose rejected by default" 3 '' "E002" --
 STDIN='Here you go: {"a":1}' check "--skip-prose" 0 '{"a":1}' "R021 1:1 leading prose skipped" -- --skip-prose --report
+STDIN="'ok'" check "skip-prose recovers a repaired scalar root" 0 '"ok"' "" -- --skip-prose
+STDIN='42 is the answer' check "skip-prose still refuses scalar-prefixed prose" 3 '' "E002" -- --skip-prose
+STDIN='+1' check "value-preserving number is executable" 0 '1' "" -- --for-execution
+STDIN='1e' check "incomplete exponent stays lossy" 5 '' "E010" -- --for-execution
+STDIN='{"n":1.5}' check "schema gates the default repair path" 5 '' "schema not satisfied" -- --schema '{!n:integer}'
 STDIN='{"a":"b' check "unclosed string" 0 '{"a":"b"}' "R010" -- --report
 STDIN='[1,null,tru]' check "literal completion" 0 '[1,null,true]' "R012" -- --report
 

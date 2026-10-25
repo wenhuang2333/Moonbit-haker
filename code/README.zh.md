@@ -5,10 +5,10 @@
 | | |
 | --- | --- |
 | 模块 | `zhanshishan/jsonmend` |
-| 版本 | 1.1.1 |
+| 版本 | 1.2.0 |
 | 许可证 | Apache-2.0 |
 | 首选后端 | `wasm`（同时支持 `native` 与 `js`） |
-| 预编译产物 | [Release `v1.1.1`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.1.1)——Linux / macOS arm64 / Windows 三个 CLI、wasm 探针、浏览器包、`SHA256SUMS` |
+| 预编译产物 | [Release `v1.2.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.2.0)——Linux / macOS arm64 / Windows 三个 CLI、wasm 探针、浏览器包、`SHA256SUMS` |
 | 发行渠道 | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
 
 ## 特性
@@ -200,7 +200,7 @@ execute : {"city":["Paris","London"]}
 | `strip_fence` | `Bool` | `true` | 去除 Markdown 代码围栏（`R001`）。 |
 | `collect_repairs` | `Bool` | `true` | 是否把修复写入结果；为 `false` 时数组为空，但严格模式与关闭的规则仍会抛错。 |
 | `want_text` | `Bool` | `true` | 是否在 `FinalResult.text` 中生成修复文本；为 `false` 时只构建 `Json` 值。 |
-| `skip_prose` | `Bool` | `false` | 跳过第一个 `{` 或 `[` 之前的说明文字（`R021`）。 |
+| `skip_prose` | `Bool` | `false` | 跳过第一个 `{` 或 `[` 之前的说明文字（`R021`）。没有容器根时由 `finish` 回放整个前言作为标量根：值不变的修复接受，丢弃尾部内容（`R016`）不接受。 |
 | `quote_lookahead` | `Bool` | `false` | 对缺逗号的字符串序列启用引号歧义前瞻（`R003`）。 |
 | `multi_root` | `MultiRoot` | `KeepFirst` | 根值之后内容的策略：`KeepFirst`、`AsArray` 或 `AsError`（`R016`）。 |
 | `rules` | `RuleSet` | `RuleSet::all()` | 逐规则开关；关闭某条规则会让对应编号抛 `E010`。 |
@@ -228,7 +228,7 @@ execute : {"city":["Paris","London"]}
 | `R008` | `FillNull` | 为缺失的值补 `null`。 |
 | `R009` | `CloseContainer` | 补全未闭合的数组或对象。 |
 | `R010` | `CloseString` | 补全未闭合的字符串。 |
-| `R011` | `FixNumber` | 规范化或裁剪数字。 |
+| `R011` | `FixNumber` | 规范化或裁剪数字。值不变的写法（`+1`、`01`、`1.`、`.5`、`-01`）是 `Cosmetic`；残缺指数（`1e`、`1e+`）是 `Lossy`。 |
 | `R012` | `ConvertLiteral` | 转换或补全字面量（`True`、`None`、`undefined`、非有限数等）。 |
 | `R013` | `EscapeControl` | 转义字符串中的控制字符。 |
 | `R014` | `FixEscape` | 修正非法或残缺的转义、孤立代理项。 |
@@ -457,8 +457,8 @@ moon run bench --target native --release
 moon run bench --target js --release
 ```
 
-在 2026 年的 Apple 芯片笔记本上，native 实测合法 JSON 35–39 MB/s、瑕疵 JSON
-72–80 MB/s、单个超长字符串 594 MB/s，js 实测 19–49 MB/s（同机多次观测的中位数，
+在 2026 年的 Apple 芯片笔记本上，native 实测合法 JSON 38–40 MB/s、瑕疵 JSON
+74–80 MB/s、单个超长字符串 832 MB/s，js 实测 19–33 MB/s（同机多次观测的中位数，
 不同轮次可差 ±15%）。0.4.0 补了**产品场景**的基准：4 KB 工具调用文档按 3 码元分块，
 摊还 0.08 µs/feed、36 MB/s，290 000 次 feed 里没有一次达到毫秒时钟分辨率；
 按 1 MB 文档口径打开 `collect_deltas` 的代价仍是基线的 **1.40–1.46 倍**（**已知未达标项**，
@@ -474,14 +474,17 @@ moon run bench --target js --release
 
 这些数字是观测值而非承诺：吞吐取决于输入形态、分块大小、快照频率与工具链版本。
 内存（12.95 MB 输入实测 177.9 MB，13.7 倍；同机 Node 10.6 倍、Python 14.3 倍，
-因此「4 倍」目标本身不现实）与产物大小另行测量。完整方法、表格与决策记录见
-`docs/BENCHMARK.md`，复现步骤见 `docs/REPRODUCE.md`。
+因此「4 倍」目标本身不现实）与产物大小另行测量。1.1.x 的 CLI 在 `feed_bytes`
+里批量合并 ASCII 字符串、并让 `--check` 跳过渲染：单个 10 MB 字符串从
+398.6 MB / 38.0 倍降到 99.0 MB / 9.4 倍，13 MB 对象数组的 `--check` 从
+219.5 MB / 16.9 倍降到 146.2 MB / 11.3 倍；`repair()` 仍要输出文本，保持 13.7 倍。
+完整方法、表格与决策记录见 `docs/BENCHMARK.md`，复现步骤见 `docs/REPRODUCE.md`。
 
 ## 已知限制
 
 - **`semantic_readiness` 与 `repair` 同量级但仍是整篇调用。** 约 116–170 µs / 4.9 KiB（`repair` 的 1.1–1.7 倍）：`Delta.at` 折算免掉了重放采样。要放进每次 `feed` 的循环，仍然用增量观察器（`SemanticWatcher` / `FieldTracker`），它不做快照。
 - **骨架约束只覆盖值约束子集。** 0.7.0 起支持 `minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern`（字符类子集），但没有 `$ref` / `oneOf` / `format`（见 `docs/SPEC.md`）。
-- **覆盖率最低项在 `llm` 包**：`llm/text.mbt` 66/91 = 72.5%（文本流的错误分支只覆盖一半）；根包最低为 `api.mbt` 86/95 = 90.5%，`plan.mbt` 已达 489/526 = 93.0%。
+- **覆盖率最低项在 `llm` 包**：`llm/text.mbt` 66/91 = 72.5%（文本流的错误分支只覆盖一半）；根包最低为 `api.mbt` 85/95 = 89.5%，`plan.mbt` 已达 489/526 = 93.0%。
 - **live 演示页只重放四个固定场景。** 它是「同一份数据在两种读法下的对比」演示，不是任意流的通用可视化；浏览器验证在本机用 Playwright 做过，CI 只跑帧级断言。
 - **`Options::for_text()` 是预设，不是无树引擎。** 它关掉修复记录与缩进，但值仍然建树；真正的「只出文本」模式（`want_value = false`）仍未实现，见路线图。
 - **`FR-16` 事件接口是薄封装。** `feed_with` / `feed_bytes_with` 只是 `drain_deltas` 的迭代器形式，回调在 `feed` 内部运行，因此回调里不能再次喂同一个解析器；它不是独立的推送接口（理由见 `docs/ONEPAGE.md`）。
@@ -494,12 +497,12 @@ moon run bench --target js --release
 - **`Json` 数字遵循 core 的表示。** 超大整数在树中可能损失精度，但修复后的文本保留数字原文。
 - **`quote_lookahead` 默认关闭。** 开启后，缺少逗号的连续字符串会偏向解释为字符串内容。
 - **修复记录受 `max_repairs` 限制（默认 10000 条）。** 超出后仍会继续修复但不再记录，结果把 `repairs_truncated` 置为 `true`，CLI 另向标准错误打印提示。
-- **增量补丁流正确但不便宜。** 每次变更都要分配一个 `Delta` 与一份路径数组，1 MB 文档产生约 19.5 万条记录，耗时是基线的 1.40–1.46 倍。在 agent 场景（4 KB、3 码元分块）整条流是 0.115 ms，开销不在关键路径上，因此紧凑缓冲不再是下一步要做的。
-- **`--skip-prose` 只能跳过容器根之前的说明文字。** 标量根带前缀文字（`Sure!\n42`）仍会抛 `E002`。
-- **内存是输入的 13.7 倍（12.95 MB 输入实测 177.9 MB）。** 同一份输入上 Node `JSON.parse` 是 10.6 倍、Python `json.loads` 是 14.3 倍：**「≤ 4 倍」对任何建树实现都不现实**，包括 Node 自己。要达到只能做「只直出文本、不建树」的模式（`docs/MEMORY.md`）。
+- **增量补丁流正确但不便宜。** 每次变更都要分配一个 `Delta` 与一份路径数组，1 MB 文档产生约 19.5 万条记录，耗时是基线的 1.40–1.46 倍。文本尾巴现在用游标推进，长字符串按小块 drain 不再重扫前缀（1 MiB / 64 码元：374 ms → 201 ms）；每条 `Delta` 的分配未变。在 agent 场景（4 KB、3 码元分块）整条流是 0.115 ms，开销不在关键路径上，因此紧凑缓冲不再是下一步要做的。
+- **`--skip-prose` 能恢复裸标量根，但不能恢复「前言 + 标量」。** `'ok'`、`True`、`+1`、`42 // done` 与围栏 `42` 都能恢复；`Sure!\n42` 仍抛 `E002`，带尾巴的 `42 is the answer` 也仍拒绝。
+- **`repair()` 的内存是输入的 13.7 倍（12.95 MB 输入实测 177.9 MB）。** 同一份输入上 Node `JSON.parse` 是 10.6 倍、Python `json.loads` 是 14.3 倍：**「≤ 4 倍」对任何建树实现都不现实**，包括 Node 自己。`--check` 不渲染输出，峰值 7.6 倍；CLI 的字节快路径把 10 MB 单字符串从 38 倍降到 9.4 倍。要达到 4 倍仍需「只直出文本、不建树」的模式（`docs/MEMORY.md`）。
 - **单次 feed 的 p99 只能给上界。** 运行时 `@env.now()` 是毫秒分辨率、也没有分配计数，所以场景基准报告的是摊还 µs/feed 与「没有一次 feed 达到毫秒分辨率」的计数（`docs/BENCHMARK.md`）。
 - **字段就绪曲线只覆盖顶层成员。** 嵌套成员（`{"arguments":{…}}`）要等容器闭合才就绪；曲线成本约 1.8 ms/KiB，且全字段早停的节省在扁平记录上构造性地≈0。
-- **文本模式默认不跳前言。** `--skip-prose` 只从 `{` 或 `[` 开始取值，标量根（`0`、`42`、`false`）会被当成前言跳过，所以默认关闭；前言加标量根（`Sure!\n42`）仍会抛 `E002`。
+- **文本模式默认不跳前言。** `--skip-prose` 从 `{` 或 `[` 开始取值，标量根由 `finish` 回放恢复；前言加标量根（`Sure!\n42`）仍会抛 `E002`，因为前言在哪里结束不可判定。
 - **JS 后端仍会为每个码元分配一个 `Position`。** n/2n/4n 比值因此会到 2.3–2.8（阈值 2.3）；绝对吞吐远高于 5 MB/s 下限，因此记录为决策而不是立即修。
 - **解析器实例非线程安全。** 每个输入流应使用独立实例。
 

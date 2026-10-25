@@ -23,12 +23,14 @@ output as well:
 
 * `/usr/bin/time -l` (macOS) or `-v` (Linux) gives the process peak RSS. Python
   additionally gives `tracemalloc`, which is exact for its own allocation.
-* No CLI arm is truly streaming. Every path in `cmd/jsonmend` calls `read_all`,
-  which builds the whole input as a `StringBuilder` before any parser sees it,
-  so each peak includes at least the input text, the decoded `String`, and the
-  value tree. The difference between the arms is the *marginal* cost of the
-  plan, the event log or the rendered output — not a demonstration that a
-  mode avoids the tree.
+* The default `repair` / `--check` path streams 64 KiB chunks from `fread`
+  straight into `PartialParser::feed_bytes`, so it never holds the whole input
+  as a second `String`. `explain`, `readiness`, `batch`, and `llm` still call
+  `read_all`, so their peaks include the whole input text as well. The default
+  path keeps a 1 MiB prefix for error snippets; the streamed chunks themselves
+  are not retained. The difference between arms is the *marginal* cost of the
+  plan, the event log or the rendered output — not a demonstration that a mode
+  avoids the tree.
 
 The MoonBit *core* `@json.parse` is not measured separately: core has no file
 reading entry point and this library deliberately does not expose one, so the
@@ -196,9 +198,9 @@ def main() -> int:
             },
             {
                 "mode": "streaming feed",
-                "what": "分块喂入 64 KiB（--chunk 65536）",
+                "what": "默认 64 KiB 分块（主路径，渲染输出）",
                 "metric": "峰值工作集（峰值 RSS）",
-                "argv": [args.cli, "--chunk", "65536", path],
+                "argv": [args.cli, path],
                 "input": actual,
             },
             {
@@ -228,10 +230,11 @@ def main() -> int:
                 m["peak"] = peak
                 m["note"] = m.pop("extra", "")
 
-        # A diagnostic, not a mode: the same tree without rendering the value.
-        # The difference against `repair()` is the cost of the output; what is
-        # left is the value tree plus the input buffer, and core's own share is
-        # not separable from that (see section 4).
+        # A diagnostic, not a mode: `--check` sets `want_text: false`, so it
+        # builds the same tree without rendering the value. The difference
+        # against `repair()` is the cost of the output; what is left is the
+        # value tree plus the string parts, and core's own share is not
+        # separable from that (see section 4).
         check_peak, _out, _rc, _err = peak_rss([args.cli, "--check", path])
 
         # The no-tree mode does not exist yet: it is reported as a declared
@@ -390,12 +393,12 @@ def main() -> int:
             lines.append(
                 "不能回答：MoonBit **core** 的 `@json.parse` 单独占多少。core 没有文件读取入口，"
                 "本库也刻意不暴露一个。能测到的最接近的两臂是 `--check`（建树、不渲染，本次 %.1f MB）"
-                "与 `repair()`（建树并渲染，本次 %.1f MB）：两者在噪声内相同，"
-                "所以峰值不是输出渲染造成的，而是「输入缓冲 + 值树」；"
+                "与 `repair()`（建树并渲染，本次 %.1f MB）：`--check` 现在设置 `want_text=false`，"
+                "所以两者之差是**渲染输出**的边际成本；剩下的 %.1f MB 是值树与字符串 parts，"
                 "core 自身在这部分里占多少，从这两个数里拆不出来。"
                 "要一个精确的 core 基线，需要给基准程序加一个 FFI 读文件入口"
                 "（core 自身没有文件读取 API）。"
-                % (check_peak, modes[0]["peak"])
+                % (check_peak, modes[0]["peak"], check_peak)
             )
         else:
             lines.append(
@@ -405,11 +408,11 @@ def main() -> int:
             )
         lines.append("")
         lines.append(
-            "也不能回答「有没有真正的流式 I/O」：`cmd/jsonmend` 的每一条路径都先调用 `read_all`"
-            "（`code/cmd/jsonmend/batch.mbt`），把整份输入建成一个 `StringBuilder`，之后才交给解析器。"
-            "所以每个峰值都至少包含输入文本、解码后的 `String` 与值树；"
-            "`streaming feed`、`readiness`、`llm --text` 三行之间以及它们与 `repair` 之间的差额，"
-            "是计划、事件表与渲染输出的**边际**成本，而不是「流式模式省掉了值树」的证据。"
+            "默认的 `repair` / `--check` 主路径按 64 KiB `fread` 分块，每块直接 `feed_bytes` 给解析器，"
+            "不把整份输入读成第二个 `String`；`explain`、`readiness`、`batch` 与 `llm` 仍然 `read_all`，"
+            "所以这些臂的峰值还包含整份输入文本。主路径保留 1 MiB 前缀用于错误摘录，"
+            "分块本身不保留。`streaming feed`、`readiness`、`llm --text` 三行之间以及它们与 `repair` "
+            "之间的差额，是计划、事件表与渲染输出的**边际**成本，而不是「流式模式省掉了值树」的证据。"
         )
         lines.append("")
         lines.append(

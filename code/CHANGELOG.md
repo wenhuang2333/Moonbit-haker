@@ -5,7 +5,45 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布] - 2026-10-25
+## [1.2.0] - 2026-10-25
+
+Minor 版：修 89 条可修标量根误拒、把 `R011` 按值是否改变分级、加速 CLI 字节路径与
+增量文本 drain，并让默认 `repair`/`--check` 路径执行 `--schema`。
+
+### 引擎与 CLI
+
+- **`skip_prose` 的标量根重放不再要求「零修复」**：重放接受「整段前言被读成
+  一个值且没有 `R016`」的结果。`'ok'`、`True`、`+1`、`42 // done`、围栏标量
+  等可修标量根从 `E002` 变为正常结果；`42 is the answer`、`None of the above`
+  这类带尾巴的前言仍拒绝。注册语料上，宽松档 + `--skip-prose` 的拒绝从
+  **91/1200 降到 0/1200**，执行档 + `--skip-prose` 从 343/1200 降到
+  **254/1200**（回到设计内的 gate 拒绝，不再有 91 条 E002）。重放中的
+  `E010`/`E011`/资源上限错误现在直接上抛，而不是被原始 `E002` 掩盖。
+- **`R011` 按值是否改变分级**：`+1`→`1`、`01`→`1`、`1.`→`1`、`.5`→`0.5`、
+  `-01`→`-1` 是 `Info`/`Cosmetic`，执行档不再拒绝；`1e`/`1e+`→`1` 仍按
+  `Warning`/`Lossy`（确实丢了指数）。`RepairCode::severity()` 的静态表不变，
+  级别在调用点显式传入。
+- **`feed_bytes` 增加 ASCII 串内容批量路径**：字符串内的连续 ASCII 码元一次
+  `push_run`，不再每码元 `parts.push(c.to_string())`。CLI 的 10 MB 单字符串
+  `--check` 从 398.6 MB / 38.0× 降到 99.0 MB / 9.4×；13 MB 对象数组
+  `--check` 从 219.5 MB / 16.9× 降到 146.2 MB / 11.3×。UTF-8 校验、E040
+  绝对偏移、`max_input_len`/`max_token_len` 与分块不变性保持不变。
+- **`--check` 不再渲染修复文本**（`want_text=false`）：它只需要记录与退出码。
+  `repair` 仍然输出文本，13.7× 的引擎基线不变。
+- **增量文本 drain 改为持久游标**：`delta_text_tail` 不再每次从 `parts` 头部
+  重扫。1 MiB 字符串按 64 码元分块、每块 drain 一次，从 374 ms 降到 201 ms；
+  `AppendText` 契约与重放测试不变。
+- **默认 `repair`/`--check` 路径执行 `--schema`**：以前只有 `explain` 与
+  `readiness` 读取骨架，`jsonmend --schema '{!n:integer}'` 对 `{"n":1.5}` 会
+  静默输出；现在不满足时打印 missing/mismatch 并以退出码 5 拒绝。
+- **测试与门禁**：`moon test` 仍为 210/210（新增断言扩展现有测试块）；
+  `cli_smoke.sh` 从 89 条增加到 **94 条**，覆盖标量根、R011、`--schema` 默认
+  路径与「带尾巴的前言仍拒绝」。
+- **兼容性注记**：`skip_prose` 与 `R011` 的两处改动会改变既有判定（前者把
+  可修标量根从 `E002` 变为结果，后者把值不变的数字写法从 `Lossy` 变为
+  `Cosmetic`）；`--schema` 在默认路径上从「静默忽略」变为「拒绝」。这些是
+  行为变化而不是纯内部重构，正式发布时应按 **minor** 处理（1.2.0），不要
+  当作 1.1.2 补丁。
 
 ### 仓库
 

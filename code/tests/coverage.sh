@@ -97,6 +97,10 @@ trap 'rm -f "$SUMMARY_FILE" "$ROWS_FILE" "$LOG_FILE" "$CUR_FILE" "$NEW_FILE" "$O
 echo "coverage.sh: moon coverage clean"
 moon coverage clean >/dev/null 2>&1
 
+# A coverage file embeds each module's counter length. A stale file from an
+# earlier build makes `moon coverage report` fail with "counter length
+# mismatch"; remove them before the run. They are generated under `_build`.
+find "$ROOT/_build" -name 'moonbit_coverage_*' -delete 2>/dev/null || true
 echo "coverage.sh: moon test --enable-coverage"
 if ! moon test --enable-coverage >"$LOG_FILE" 2>&1; then
   echo "coverage.sh: the instrumented test run failed:" >&2

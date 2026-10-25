@@ -59,10 +59,52 @@ fn ex_code(s : String) -> RepairCode? {
 }
 
 ///|
+/// The number token that starts at `off`, for deciding R011's context-dependent
+/// severity. Digits and the characters a number lexeme may contain are
+/// included; anything else ends the token.
+fn number_token_at(input : String, off : Int32) -> String {
+  let n = input.length()
+  let start = if off < 0 { 0 } else if off > n { n } else { off }
+  let mut i = start
+  while i < n {
+    let c = input.at(i).to_int()
+    if (c >= 0x30 && c <= 0x39) ||
+      c == 0x2B ||
+      c == 0x2D ||
+      c == 0x2E ||
+      c == 0x65 ||
+      c == 0x45 {
+      i = i + 1
+    } else {
+      break
+    }
+  }
+  input[start:i].to_owned()
+}
+
+///|
+/// R011's severity depends on the token: a value-preserving rewrite is
+/// `Info`, an incomplete exponent (or a numberless token dropped in an array)
+/// is `Warning`.
+fn r011_severity(input : String, off : Int32) -> Severity {
+  let token = number_token_at(input, off)
+  match normalize_number(token) {
+    Some(txt) =>
+      if txt != token && number_repair_loses_value(token) {
+        Warning
+      } else {
+        Info
+      }
+    None => Warning
+  }
+}
+
+///|
 /// Exactness implied by a `R005@6,R006@7` string, using the static severity of
 /// each code. `QuoteBareWord` is the one code whose severity depends on its
-/// slot, so a value-position occurrence is expected to be riskier.
-fn ex_from_recs(recs : String) -> Exactness {
+/// slot, so a value-position occurrence is expected to be riskier; `FixNumber`
+/// depends on the token at the recorded offset.
+fn ex_from_recs(input : String, recs : String) -> Exactness {
   if recs == "" {
     return Exact
   }
@@ -73,8 +115,21 @@ fn ex_from_recs(recs : String) -> Exactness {
       Some(i) => item[0:i].to_owned()
       None => item.to_owned()
     }
+    let off = match cut {
+      Some(i) => @string.parse_int(item[i + 1:].to_owned()) catch { _ => -1 }
+      None => -1
+    }
     match ex_code(name) {
-      Some(c) => if c.severity() is Warning { lossy = true }
+      Some(c) => {
+        let sev = if c is FixNumber {
+          r011_severity(input, off)
+        } else {
+          c.severity()
+        }
+        if sev is Warning {
+          lossy = true
+        }
+      }
       None => ()
     }
   }
@@ -107,6 +162,16 @@ test "exactness of hand written cases" {
     ("tru", Options::default(), "lossy"),
     ("[1,2,3,]", Options::default(), "cosmetic"),
     ("{\"a\":1,\"a\":2}", Options::default(), "lossy"),
+    // A number rewrite that keeps the value is notation; a trimmed exponent
+    // is information loss.
+    ("+1", Options::default(), "cosmetic"),
+    ("01", Options::default(), "cosmetic"),
+    ("1.", Options::default(), "cosmetic"),
+    (".5", Options::default(), "cosmetic"),
+    ("-01", Options::default(), "cosmetic"),
+    ("1e", Options::default(), "lossy"),
+    ("1e+", Options::default(), "lossy"),
+    ("1e5", Options::default(), "exact"),
   ]
   for (input, opts, want) in table {
     let o = ex_run(input, opts)
@@ -144,7 +209,7 @@ test "every golden case carries the exactness its records imply" {
     }
     let o = ex_run(c.input, c.opts)
     if o.err == "" {
-      let want = ex_from_recs(c.recs)
+      let want = ex_from_recs(c.input, c.recs)
       let ok = o.exactness == want ||
         // The only documented divergence: a value-position bare word is
         // `Warning`, so the result is one level riskier than the static table
@@ -167,6 +232,15 @@ test "max_loss gates the result before it can be executed" {
   assert_eq(ex_run("{'a':1}", ex).err, "")
   assert_eq(ex_run("[1,,2]", ex).err, "")
   assert_eq(ex_run("[1 2]", ex).err, "")
+  // A number rewrite that keeps the value is notation, not loss.
+  assert_eq(ex_run("+1", ex).err, "")
+  assert_eq(ex_run("01", ex).err, "")
+  assert_eq(ex_run("1.", ex).err, "")
+  assert_eq(ex_run(".5", ex).err, "")
+  assert_eq(ex_run("-01", ex).err, "")
+  // An incomplete exponent does drop information.
+  assert_true(ex_run("1e", ex).err.contains("E010"), msg=ex_run("1e", ex).err)
+  assert_true(ex_run("1e+", ex).err.contains("E010"), msg=ex_run("1e+", ex).err)
   // ... rejects a repair that admits a second reading (FR-27) ...
   assert_true(
     ex_run("{\"mode\": fast}", ex).err.contains("E011"),

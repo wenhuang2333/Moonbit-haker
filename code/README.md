@@ -5,10 +5,10 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 | | |
 | --- | --- |
 | Module | `zhanshishan/jsonmend` |
-| Version | 1.1.1 |
+| Version | 1.2.0 |
 | License | Apache-2.0 |
 | Preferred target | `wasm` (also builds for `native` and `js`) |
-| Prebuilt binaries | [Release `v1.1.1`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.1.1) — Linux, macOS arm64 and Windows CLIs, wasm probe, browser bundle, `SHA256SUMS` |
+| Prebuilt binaries | [Release `v1.2.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.2.0) — Linux, macOS arm64 and Windows CLIs, wasm probe, browser bundle, `SHA256SUMS` |
 | Registry | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
 
 ## Features
@@ -207,7 +207,7 @@ Every field of `Options`. `@jsonmend.Options::default()` is the documented defau
 | `strip_fence` | `Bool` | `true` | Strip Markdown code fences (`R001`). |
 | `collect_repairs` | `Bool` | `true` | Record repairs in the result; when `false` the array stays empty, but strict mode and disabled rules still raise. |
 | `want_text` | `Bool` | `true` | Produce repaired text in `FinalResult.text`; when `false` only the `Json` value is built. |
-| `skip_prose` | `Bool` | `false` | Skip leading prose before the first `{` or `[` (`R021`). |
+| `skip_prose` | `Bool` | `false` | Skip leading prose before the first `{` or `[` (`R021`). With no container root, `finish` replays the prelude as a scalar root; a value-preserving repair is accepted, dropped trailing content (`R016`) is not. |
 | `quote_lookahead` | `Bool` | `false` | Enable quote-ambiguity lookahead for missing commas between strings (`R003`). |
 | `multi_root` | `MultiRoot` | `KeepFirst` | Policy for content after the first root value: `KeepFirst`, `AsArray`, or `AsError` (`R016`). |
 | `rules` | `RuleSet` | `RuleSet::all()` | Per-rule switches; disabling a rule makes that code raise `E010`. |
@@ -235,7 +235,7 @@ Every change is one record whose code is stable. The full dictionary, with examp
 | `R008` | `FillNull` | Fill `null` for a missing value. |
 | `R009` | `CloseContainer` | Close an unclosed array or object. |
 | `R010` | `CloseString` | Close an unclosed string. |
-| `R011` | `FixNumber` | Normalize or trim a number. |
+| `R011` | `FixNumber` | Normalize or trim a number. Value-preserving rewrites (`+1`, `01`, `1.`, `.5`, `-01`) are `Cosmetic`; a trimmed exponent (`1e`, `1e+`) is `Lossy`. |
 | `R012` | `ConvertLiteral` | Convert or complete a literal (`True`, `None`, `undefined`, non-finite values). |
 | `R013` | `EscapeControl` | Escape a control character inside a string. |
 | `R014` | `FixEscape` | Repair an invalid or truncated escape, or a lone surrogate. |
@@ -417,7 +417,7 @@ moon run examples/agent_loop --target native --release
 | Ground-truth evaluation (protocol frozen first) | 1200 cases (19 mutation families + 1 control × 60) | recovery **100.00%**, 0 mislabelled, 4/4 pre-registered criteria PASS |
 | Command line smoke (exit codes 0/1/2/3/4/5/70) | 62 assertions, 14 of them `explain` | pass |
 | Differential corpus against `jsonrepair` / `json-repair` | 402 cases | 202 divergences, all documented, 0 unexplained |
-| Line coverage of the library | 3551/3777 lines (root), 337/391 (`llm`) | 94.0% / 86.2% (`moon coverage` cannot instrument the `cmd` package, which calls `quit()`; within the root package the weakest file is `api.mbt` at 90.5%, and across the library `llm/text.mbt` at 72.5%) |
+| Line coverage of the library | 3585/3817 lines (root), 337/391 (`llm`) | 93.9% / 86.2% (`moon coverage` cannot instrument the `cmd` package, which calls `quit()`; within the root package the weakest file is `api.mbt` at 89.5%, and across the library `llm/text.mbt` at 72.5%) |
 
 Cross-backend results are identical: 129 tests pass on wasm-gc, native and
 JavaScript. `.github/workflows/ci.yml` runs the same commands on every push, so
@@ -455,12 +455,16 @@ moon run bench --target native --release
 moon run bench --target js --release
 ```
 
-On a 2026 Apple-silicon laptop, native measured 41–42 MB/s (valid), 83–87 MB/s
-(flawed) and 594 MB/s (one long string); js measured 22–39 MB/s. The same run
+On a 2026 Apple-silicon laptop, native measured 38–40 MB/s (valid), 74–80 MB/s
+(flawed) and 832 MB/s (one long string); js measured 19–33 MB/s. The same run
 also measures two things that matter for streaming: the **first visible value**
 appears at 0.7% of the document (median over tool-call payloads), and enabling
 `collect_deltas` costs 1.40–1.46 × the baseline time on a 1 MB document — that number is a
-**known shortfall**, not a win.
+**known shortfall**, not a win. The 1.1.x CLI batches plain ASCII string runs in
+`feed_bytes` and skips rendering for `--check`: a 10 MB single string drops from
+398.6 MB / 38.0 × to 99.0 MB / 9.4 ×, and a 13 MB object array `--check` from
+219.5 MB / 16.9 × to 146.2 MB / 11.3 ×. `repair()` still renders the output and
+remains at 13.7 ×.
 
 These figures are observations, not a guarantee: throughput depends on the input
 shape, chunk size, snapshot frequency, and the toolchain version. Memory
@@ -482,12 +486,12 @@ separately from the process. The full method, tables and decision records are in
 - **`Json` numbers follow the core representation.** Very large integers may lose precision in the tree, although the repaired text keeps the number's original digits.
 - **`quote_lookahead` is off by default.** When enabled, a sequence of strings that is missing commas is biased toward being read as string content.
 - **Repair records are capped by `max_repairs` (default 10000).** Further repairs are applied but not recorded, and the result sets `repairs_truncated`; the CLI prints a note to standard error.
-- **Incremental deltas are correct but not cheap.** Each change allocates one `Delta` plus a path array, so a 1 MB document produces ~195 000 records and takes 1.40–1.46 × the baseline. In the agent scenario (4 KB, 3-code-unit chunks) the whole stream is 0.115 ms, so the overhead is not on the critical path and the compact buffer is no longer the next thing to build.
-- **`--skip-prose` only skips prose before a container root.** A scalar root preceded by prose (`Sure!\n42`) still raises `E002`.
-- **Memory is 13.7 × the input** (177.9 MB for a 12.95 MB document). On the same input Node's `JSON.parse` is 10.6 × and Python's `json.loads` is 14.3 ×, so **a 4 × budget is not realistic for any tree-building parser**, Node included. Reaching it requires a "render text without building a tree" mode ([docs/MEMORY.md](docs/MEMORY.md)).
+- **Incremental deltas are correct but not cheap.** Each change allocates one `Delta` plus a path array, so a 1 MB document produces ~195 000 records and takes 1.40–1.46 × the baseline. The text tail now uses a cursor, so draining a long string in small chunks no longer rescans the prefix (1 MiB / 64-code-unit chunks: 374 ms → 201 ms); the per-delta allocation is unchanged. In the agent scenario (4 KB, 3-code-unit chunks) the whole stream is 0.115 ms, so the overhead is not on the critical path and the compact buffer is no longer the next thing to build.
+- **`--skip-prose` recovers a bare scalar root, not prose followed by one.** `'ok'`, `True`, `+1`, `42 // done` and a fenced `42` are recovered; prose followed by a scalar (`Sure!\n42`) still raises `E002`, and so does a scalar with a tail (`42 is the answer`).
+- **Memory is 13.7 × the input for `repair()`** (177.9 MB for a 12.95 MB document). On the same input Node's `JSON.parse` is 10.6 × and Python's `json.loads` is 14.3 ×, so **a 4 × budget is not realistic for any tree-building parser**, Node included. `--check` skips rendering and peaks at 7.6 ×; the byte fast path cuts a 10 MB single string from 38 × to 9.4 ×. Reaching 4 × still requires a "render text without building a tree" mode ([docs/MEMORY.md](docs/MEMORY.md)).
 - **The per-feed p99 is only an upper bound.** The runtime clock is millisecond-resolution and exposes no allocation counter, so the scenario benchmark reports an amortised µs/feed plus the count of feeds that reached the clock resolution (`docs/BENCHMARK.md`).
 - **The readiness curve covers top-level members only.** A nested member (`{"arguments":{…}}`) is ready only when its container closes; the curve costs ~1.8 ms/KiB, and early stopping saves ~0 on flat records by construction.
-- **Text mode does not skip prose by default.** `--skip-prose` starts a value only at `{` or `[`, so it would skip a scalar root (`0`, `42`, `false`); prose followed by a scalar root still raises `E002`.
+- **Text mode does not skip prose by default.** `--skip-prose` starts a value at `{` or `[`, and a scalar root is recovered by the `finish` replay; prose followed by a scalar root still raises `E002` because where the prose ends is undecidable.
 - **The JS backend still allocates one `Position` per code unit.** The n/2n/4n ratio therefore reaches 2.3–2.8 against a 2.3 target. Absolute throughput is well above the 5 MB/s floor, so this is recorded as a decision rather than fixed.
 - **Parser instances are not thread-safe.** Use one instance per input stream.
 

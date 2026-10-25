@@ -115,15 +115,19 @@ pub fn repair_opts_text(input : String, policy : String) -> String {
 
 ///|
 /// The full decision plan as JSON, with the library's declaration language.
+///
+/// A declaration that cannot be parsed is reported as `{"error": …}` instead of
+/// being silently replaced by `Schema::Any`: a page that showed "no skeleton"
+/// for a typo would be claiming the document passed a check that never ran.
 pub fn analyze_text(input : String, policy : String, schema : String) -> String {
   let opts = web_options(policy)
-  let plan = if schema == "" {
-    @mend.analyze(input, options=opts)
-  } else {
-    let s = @mend.Schema::parse(schema) catch { _ => @mend.Schema::Any }
-    @mend.analyze(input, options=opts, schema=s)
+  if schema == "" {
+    return @mend.analyze(input, options=opts).to_json()
   }
-  plan.to_json()
+  let s = @mend.Schema::parse(schema) catch {
+    e => return "{\"error\":\"" + escape(e.to_string()) + "\"}"
+  }
+  @mend.analyze(input, options=opts, schema=s).to_json()
 }
 
 ///|
@@ -152,6 +156,163 @@ pub fn analyze_json_schema_text(
 }
 
 ///|
+/// The same analysis with `skip_prose` on, for the chat-channel case where a
+/// model prefixes the arguments with a sentence. A malformed declaration is
+/// reported, not replaced by `Schema::Any` (see `analyze_text`).
+pub fn analyze_prose_text(
+  input : String,
+  policy : String,
+  schema : String,
+) -> String {
+  let opts = { ..web_options(policy), skip_prose: true, }
+  if schema == "" {
+    return @mend.analyze(input, options=opts).to_json()
+  }
+  let s = @mend.Schema::parse(schema) catch {
+    e => return "{\"error\":\"" + escape(e.to_string()) + "\"}"
+  }
+  @mend.analyze(input, options=opts, schema=s).to_json()
+}
+
+///|
+/// `analyze_json_schema` with `skip_prose` on.
+pub fn analyze_json_schema_prose_text(
+  input : String,
+  policy : String,
+  schema_json : String,
+) -> String {
+  let opts = { ..web_options(policy), skip_prose: true, }
+  let parsed = Some(@mend.Schema::parse_json_schema(schema_json)) catch {
+    e => return "{\"error\":\"" + escape(e.to_string()) + "\"}"
+  }
+  match parsed {
+    Some(s) => {
+      let plan = @mend.analyze(input, options=opts, schema=s)
+      plan.to_json()
+    }
+    None => "{\"error\":\"schema\"}"
+  }
+}
+
+///|
+/// The readiness curve as JSON: the three document-level numbers, every
+/// field-ready event with the input fraction it happened at, and the final
+/// verdict. One pass of the engine; the page only draws what came back.
+pub fn readiness_text(input : String, schema : String) -> String {
+  let s = @mend.Schema::parse(schema) catch {
+    e => return "{\"error\":\"" + escape(e.to_string()) + "\"}"
+  }
+  try {
+    let full = @mend.semantic_readiness(input, s)
+    let events = @mend.watch_readiness(input, s)
+    let fields = @mend.field_readiness(input)
+    let sb = StringBuilder()
+    sb.write_string("{\"syntax_permille\":")
+    sb.write_string(full.syntax_permille.to_string())
+    sb.write_string(",\"schema_permille\":")
+    sb.write_string(full.schema_permille.to_string())
+    sb.write_string(",\"settled_permille\":")
+    sb.write_string(full.settled_permille.to_string())
+    sb.write_string(",\"verdict\":{\"ok\":")
+    sb.write_string(full.verdict.ok.to_string())
+    sb.write_string(",\"total\":")
+    sb.write_string(full.verdict.total.to_string())
+    sb.write_string(",\"satisfied\":")
+    sb.write_string(full.verdict.satisfied.to_string())
+    sb.write_string(",\"missing\":[")
+    for i = 0; i < full.verdict.missing.length(); i = i + 1 {
+      if i > 0 {
+        sb.write_string(",")
+      }
+      sb.write_string("\"" + escape(full.verdict.missing[i]) + "\"")
+    }
+    sb.write_string("],\"mismatched\":[")
+    for i = 0; i < full.verdict.mismatched.length(); i = i + 1 {
+      if i > 0 {
+        sb.write_string(",")
+      }
+      let m = full.verdict.mismatched[i]
+      sb.write_string("{\"path\":\"")
+      sb.write_string(escape(m.path))
+      sb.write_string("\",\"expected\":\"")
+      sb.write_string(escape(m.expected))
+      sb.write_string("\",\"got\":\"")
+      sb.write_string(escape(m.got))
+      sb.write_string("\"}")
+    }
+    sb.write_string("]},\"events\":[")
+    for i = 0; i < events.length(); i = i + 1 {
+      if i > 0 {
+        sb.write_string(",")
+      }
+      sb.write_string("{\"permille\":")
+      sb.write_string(events[i].permille.to_string())
+      sb.write_string(",\"event\":")
+      sb.write_string(events[i].event.to_json())
+      sb.write_string("}")
+    }
+    sb.write_string("],\"fields\":[")
+    for i = 0; i < fields.length(); i = i + 1 {
+      if i > 0 {
+        sb.write_string(",")
+      }
+      sb.write_string("{\"key\":\"")
+      sb.write_string(escape(fields[i].key))
+      sb.write_string("\",\"permille\":")
+      sb.write_string(fields[i].permille.to_string())
+      sb.write_string("}")
+    }
+    sb.write_string("]}")
+    sb.to_string()
+  } catch {
+    e => "{\"error\":\"" + escape(e.to_string()) + "\"}"
+  }
+}
+
+///|
+/// The delta stream for the first `upto` code units: the protocol a consumer
+/// subscribes to instead of re-reading the document on every frame.
+pub fn deltas_text(input : String, upto : Int32) -> String {
+  let n = input.length()
+  let cap = if upto < 0 { 0 } else if upto > n { n } else { upto }
+  try {
+    let parser = @mend.PartialParser::new(options=@mend.Options::for_llm())
+    parser.feed(input[:cap].to_owned())
+    let ds = parser.drain_deltas()
+    let sb = StringBuilder()
+    sb.write_string("{\"consumed\":")
+    sb.write_string(cap.to_string())
+    sb.write_string(",\"total\":")
+    sb.write_string(n.to_string())
+    sb.write_string(",\"deltas\":[")
+    for i = 0; i < ds.length(); i = i + 1 {
+      if i > 0 {
+        sb.write_string(",")
+      }
+      let d = ds[i]
+      sb.write_string("{\"op\":\"")
+      sb.write_string(d.op.name())
+      sb.write_string("\",\"pointer\":\"")
+      sb.write_string(escape(d.pointer()))
+      sb.write_string("\",\"at\":")
+      sb.write_string(d.at.to_string())
+      sb.write_string(",\"value\":")
+      match d.value {
+        Some(v) => sb.write_string("\"" + escape(v.stringify()) + "\"")
+        None => sb.write_string("null")
+      }
+      sb.write_string(",\"text\":\"")
+      sb.write_string(escape(d.text))
+      sb.write_string("\"}")
+    }
+    sb.write_string("]}")
+    sb.to_string()
+  } catch {
+    e => "{\"error\":\"" + escape(e.to_string()) + "\"}"
+  }
+}
+
+///|
 /// The live streaming view: everything the browser page needs to render one
 /// frame of a model's output, as one JSON object (FR-35).
 ///
@@ -165,6 +326,15 @@ pub fn live_text(input : String, upto : Int32, schema : String) -> String {
   let n = input.length()
   let cap = if upto < 0 { 0 } else if upto > n { n } else { upto }
   let prefix = input[:cap].to_owned()
+  // A declaration that cannot be parsed is reported before any frame is built:
+  // the streaming page must not show "no skeleton" for a typo.
+  let declared : @mend.Schema? = if schema == "" {
+    None
+  } else {
+    Some(@mend.Schema::parse(schema)) catch {
+      e => return "{\"error\":\"" + escape(e.to_string()) + "\"}"
+    }
+  }
   try {
     // Two channels, on purpose. The display channel is permissive and follows
     // the value as it is written (`for_llm` turns on the delta stream); the
@@ -235,63 +405,65 @@ pub fn live_text(input : String, upto : Int32, schema : String) -> String {
     sb.write_string(keys.length().to_string())
     sb.write_string(",\"plan\":")
     sb.write_string(plan.to_json())
-    if schema != "" {
-      let sk = @mend.Schema::parse(schema) catch { _ => @mend.Schema::Any }
-      let plan2 = @mend.analyze(prefix, options=gate_opts, schema=sk)
-      sb.write_string(",\"schema\":")
-      sb.write_string(plan2.to_json())
-      // The document level readiness: two fractions of the *whole* stream. The
-      // page uses them to answer the interesting question, which is not
-      // "has the JSON ended" but "do I already have what I asked for".
-      let full = @mend.semantic_readiness(input, sk, step=1) catch {
-        _ =>
-          {
-            syntax_permille: -1,
-            settled_permille: -1,
-            schema_permille: -1,
-            step: 1,
-            verdict: {
-              total: 0,
-              satisfied: 0,
-              missing: [],
-              mismatched: [],
-              ok: false,
-            },
-          }
-      }
-      sb.write_string(",\"syntax_ready\":")
-      sb.write_string(full.syntax_permille.to_string())
-      sb.write_string(",\"schema_ready\":")
-      sb.write_string(full.schema_permille.to_string())
-      // `settled` is when every declared member became final, whether or not it
-      // had the declared kind. It is the number a streaming caller acts on: a
-      // wrong-typed argument settles early and the page can say "decided at
-      // N%, the answer is no" instead of "not ready until the end".
-      sb.write_string(",\"settled_ready\":")
-      sb.write_string(full.settled_permille.to_string())
-      sb.write_string(",\"declared\":")
-      sb.write_string(full.verdict.satisfied.to_string())
-      sb.write_string(",\"declared_total\":")
-      sb.write_string(full.verdict.total.to_string())
-      // Execution readiness: every member the caller declared is already final,
-      // and nothing seen so far had two readings. That is the moment the caller
-      // may stop the generation, which is usually long before the end. The
-      // arrival is `settled_permille`, not `schema_permille`: for an argument
-      // of the wrong kind the arrival is early and the answer is no, and the
-      // page should be able to stop there.
-      let reached = n == 0 || cap * 1000 / n >= full.settled_permille
-      sb.write_string(",\"execution_ready\":")
-      sb.write_string(
-        (reached && full.verdict.ok && !snap.ambiguous).to_string(),
-      )
-      sb.write_string(",\"missing\":[")
-      for i = 0; i < full.verdict.missing.length(); i = i + 1 {
-        if i > 0 {
-          sb.write_string(",")
+    match declared {
+      Some(sk) => {
+        let plan2 = @mend.analyze(prefix, options=gate_opts, schema=sk)
+        sb.write_string(",\"schema\":")
+        sb.write_string(plan2.to_json())
+        // The document level readiness: two fractions of the *whole* stream. The
+        // page uses them to answer the interesting question, which is not
+        // "has the JSON ended" but "do I already have what I asked for".
+        let full = @mend.semantic_readiness(input, sk, step=1) catch {
+          _ =>
+            {
+              syntax_permille: -1,
+              settled_permille: -1,
+              schema_permille: -1,
+              step: 1,
+              verdict: {
+                total: 0,
+                satisfied: 0,
+                missing: [],
+                mismatched: [],
+                ok: false,
+              },
+            }
         }
-        sb.write_string("\"" + escape(full.verdict.missing[i]) + "\"")
+        sb.write_string(",\"syntax_ready\":")
+        sb.write_string(full.syntax_permille.to_string())
+        sb.write_string(",\"schema_ready\":")
+        sb.write_string(full.schema_permille.to_string())
+        // `settled` is when every declared member became final, whether or not it
+        // had the declared kind. It is the number a streaming caller acts on: a
+        // wrong-typed argument settles early and the page can say "decided at
+        // N%, the answer is no" instead of "not ready until the end".
+        sb.write_string(",\"settled_ready\":")
+        sb.write_string(full.settled_permille.to_string())
+        sb.write_string(",\"declared\":")
+        sb.write_string(full.verdict.satisfied.to_string())
+        sb.write_string(",\"declared_total\":")
+        sb.write_string(full.verdict.total.to_string())
+        // Execution readiness: every member the caller declared is already final,
+        // and nothing seen so far had two readings. That is the moment the caller
+        // may stop the generation, which is usually long before the end. The
+        // arrival is `settled_permille`, not `schema_permille`: for an argument
+        // of the wrong kind the arrival is early and the answer is no, and the
+        // page should be able to stop there.
+        let reached = n == 0 || cap * 1000 / n >= full.settled_permille
+        sb.write_string(",\"execution_ready\":")
+        sb.write_string(
+          (reached && full.verdict.ok && !snap.ambiguous).to_string(),
+        )
+        sb.write_string(",\"missing\":[")
+        for i = 0; i < full.verdict.missing.length(); i = i + 1 {
+          if i > 0 {
+            sb.write_string(",")
+          }
+          sb.write_string("\"" + escape(full.verdict.missing[i]) + "\"")
+        }
+        sb.write_string("]")
       }
-      sb.write_string("]")
+      None => ()
     }
     sb.write_string("}")
     sb.to_string()
@@ -383,4 +555,8 @@ fn main {
   js_register2s("repair_opts", repair_opts_text)
   js_register3s("analyze", analyze_text)
   js_register3s("analyze_json_schema", analyze_json_schema_text)
+  js_register3s("analyze_prose", analyze_prose_text)
+  js_register3s("analyze_json_schema_prose", analyze_json_schema_prose_text)
+  js_register2s("readiness", readiness_text)
+  js_register2("deltas", deltas_text)
 }

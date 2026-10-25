@@ -1,135 +1,957 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>JSONMend 演示 — 流式 JSON 修复与部分解析</title>
+    <title>JSONMend 控制台 — 流式 JSON 修复与执行门</title>
+    <meta
+      name="description"
+      content="JSONMend 交互控制台：22 条修复规则、五种安全档位、执行门判定、流式部分解析、字段就绪曲线与 CLI。页面里每一次修复都由 MoonBit 编译出的 jsonmend.js 现场完成。"
+    />
     <style>
       :root {
-        color-scheme: light dark;
-        --fg: #1f2328;
-        --bg: #ffffff;
-        --muted: #6a737d;
-        --line: #d8dee4;
-        --accent: #0969da;
-        --code-bg: #f6f8fa;
+        color-scheme: light;
+        --bg: #f5f7fa;
+        --bg-glow: rgba(15, 118, 110, 0.07);
+        --panel: #ffffff;
+        --panel-2: #f9fbfc;
+        --code-bg: #f1f4f8;
+        --ink: #0e1620;
+        --muted: #5a6878;
+        --line: #e1e7ee;
+        --line-strong: #c8d3e0;
+        --accent: #0f766e;
+        --accent-ink: #0b5c56;
+        --accent-soft: rgba(15, 118, 110, 0.1);
+        --ok: #15803d;
+        --ok-soft: rgba(21, 128, 61, 0.11);
+        --warn: #b45309;
+        --warn-soft: rgba(180, 83, 9, 0.12);
+        --bad: #be123c;
+        --bad-soft: rgba(190, 18, 60, 0.11);
+        --info: #1d4ed8;
+        --info-soft: rgba(29, 78, 216, 0.1);
+        --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 14px 34px -22px rgba(16, 24, 40, 0.35);
+        --radius: 14px;
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --fg: #e6edf3;
-          --bg: #0d1117;
-          --muted: #8b949e;
-          --line: #30363d;
-          --accent: #58a6ff;
-          --code-bg: #161b22;
-        }
+      html[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #090d12;
+        --bg-glow: rgba(45, 212, 191, 0.08);
+        --panel: #111823;
+        --panel-2: #0d141d;
+        --code-bg: #0b1119;
+        --ink: #e6eef7;
+        --muted: #8da0b4;
+        --line: #1e2937;
+        --line-strong: #2d3b4d;
+        --accent: #2dd4bf;
+        --accent-ink: #5eead4;
+        --accent-soft: rgba(45, 212, 191, 0.12);
+        --ok: #4ade80;
+        --ok-soft: rgba(74, 222, 128, 0.14);
+        --warn: #fbbf24;
+        --warn-soft: rgba(251, 191, 36, 0.14);
+        --bad: #fb7185;
+        --bad-soft: rgba(251, 113, 133, 0.14);
+        --info: #93b4fd;
+        --info-soft: rgba(147, 180, 253, 0.14);
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 18px 40px -26px rgba(0, 0, 0, 0.85);
       }
-      * { box-sizing: border-box; }
+      *,
+      *::before,
+      *::after { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        * { transition: none !important; animation: none !important; }
+      }
       body {
         margin: 0;
-        padding: 2rem 1rem 4rem;
-        font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
-        color: var(--fg);
-        background: var(--bg);
+        background:
+          radial-gradient(1100px 420px at 12% -8%, var(--bg-glow), transparent 62%),
+          var(--bg);
+        color: var(--ink);
+        font: 15px/1.62 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+          "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
       }
-      main { max-width: 960px; margin: 0 auto; }
-      h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
-      h2 { font-size: 1.1rem; margin: 2rem 0 .5rem; }
-      p.lead { color: var(--muted); margin: 0 0 1.5rem; }
-      textarea {
-        width: 100%;
-        min-height: 8rem;
-        padding: .75rem;
-        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-        color: var(--fg);
-        background: var(--code-bg);
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        resize: vertical;
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      code, pre, kbd, .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+      :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+      .skip {
+        position: absolute; left: -9999px; top: 0; background: var(--panel);
+        padding: .5rem .8rem; border: 1px solid var(--accent); border-radius: 8px; z-index: 99;
       }
-      pre {
-        margin: .5rem 0 0;
-        padding: .75rem;
-        overflow-x: auto;
-        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-        background: var(--code-bg);
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        white-space: pre-wrap;
-        word-break: break-word;
+      .skip:focus { left: 12px; top: 12px; }
+      .wrap { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0 20px; }
+
+      header.top {
+        position: sticky; top: 0; z-index: 40;
+        border-bottom: 1px solid var(--line);
+        background: color-mix(in srgb, var(--bg) 86%, transparent);
+        backdrop-filter: saturate(1.4) blur(12px);
       }
+      .top-inner { display: flex; align-items: center; gap: 14px; padding: 9px 20px; max-width: 1180px; margin: 0 auto; }
+      .brand { display: flex; align-items: center; gap: 9px; color: inherit; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
+      .brand:hover { text-decoration: none; }
+      .brand .mark {
+        display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px;
+        background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 45%, #0ea5e9));
+        color: #fff; font: 700 13px/1 ui-monospace;
+      }
+      html[data-theme="dark"] .brand .mark { color: #04211e; }
+      .brand small { color: var(--muted); font-weight: 500; font-size: .78rem; }
+      nav.links { display: flex; gap: 2px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
+      nav.links::-webkit-scrollbar { display: none; }
+      nav.links a {
+        color: var(--muted); font-size: .84rem; padding: .3rem .55rem; border-radius: 8px;
+        border: 1px solid transparent; white-space: nowrap;
+      }
+      nav.links a:hover { color: var(--accent); background: var(--accent-soft); text-decoration: none; }
+      nav.links a.active { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
+      .top-actions { display: flex; align-items: center; gap: 8px; }
+      #engine-status {
+        display: inline-flex; align-items: center; gap: 6px; font: 11.5px/1 ui-monospace;
+        color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: .3rem .6rem; white-space: nowrap;
+      }
+      #engine-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+      body.no-engine #engine-status { color: var(--bad); border-color: var(--bad); }
+      body.no-engine #engine-status::before { background: var(--bad); box-shadow: 0 0 0 3px var(--bad-soft); }
+
       button {
-        margin: .5rem .5rem 0 0;
-        padding: .35rem .8rem;
-        font: inherit;
-        color: var(--fg);
-        background: var(--code-bg);
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        cursor: pointer;
+        font: inherit; font-size: .86rem; cursor: pointer; color: var(--ink);
+        background: var(--panel); border: 1px solid var(--line-strong); border-radius: 9px;
+        padding: .38rem .7rem; transition: border-color .15s, color .15s, background .15s;
       }
       button:hover { border-color: var(--accent); color: var(--accent); }
-      label { display: block; margin-top: 1rem; color: var(--muted); }
-      input[type="range"] { width: 100%; }
-      .grid { display: grid; gap: 1rem; grid-template-columns: 1fr; }
-      @media (min-width: 800px) { .grid { grid-template-columns: 1fr 1fr; } }
-      .label { color: var(--muted); font-size: .85rem; margin-top: .75rem; }
-      code { background: var(--code-bg); padding: .1rem .3rem; border-radius: 4px; }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+      html[data-theme="dark"] button.primary { color: #04211e; }
+      button.primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); color: #fff; }
+      html[data-theme="dark"] button.primary:hover { color: #04211e; }
+      button.ghost { background: transparent; border-color: var(--line); color: var(--muted); }
+      button[aria-pressed="true"], button.active {
+        border-color: var(--accent); color: var(--accent); background: var(--accent-soft);
+      }
+      button:disabled { opacity: .45; cursor: not-allowed; }
+      textarea, input[type="text"], input[type="search"], select {
+        width: 100%; max-width: 100%; color: var(--ink); background: var(--code-bg);
+        border: 1px solid var(--line); border-radius: 9px; padding: .5rem .6rem;
+        font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      textarea { resize: vertical; min-height: 7rem; }
+      select { cursor: pointer; }
+      .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      .row.tight { gap: 6px; }
+      .row label { color: var(--muted); font-size: .82rem; }
+      label.check { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .82rem; cursor: pointer; }
+      .hint { color: var(--muted); font-size: .8rem; margin: .5rem 0 0; }
+      .kbd {
+        font: 11px/1.6 ui-monospace; border: 1px solid var(--line-strong); border-bottom-width: 2px;
+        border-radius: 6px; padding: .05rem .35rem; color: var(--muted); background: var(--panel-2);
+      }
+
+      .hero { padding: 46px 0 10px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 28px; align-items: center; }
+      @media (max-width: 940px) { .hero { grid-template-columns: minmax(0, 1fr); gap: 20px; } }
+      .kicker { display: inline-flex; align-items: center; gap: 8px; font: 600 11.5px/1 ui-monospace; letter-spacing: .12em; color: var(--accent); text-transform: uppercase; }
+      .kicker::before { content: ""; width: 22px; height: 1px; background: var(--accent); }
+      .hero h1 { font-size: clamp(1.85rem, 4.2vw, 2.7rem); line-height: 1.12; letter-spacing: -.025em; margin: .7rem 0 .7rem; }
+      .hero h1 em { font-style: normal; color: var(--accent); }
+      .hero p.lead { color: var(--muted); font-size: 1.02rem; max-width: 60ch; margin: 0; }
+      .hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+      .hero-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); overflow: hidden; }
+      .hero-card .hc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
+      .hero-card .hc-head b { font: 600 11.5px/1 ui-monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+      .hero-card .hc-body { padding: 14px; display: grid; gap: 10px; }
+      .hero-card pre { max-height: 9.5rem; }
+
+      .stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-top: 30px; }
+      @media (max-width: 940px) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+      @media (max-width: 560px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      .stat { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 10px 12px; min-width: 0; }
+      .stat b { display: block; font: 700 1.08rem/1.35 ui-monospace; letter-spacing: -.01em; }
+      .stat span { color: var(--muted); font-size: .76rem; display: block; }
+
+      section.band { padding: 58px 0 4px; scroll-margin-top: 66px; }
+      .band-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+      .band-num { font: 700 12px/1 ui-monospace; letter-spacing: .16em; color: var(--accent); }
+      h2.band-title { font-size: 1.42rem; letter-spacing: -.02em; margin: 0; }
+      .band-tag { font: 11.5px/1.6 ui-monospace; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: .15rem .55rem; }
+      p.band-sub { color: var(--muted); margin: .55rem 0 18px; max-width: 82ch; }
+      .grid { display: grid; gap: 16px; }
+      .g-2 { grid-template-columns: minmax(0, 1.04fr) minmax(0, .96fr); }
+      .g-2r { grid-template-columns: minmax(0, .96fr) minmax(0, 1.04fr); }
+      @media (max-width: 940px) { .g-2, .g-2r { grid-template-columns: minmax(0, 1fr); } }
+      .stack { display: grid; gap: 16px; align-content: start; }
+      .card {
+        background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+        box-shadow: var(--shadow); padding: 15px; min-width: 0;
+      }
+      .card > h3 {
+        margin: 0 0 10px; font: 600 11.5px/1.4 ui-monospace; letter-spacing: .1em;
+        text-transform: uppercase; color: var(--muted);
+      }
+      .card > h3 + p.note { margin: -.4rem 0 .8rem; color: var(--muted); font-size: .82rem; }
+      .span-2 { grid-column: 1 / -1; }
+
+      pre {
+        margin: 0; padding: .7rem .8rem; background: var(--code-bg); border: 1px solid var(--line);
+        border-radius: 10px; font-size: 12.5px; line-height: 1.55; overflow: auto;
+        max-height: 22rem; white-space: pre-wrap; overflow-wrap: anywhere;
+      }
+      pre.tall { max-height: 30rem; }
+      pre.short { max-height: 11rem; }
+      pre.stream { max-height: 15rem; }
+      pre.stream.busy::after { content: "▌"; color: var(--accent); }
+      .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+      .pill {
+        display: inline-flex; align-items: center; gap: .35rem; padding: .14rem .52rem;
+        border-radius: 999px; font: 600 11.5px/1.7 ui-monospace; border: 1px solid var(--line);
+        color: var(--muted); white-space: nowrap;
+      }
+      a.pill:hover { text-decoration: none; border-color: var(--accent); color: var(--accent); }
+      .pill.ok { color: var(--ok); background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+      .pill.warn { color: var(--warn); background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+      .pill.bad { color: var(--bad); background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+      .pill.info { color: var(--info); background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 40%, transparent); }
+      .verdict {
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        padding: 11px 13px; border-radius: 12px; border: 1px solid var(--line);
+        background: var(--panel-2); font-weight: 650; min-height: 3rem;
+      }
+      .verdict.ok { color: var(--ok); background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 42%, transparent); }
+      .verdict.warn { color: var(--warn); background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 42%, transparent); }
+      .verdict.bad { color: var(--bad); background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 42%, transparent); }
+      .verdict .sub { color: var(--muted); font-weight: 400; font-size: .82rem; }
+      .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 8px; }
+      .kv > div { border: 1px solid var(--line); border-radius: 10px; padding: .45rem .6rem; background: var(--panel-2); min-width: 0; }
+      .kv dt { color: var(--muted); font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; }
+      .kv dd { margin: .15rem 0 0; font: 600 13px/1.5 ui-monospace; overflow-wrap: anywhere; }
+      .meta { color: var(--muted); font-size: .82rem; margin: .6rem 0 0; }
+      .retry { border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); background: var(--warn-soft); border-radius: 12px; padding: 10px 12px; }
+      .retry h4 { margin: 0 0 6px; font: 600 11.5px/1.4 ui-monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--warn); }
+      .retry pre { background: color-mix(in srgb, var(--panel) 70%, transparent); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
+      .error-box { border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent); background: var(--bad-soft); border-radius: 12px; padding: 10px 12px; color: var(--bad); font-size: .88rem; }
+      [hidden] { display: none !important; }
+
+      .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+      .tabs button { font-size: .82rem; }
+
+      .table-wrap { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: auto; max-width: 100%; }
+      table { border-collapse: collapse; width: 100%; font-size: 13px; }
+      th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      th {
+        position: sticky; top: 0; z-index: 1; background: var(--panel-2);
+        font: 600 11px/1.6 ui-monospace; letter-spacing: .07em; text-transform: uppercase; color: var(--muted);
+      }
+      tbody tr:hover { background: var(--accent-soft); }
+      tbody tr:last-child td { border-bottom: none; }
+      td code, th code { font-size: 12px; background: var(--code-bg); border-radius: 5px; padding: .05rem .3rem; }
+      td.nowrap { white-space: nowrap; }
+      .rule-sample { color: var(--muted); font-size: 12px; max-width: 30ch; overflow-wrap: anywhere; }
+      .flash { animation: flash 1.1s ease-out; }
+      @keyframes flash { from { background: var(--warn-soft); } to { background: transparent; } }
+
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 1.6rem; }
+      .chip { font: 12px/1.7 ui-monospace; border: 1px solid var(--line); border-radius: 999px; padding: .08rem .5rem; color: var(--muted); }
+      .chip.ready { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); background: var(--ok-soft); }
+      .chip.miss { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); background: var(--bad-soft); }
+      .bars { display: grid; gap: 7px; }
+      .bar-row { display: grid; grid-template-columns: minmax(64px, 130px) 1fr 56px; gap: 9px; align-items: center; font: 12px/1.5 ui-monospace; }
+      .bar-row .name { color: var(--muted); overflow-wrap: anywhere; }
+      .bar-row .val { text-align: right; color: var(--muted); }
+      .bar { height: 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--code-bg); overflow: hidden; }
+      .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #38bdf8)); }
+      .timeline { position: relative; height: 42px; margin: 22px 0 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--code-bg); }
+      .timeline .tick { position: absolute; top: 7px; bottom: 7px; width: 2px; background: var(--accent); border-radius: 2px; }
+      .timeline .tick.ok { background: var(--ok); }
+      .timeline .tick.bad { background: var(--bad); }
+      .timeline .tick em {
+        position: absolute; top: -1.25rem; left: 0; transform: translateX(-50%);
+        font: 10px/1.2 ui-monospace; font-style: normal; color: var(--muted); white-space: nowrap;
+      }
+      .timeline .end { position: absolute; right: 4px; bottom: -1.35rem; font: 10px/1 ui-monospace; color: var(--muted); }
+      .log { font: 12px/1.65 ui-monospace; max-height: 15rem; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--code-bg); }
+      .log > div { display: grid; grid-template-columns: 3.4rem 6.2rem minmax(0, 1fr); gap: 8px; padding: 2px 8px; border-bottom: 1px dashed var(--line); }
+      .log > div:last-child { border-bottom: none; }
+      .log .at { color: var(--muted); text-align: right; }
+      .log .op { color: var(--accent); }
+      .log .ptr { overflow-wrap: anywhere; }
+      .log .empty { padding: 8px; color: var(--muted); display: block; }
+
+      .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+      .toolbar input[type="search"] { max-width: 22rem; }
+      .toolbar select { max-width: 12rem; }
+
+      .surfaces { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+      @media (max-width: 940px) { .surfaces { grid-template-columns: minmax(0, 1fr); } }
+      .surface { display: grid; gap: 8px; align-content: start; }
+      .surface h3 { margin: 0; font-size: .95rem; letter-spacing: -.01em; text-transform: none; color: var(--ink); font-family: inherit; }
+      .surface .cmdline { display: flex; gap: 6px; align-items: stretch; }
+      .surface .cmdline pre { flex: 1; min-width: 0; }
+      .surface .cmdline button { white-space: nowrap; }
+      .surface p { margin: 0; color: var(--muted); font-size: .84rem; }
+      footer { margin-top: 64px; border-top: 1px solid var(--line); padding: 26px 0 40px; color: var(--muted); font-size: .85rem; }
+      footer .foot-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; }
+      @media (max-width: 940px) { footer .foot-grid { grid-template-columns: minmax(0, 1fr); } }
+      footer ul { margin: .4rem 0 0; padding-left: 1.1rem; }
+      footer li { margin: .18rem 0; }
+      .banner {
+        border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); background: var(--warn-soft);
+        color: var(--warn); border-radius: 12px; padding: 10px 12px; margin: 18px 0 0; font-size: .88rem;
+      }
     </style>
   </head>
   <body>
-    <main>
-      <h1>JSONMend</h1>
-      <p class="lead">
-        流式 JSON 修复与部分解析库，纯 MoonBit 实现。本页由 MoonBit 的 JavaScript
-        后端编译产物直接驱动，没有第二个实现。
-      </p>
-      <p class="label">
-        实时演示 · <a href="./live.html">live.html</a> —— 四条真实场景逐帧重放，同一帧里
-        显示模型流、实时结构、成员就绪、三个 readiness 数字与拒绝时的重试提示。
-        接入演示 · <a href="./mcp.html">mcp.html</a> —— 一行 MCP 配置、真实的
-        <code>jsonmend_analyze</code> 拒绝与重试、以及工具声明直连。
-      </p>
-
-      <h2>一次性修复</h2>
-      <p class="label">
-        输入一段破损或截断的 JSON（单引号、注释、多余逗号、裸词、围栏、截断都可以），
-        点击按钮查看修复结果与修复记录。
-      </p>
-      <textarea id="input">```json
-{'name': 'MoonBit', // LLM 常见的注释
- 'tags': ['json', 'repair',],
- 'meta': {ok: true, score: NaN,}
-}
-```</textarea>
-      <button id="run">修复</button>
-      <button id="sample-valid">合法输入</button>
-      <button id="sample-truncated">截断输入</button>
-      <button id="sample-prose">前导说明（需 skip_prose）</button>
-
-      <div class="grid">
-        <div>
-          <div class="label">修复后的文本（stdout）</div>
-          <pre id="out">—</pre>
+    <a class="skip" href="#workbench">跳到工作台</a>
+    <header class="top">
+      <div class="top-inner">
+        <a class="brand" href="#top">
+          <span class="mark" aria-hidden="true">{}</span>
+          <span>JSONMend <small>v1.2.0</small></span>
+        </a>
+        <nav class="links" aria-label="页面章节">
+          <a href="#workbench" data-nav="workbench">工作台</a>
+          <a href="#gate" data-nav="gate">执行门</a>
+          <a href="#stream" data-nav="stream">流式</a>
+          <a href="#rules" data-nav="rules">22 条规则</a>
+          <a href="#readiness" data-nav="readiness">就绪曲线</a>
+          <a href="#cli" data-nav="cli">CLI</a>
+          <a href="#surfaces" data-nav="surfaces">接入</a>
+        </nav>
+        <div class="top-actions">
+          <span id="engine-status" role="status">检测引擎…</span>
+          <button id="theme-toggle" type="button" aria-label="切换浅色/深色主题" aria-pressed="false">☾ 深色</button>
         </div>
-        <div>
-          <div class="label">修复记录（R 码 + 位置 + 说明）</div>
-          <pre id="report">—</pre>
+      </div>
+    </header>
+
+    <main id="top">
+      <div class="wrap">
+        <div id="no-engine-banner" class="banner" hidden>
+          <b>jsonmend.js 没有加载</b>：页面里的每一次修复、判定与就绪测量都需要它。请用
+          <code>python3 -m http.server 8000 -d static/demo</code> 打开，或先跑
+          <code>bash static/demo/build.sh</code> 重新生成 bundle。下面的规则表、CLI 与接入面仍然可读。
         </div>
       </div>
 
-      <h2>流式快照</h2>
-      <p class="label">
-        拖动滑块只喂入前 N 个码元，查看 <code>snapshot()</code> 的部分结果、完整性状态
-        与未闭合路径。快照是稳定前缀：输入增长时已确定的部分不会回退。
-      </p>
-      <input id="upto" type="range" min="0" max="0" value="0" />
-      <div class="label" id="upto-label">N = 0</div>
-      <pre id="snapshot">—</pre>
+      <section class="hero wrap" aria-labelledby="hero-title">
+        <div>
+          <span class="kicker">LLM JSON 的执行门 · 纯 MoonBit</span>
+          <h1 id="hero-title">不要等合法 JSON，<br />先问<em>我已经知道了什么</em>。</h1>
+          <p class="lead">
+            JSONMend 修复正在生成中的坏 JSON：能修就修、修不了就补全，并在一次调用里回答
+            「这份结果能不能直接执行、为什么不能、怎么让模型改」。这一页的每一次修复、每一帧快照、
+            每一个判定，都由 <code>code/examples/web/main.mbt</code> 编译出的
+            <code>jsonmend.js</code> 在浏览器里现场完成，页面里没有第二份实现。
+          </p>
+          <div class="hero-actions">
+            <a class="pill info" href="#workbench">从工作台开始 ↓</a>
+            <a class="pill" href="./live.html">逐帧实时演示 live.html</a>
+            <a class="pill" href="./mcp.html">MCP 接入 mcp.html</a>
+          </div>
+        </div>
+        <aside class="hero-card" aria-label="执行门现场判定">
+          <div class="hc-head">
+            <b>执行门 · 现场判定</b>
+            <span class="pill" id="hero-policy">policy agent</span>
+          </div>
+          <div class="hc-body">
+            <div class="verdict warn" id="hero-verdict">计算中…</div>
+            <pre class="short" id="hero-input">{"amount":100,"currency":"USD"</pre>
+            <div class="pills">
+              <span class="pill">error <b id="hero-code" class="mono">—</b></span>
+              <span class="pill">decision <b id="hero-decision" class="mono">—</b></span>
+            </div>
+            <pre class="short" id="hero-retry">—</pre>
+          </div>
+        </aside>
+      </section>
 
-      <h2>命令行</h2>
-      <pre id="cli">—</pre>
+      <div class="wrap">
+        <div class="stats" id="evidence-strip" aria-label="质量与证据"></div>
+      </div>
+
+      <section class="band wrap" id="workbench" aria-labelledby="wb-title">
+        <div class="band-head">
+          <span class="band-num">01</span>
+          <h2 class="band-title" id="wb-title">修复工作台</h2>
+          <span class="band-tag">repair · analyze · 五种安全档位</span>
+        </div>
+        <p class="band-sub">
+          输入任意破损 JSON（围栏、注释、单引号、尾逗号、裸词、<code>NaN</code>、截断、多个根值……），
+          选择安全档位后查看修复文本、完整决策计划与逐条修复记录。执行门始终按精确度判定：
+          <code>Info</code> 只改记法可以执行，<code>Warning</code> 发明或丢弃了信息就拒绝。切到
+          <code>strict</code>（或遇到有损修复时的 <code>execution</code>），结果会从「修好了」
+          变成「拒绝执行 + 可直接回灌模型的提示」。
+        </p>
+
+        <div class="grid g-2">
+          <div class="card">
+            <h3>输入</h3>
+            <div class="row" style="margin-bottom: 8px">
+              <label for="wb-policy">安全档位</label>
+              <select id="wb-policy" style="max-width: 12rem"></select>
+              <label class="check"><input id="wb-skip-prose" type="checkbox" /> 跳过前导说明</label>
+            </div>
+            <label for="wb-input" class="hint" style="display: block; margin-bottom: 4px">破损 JSON（也可把 .json 文件拖进来）</label>
+            <textarea id="wb-input" spellcheck="false" aria-label="待修复的 JSON 输入"></textarea>
+            <div class="row" style="margin-top: 10px">
+              <button id="wb-run" class="primary" type="button">修复并判定</button>
+              <button id="wb-clear" class="ghost" type="button">清空</button>
+              <span class="hint" style="margin: 0">快捷键 <span class="kbd">Ctrl/⌘ + Enter</span></span>
+            </div>
+            <div class="hint" id="wb-policy-hint"></div>
+            <h3 style="margin-top: 14px">预设样本</h3>
+            <div class="chips" id="wb-samples"></div>
+          </div>
+
+          <div class="stack">
+            <div class="card">
+              <h3>执行门判定</h3>
+              <div class="verdict" id="wb-verdict">—</div>
+              <dl class="kv" style="margin: 12px 0 0">
+                <div><dt>decision</dt><dd id="wb-decision">—</dd></div>
+                <div><dt>exactness</dt><dd id="wb-exactness">—</dd></div>
+                <div><dt>ambiguity</dt><dd id="wb-ambiguity">—</dd></div>
+                <div><dt>execution</dt><dd id="wb-execution">—</dd></div>
+                <div><dt>valid_json</dt><dd id="wb-valid">—</dd></div>
+                <div><dt>normalized</dt><dd id="wb-normalized">—</dd></div>
+              </dl>
+              <p class="meta" id="wb-meta">—</p>
+            </div>
+            <div class="card retry" id="wb-retry" hidden>
+              <h4>被拒绝 — 把这段原样回灌模型</h4>
+              <pre id="wb-retry-text">—</pre>
+              <div class="row" style="margin-top: 8px">
+                <button type="button" data-copy="wb-retry-text" data-copy-target="wb-retry-text">复制重试提示</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card span-2" style="margin-top: 16px">
+          <div class="tabs" role="tablist" aria-label="工作台输出">
+            <button type="button" data-wb-tab="output" aria-pressed="true">修复结果</button>
+            <button type="button" data-wb-tab="plan" aria-pressed="false">决策计划 JSON</button>
+            <button type="button" data-wb-tab="repairs" aria-pressed="false">修复记录</button>
+            <button type="button" id="wb-copy-output" class="ghost" data-copy="wb-output" style="margin-left: auto">复制当前面板</button>
+          </div>
+          <div id="wb-panel-output" role="tabpanel">
+            <pre id="wb-output" class="tall">—</pre>
+          </div>
+          <div id="wb-panel-plan" role="tabpanel" hidden>
+            <pre id="wb-plan" class="tall">—</pre>
+          </div>
+          <div id="wb-panel-repairs" role="tabpanel" hidden>
+            <div id="wb-repairs" class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>规则</th><th>级别</th><th>动作</th><th>位置</th><th>歧义</th><th>置信度</th></tr>
+                </thead>
+                <tbody id="wb-repairs-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="band wrap" id="gate" aria-labelledby="gate-title">
+        <div class="band-head">
+          <span class="band-num">02</span>
+          <h2 class="band-title" id="gate-title">执行门 · 工具参数</h2>
+          <span class="band-tag">analyze · JSON Schema 子集 · retry.prompt</span>
+        </div>
+        <p class="band-sub">
+          左侧是工具声明（骨架声明 <code>{!query:string,!limit:integer}</code> 或模型已经拿到的
+          <code>inputSchema</code>），右侧是模型这次写出来的参数。两者一起喂给引擎：语法修复、类型检查、
+          值约束、重复键语义歧义与资源上限，最后只给一个词——<b>能不能执行</b>。
+          不支持的 JSON Schema 关键字会被报成 <code>E070</code>，而不是被静默丢掉。
+        </p>
+
+        <div class="grid g-2">
+          <div class="card">
+            <h3>声明与参数</h3>
+            <div class="row" style="margin-bottom: 8px">
+              <button type="button" data-gate-mode="decl" aria-pressed="true">骨架声明</button>
+              <button type="button" data-gate-mode="json" aria-pressed="false">JSON Schema</button>
+              <label for="gate-policy" style="margin-left: auto">policy</label>
+              <select id="gate-policy" style="max-width: 10rem"></select>
+            </div>
+            <label for="gate-args" class="hint" style="display: block; margin-bottom: 4px">模型输出 / 工具参数</label>
+            <textarea id="gate-args" spellcheck="false" style="min-height: 6rem" aria-label="模型输出的工具参数"></textarea>
+            <label for="gate-schema" class="hint" id="gate-schema-label" style="display: block; margin: 10px 0 4px">骨架声明</label>
+            <textarea id="gate-schema" spellcheck="false" style="min-height: 6rem" aria-label="工具声明或骨架声明"></textarea>
+            <div class="row" style="margin-top: 10px">
+              <button id="gate-run" class="primary" type="button">过闸</button>
+              <span class="hint" style="margin: 0" id="gate-schema-hint"></span>
+            </div>
+            <h3 style="margin-top: 14px">预设</h3>
+            <div class="chips" id="gate-presets"></div>
+          </div>
+
+          <div class="stack">
+            <div class="card">
+              <h3>判定</h3>
+              <div class="verdict" id="gate-verdict">—</div>
+              <dl class="kv" style="margin: 12px 0 0">
+                <div><dt>decision</dt><dd id="gate-decision">—</dd></div>
+                <div><dt>execution</dt><dd id="gate-execution">—</dd></div>
+                <div><dt>schema</dt><dd id="gate-schema-count">—</dd></div>
+                <div><dt>exactness</dt><dd id="gate-exactness">—</dd></div>
+              </dl>
+              <h3 style="margin-top: 14px">声明成员核对</h3>
+              <div class="chips" id="gate-checklist"></div>
+            </div>
+            <div class="card retry" id="gate-retry" hidden>
+              <h4>被拒绝 — 回灌模型</h4>
+              <pre id="gate-retry-text">—</pre>
+              <div class="row" style="margin-top: 8px">
+                <button type="button" data-copy="gate-retry-text" data-copy-target="gate-retry-text">复制重试提示</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card span-2" style="margin-top: 16px">
+          <h3>决策计划 JSON（<code>RepairPlan::to_json</code> 原文）</h3>
+          <pre id="gate-plan" class="tall">—</pre>
+          <div class="row" style="margin-top: 8px">
+            <button type="button" data-copy="gate-plan" data-copy-target="gate-plan">复制计划</button>
+            <span class="hint" style="margin: 0" id="gate-meta">—</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="band wrap" id="stream" aria-labelledby="stream-title">
+        <div class="band-head">
+          <span class="band-num">03</span>
+          <h2 class="band-title" id="stream-title">流式部分解析</h2>
+          <span class="band-tag">PartialParser · Delta 协议 · 三个就绪数字</span>
+        </div>
+        <p class="band-sub">
+          模型是一个码元一个码元写 JSON 的。拖动进度或播放，看引擎在当前前缀上已经知道什么：
+          部分结果、未闭合路径、每个成员是否定稿、以及 <code>syntax ready</code> /
+          <code>schema ready</code> / <code>settled ready</code> 三个比例。第三个数字回答的不是
+          「JSON 写完了吗」，而是「我已经知道答案了吗」——长尾参数下 30% 就可以停。
+          完整四条场景在 <a href="./live.html">live.html</a>。
+        </p>
+
+        <div class="card">
+          <div class="toolbar" style="margin-bottom: 8px">
+            <span class="hint" style="margin: 0">场景</span>
+            <div class="chips" id="st-scenarios"></div>
+          </div>
+          <div class="toolbar" style="margin-bottom: 8px">
+            <button id="st-play" class="primary" type="button" aria-pressed="false">▶ 播放</button>
+            <button id="st-step" type="button">单步</button>
+            <button id="st-reset" class="ghost" type="button">重置</button>
+            <label for="st-speed">速度</label>
+            <select id="st-speed" style="max-width: 6.5rem">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+            </select>
+            <label for="st-range" style="margin-left: auto">喂入进度</label>
+          </div>
+          <input id="st-range" type="range" min="0" max="0" value="0" aria-label="喂入进度（码元）" style="width: 100%" />
+          <p class="meta" id="st-meta">—</p>
+        </div>
+
+        <div class="grid g-2" style="margin-top: 16px">
+          <div class="stack">
+            <div class="card">
+              <h3>模型流（已喂入的前缀）</h3>
+              <pre id="st-text" class="stream">—</pre>
+            </div>
+            <div class="card">
+              <h3>Delta 事件流（RFC 6901 指针）</h3>
+              <div class="log" id="st-deltas"><div class="empty">尚未喂入任何码元</div></div>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h3>实时结构</h3>
+              <pre id="st-structure" class="short">—</pre>
+              <h3 style="margin-top: 12px">成员就绪</h3>
+              <div class="chips" id="st-members"></div>
+            </div>
+            <div class="card">
+              <h3>就绪比例</h3>
+              <dl class="kv">
+                <div><dt>syntax ready</dt><dd id="st-syntax">—</dd></div>
+                <div><dt>schema ready</dt><dd id="st-schema">—</dd></div>
+                <div><dt>settled ready</dt><dd id="st-settled">—</dd></div>
+                <div><dt>declared</dt><dd id="st-declared">—</dd></div>
+              </dl>
+              <div class="verdict" id="st-verdict" style="margin-top: 12px">—</div>
+            </div>
+            <div class="card retry" id="st-retry" hidden>
+              <h4>当前前缀被拒绝 — 回灌模型</h4>
+              <pre id="st-retry-text" class="short">—</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="band wrap" id="rules" aria-labelledby="rules-title">
+        <div class="band-head">
+          <span class="band-num">04</span>
+          <h2 class="band-title" id="rules-title">22 条修复规则</h2>
+          <span class="band-tag">R001–R022 · 单次左到右扫描</span>
+        </div>
+        <p class="band-sub">
+          每条规则都能当场触发：点「试用」把它自己的样本送进工作台，修复记录里就会出现这条码。
+          规则在单次从左到右扫描中即时生效，不回溯、不二次遍历；同一位置可能命中多条，按编号顺序各产生一条记录。
+          <code>Info</code> 只改记法（<code>Cosmetic</code>），<code>Warning</code> 发明或丢弃了信息（<code>Lossy</code>）。
+        </p>
+
+        <div class="toolbar">
+          <label for="rules-search" class="hint" style="margin: 0">搜索</label>
+          <input id="rules-search" type="search" placeholder="R005 / 尾逗号 / 数字" aria-label="搜索修复规则" />
+          <label for="rules-filter" class="hint" style="margin: 0">过滤</label>
+          <select id="rules-filter" aria-label="按级别或动作过滤">
+            <option value="all">全部</option>
+            <option value="info">级别：Info</option>
+            <option value="warning">级别：Warning</option>
+            <option value="remove">动作：remove</option>
+            <option value="wrap">动作：wrap</option>
+            <option value="insert">动作：insert</option>
+            <option value="replace">动作：replace</option>
+            <option value="normalize">动作：normalize</option>
+            <option value="merge">动作：merge</option>
+          </select>
+          <button id="rules-verify" type="button">自检全部 22 条</button>
+          <span class="pill info" id="rules-count">22 条规则</span>
+          <span class="hint" style="margin: 0" id="rules-verify-out"></span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>规则</th><th>级别</th><th>动作</th><th>触发条件</th><th>可复现样本</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="rules-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="band wrap" id="readiness" aria-labelledby="rd-title">
+        <div class="band-head">
+          <span class="band-num">05</span>
+          <h2 class="band-title" id="rd-title">字段就绪曲线</h2>
+          <span class="band-tag">watch_readiness · ReadinessEvent</span>
+        </div>
+        <p class="band-sub">
+          每个声明过的成员在输入消耗到多少时定稿，是一次事件流而不是离线测量。
+          <code>field_ready</code> / <code>field_invalid</code> / <code>field_rejected</code> /
+          <code>root_ready</code> / <code>root_invalid</code> 都在值定稿的那个 delta 上发出，
+          所以「值不对」可以在流还没结束时就被拒绝，从而取消整次生成。
+        </p>
+
+        <div class="grid g-2r">
+          <div class="card">
+            <h3>场景</h3>
+            <div class="chips" id="rd-samples"></div>
+            <label for="rd-schema" class="hint" style="display: block; margin: 12px 0 4px">骨架声明</label>
+            <input id="rd-schema" type="text" spellcheck="false" aria-label="骨架声明" />
+            <div class="row" style="margin-top: 10px">
+              <button id="rd-run" class="primary" type="button">测量</button>
+              <span class="hint" style="margin: 0" id="rd-meta">—</span>
+            </div>
+            <dl class="kv" style="margin-top: 12px">
+              <div><dt>syntax</dt><dd id="rd-syntax">—</dd></div>
+              <div><dt>schema</dt><dd id="rd-schema-ready">—</dd></div>
+              <div><dt>settled</dt><dd id="rd-settled">—</dd></div>
+            </dl>
+            <div class="verdict" id="rd-verdict" style="margin-top: 12px">—</div>
+            <div class="timeline" id="rd-timeline" aria-hidden="true"></div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h3>每个成员的定稿位置</h3>
+              <div class="bars" id="rd-fields"></div>
+            </div>
+            <div class="card">
+              <h3>事件流</h3>
+              <div class="table-wrap" style="max-height: 18rem">
+                <table>
+                  <thead><tr><th>事件</th><th>路径</th><th>位置</th><th>细节</th></tr></thead>
+                  <tbody id="rd-events"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="band wrap" id="cli" aria-labelledby="cli-title">
+        <div class="band-head">
+          <span class="band-num">06</span>
+          <h2 class="band-title" id="cli-title">命令行</h2>
+          <span class="band-tag">jsonmend · 退出码 0/1/2/3/4/5/70</span>
+        </div>
+        <p class="band-sub">
+          同一个引擎的原生 CLI。勾选参数、选择子命令，右边就是可以直接粘贴的一行。
+          <code>--check</code> 只检查不输出，需要修复时退出码 1；<code>--strict</code> 与
+          <code>--for-execution</code> 拒绝时退出码 5，并把可直接回灌模型的提示打到标准错误。
+        </p>
+
+        <div class="grid g-2">
+          <div class="card">
+            <h3>命令构造器</h3>
+            <div class="row">
+              <label for="cli-cmd">子命令</label>
+              <select id="cli-cmd" style="max-width: 14rem"></select>
+              <label for="cli-file">文件</label>
+              <input id="cli-file" type="text" value="broken.json" style="max-width: 12rem" aria-label="输入文件路径" />
+            </div>
+            <div class="chips" id="cli-flags" style="margin-top: 10px"></div>
+            <pre id="cli-out" class="short" style="margin-top: 10px">jsonmend broken.json</pre>
+            <div class="row" style="margin-top: 8px">
+              <button id="cli-copy" type="button" data-copy="cli-out">复制命令</button>
+              <span class="hint" style="margin: 0">文件为 <code>-</code> 或缺省时读取标准输入。</span>
+            </div>
+          </div>
+          <div class="card">
+            <h3>退出码</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>码</th><th>含义</th></tr></thead>
+                <tbody id="cli-exit-body"></tbody>
+              </table>
+            </div>
+            <h3 style="margin-top: 14px">致命错误（MendError，12 个变体）</h3>
+            <div class="table-wrap" style="max-height: 16rem">
+              <table>
+                <thead><tr><th>码</th><th>变体</th><th>退出码</th><th>触发</th></tr></thead>
+                <tbody id="cli-error-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="band wrap" id="surfaces" aria-labelledby="sf-title">
+        <div class="band-head">
+          <span class="band-num">07</span>
+          <h2 class="band-title" id="sf-title">六种接入方式</h2>
+          <span class="band-tag">MCP · stdio · npm · pip · HTTP · MoonBit</span>
+        </div>
+        <p class="band-sub">
+          按「谁来决定使用」区分：模型主动调用的 MCP、宿主应用的长驻协议、两个语言包、HTTP facade，
+          以及进程内直接用的 MoonBit 库。每一条命令都能从仓库检出直接跑。
+        </p>
+        <div class="surfaces" id="surface-list"></div>
+      </section>
+
+      <footer>
+        <div class="wrap foot-grid">
+          <div>
+            <b>这一页为什么可信</b>
+            <ul>
+              <li>输出必合法 JSON · 修复幂等 · 任意分块与一次性结果一致 · 快照是稳定前缀 · 任何字节序列不 panic。</li>
+              <li>页面里的每个数字都来自 <code>static/demo/jsonmend.js</code>（<code>code/examples/web/main.mbt</code> 的 MoonBit → JS 产物），没有为演示写的特例，也没有第二份解析器。</li>
+              <li>规则、错误码与退出码取自 <code>code/docs/RULES.md</code>、<code>code/docs/ERRORS.md</code>；质量数字取自 README 的证据表。</li>
+            </ul>
+          </div>
+          <div>
+            <b>继续看</b>
+            <ul>
+              <li><a href="./live.html">live.html</a> — 四条真实场景逐帧重放</li>
+              <li><a href="./mcp.html">mcp.html</a> — 真实 Claude Code 会话的 E010 → 重试 → 放行</li>
+              <li><a href="./README.md">static/demo/README.md</a> — 本地打开方式</li>
+              <li><a href="https://github.com/wenhuang2333/Moonbit-haker">GitHub 仓库</a> · <code>cd code &amp;&amp; moon test</code></li>
+            </ul>
+            <p class="meta">JSONMend v1.2.0 · mooncakes <code>zhanshishan/jsonmend@0.9.0</code> · 页面无外部依赖，可离线打开。</p>
+          </div>
+        </div>
+      </footer>
     </main>
+
+    <script id="jm-fixtures" type="application/json">
+      {
+        "version": "1.2.0",
+        "evidence": [
+          { "n": "210", "label": "条白盒测试" },
+          { "n": "4", "label": "个后端各 210/210" },
+          { "n": "1200", "label": "条真值评测 · 恢复率 100.00%" },
+          { "n": "402", "label": "例差分 · 202 处差异全部归因" },
+          { "n": "19", "label": "组协议一致性同跑" },
+          { "n": "103.5 KiB", "label": "wasm-gc 产物" }
+        ],
+        "policies": [
+          { "id": "permissive", "label": "permissive", "hint": "默认：能修就修，允许有损与第二种读法（显示通道）。" },
+          { "id": "interactive", "label": "interactive", "hint": "人来判断：记法可修；发明/丢弃内容拒绝（max_loss cosmetic）。" },
+          { "id": "execution", "label": "execution", "hint": "执行档：有损或有第二种读法都拒绝（E010 / E011）。" },
+          { "id": "agent", "label": "agent", "hint": "agent 档：执行档 + 64 层/1 MiB 资源上限 + 前导说明处理。" },
+          { "id": "strict", "label": "strict", "hint": "严格档：第一条修复记录就报 E010，连单引号也不放过。" }
+        ],
+        "workbenchSamples": [
+          {
+            "id": "mixed",
+            "label": "围栏 + 注释 + 单引号",
+            "policy": "permissive",
+            "skipProse": false,
+            "text": "```json\n{'name': 'MoonBit', // LLM 常见的注释\n 'tags': ['json', 'repair',],\n 'meta': {ok: true, score: 1500,}\n}\n```"
+          },
+          { "id": "trunc-container", "label": "截断的容器", "policy": "permissive", "skipProse": false, "text": "{\"tool\":\"search\",\"args\":{\"q\":\"Mo" },
+          { "id": "trunc-string", "label": "截断的字符串", "policy": "execution", "skipProse": false, "text": "{\"path\":\"/tmp/x" },
+          { "id": "adjacent", "label": "相邻字符串（两种读法）", "policy": "execution", "skipProse": false, "text": "{\"words\":[\"colour\" \"color\"]}" },
+          { "id": "dup", "label": "重复键（语义歧义）", "policy": "execution", "skipProse": false, "text": "{\"a\":1,\"a\":2}" },
+          { "id": "literals", "label": "NaN / undefined / True", "policy": "permissive", "skipProse": false, "text": "{\"ok\":true,\"score\":NaN,\"mode\":undefined,\"flag\":True}" },
+          { "id": "prose", "label": "前导说明（需 skip_prose）", "policy": "permissive", "skipProse": true, "text": "Sure! Here is the JSON you asked for:\n{\"a\":1,\"b\":[1,2,]}" },
+          { "id": "multiroot", "label": "多个根值", "policy": "permissive", "skipProse": false, "text": "{\"a\":1}{\"b\":2}" },
+          { "id": "numbers", "label": "数字形态", "policy": "permissive", "skipProse": false, "text": "{\"n\":01,\"e\":1.5e3,\"p\":+2}" },
+          { "id": "valid", "label": "合法 JSON（原样通过）", "policy": "execution", "skipProse": false, "text": "{\"name\":\"MoonBit\",\"tags\":[\"json\",\"repair\"],\"meta\":{\"ok\":true,\"n\":1.5e3}}" }
+        ],
+        "rules": [
+          { "code": "R001", "name": "StripFence", "severity": "info", "action": "remove", "trigger": "文档前导或根值之后出现三个反引号围栏行", "sample": "```json\n{\"a\":1}\n```", "skipProse": false },
+          { "code": "R002", "name": "StripComment", "severity": "info", "action": "remove", "trigger": "字符串外出现 // 行注释或 /* */ 块注释", "sample": "{\"a\":1 // note\n}", "skipProse": false },
+          { "code": "R003", "name": "NormalizeQuote", "severity": "info", "action": "normalize", "trigger": "字符串用单引号或弯引号作界定符", "sample": "{'a':1}", "skipProse": false },
+          { "code": "R004", "name": "QuoteBareWord", "severity": "info", "action": "wrap", "trigger": "裸词出现在键位置或容器内的值位置", "sample": "{a:1}", "skipProse": false },
+          { "code": "R005", "name": "RemoveExtraComma", "severity": "info", "action": "remove", "trigger": "尾逗号、前导逗号或连续逗号", "sample": "{\"a\":1,}", "skipProse": false },
+          { "code": "R006", "name": "InsertComma", "severity": "info", "action": "insert", "trigger": "容器内两个值/键之间缺少逗号", "sample": "{\"a\":1 \"b\":2}", "skipProse": false },
+          { "code": "R007", "name": "InsertColon", "severity": "info", "action": "insert", "trigger": "对象中键之后缺少冒号", "sample": "{\"a\" 1}", "skipProse": false },
+          { "code": "R008", "name": "FillNull", "severity": "warning", "action": "insert", "trigger": "有键无值就遇到闭合符、逗号或输入结束", "sample": "{\"a\":}", "skipProse": false },
+          { "code": "R009", "name": "CloseContainer", "severity": "warning", "action": "insert", "trigger": "输入结束时仍有未闭合的数组或对象", "sample": "{\"a\":[1,2", "skipProse": false },
+          { "code": "R010", "name": "CloseString", "severity": "warning", "action": "insert", "trigger": "输入结束时字符串仍未闭合", "sample": "{\"a\":\"hel", "skipProse": false },
+          { "code": "R011", "name": "FixNumber", "severity": "warning", "action": "normalize", "trigger": "数字形态需要规范化（去 +、去前导零、去尾点、去残缺指数）；保值的记法改动是 Info，丢弃残缺指数是 Warning", "sample": "{\"a\":1e}", "skipProse": false },
+          { "code": "R012", "name": "ConvertLiteral", "severity": "warning", "action": "replace", "trigger": "字面量前缀补全、Python/JS 写法或 NaN/Infinity 转换", "sample": "{\"a\":None}", "skipProse": false },
+          { "code": "R013", "name": "EscapeControl", "severity": "info", "action": "normalize", "trigger": "字符串内出现未转义的控制字符（码元 < 0x20）", "sample": "{\"a\":\"line\nbreak\"}", "skipProse": false },
+          { "code": "R014", "name": "FixEscape", "severity": "warning", "action": "normalize", "trigger": "非法转义、残缺 \\u 序列或未配对的代理码元", "sample": "{\"a\":\"\\q\"}", "skipProse": false },
+          { "code": "R015", "name": "MismatchedCloser", "severity": "info", "action": "replace", "trigger": "数组遇到 }，或对象遇到 ]", "sample": "{\"a\":1]", "skipProse": false },
+          { "code": "R016", "name": "DropUnexpected", "severity": "warning", "action": "remove", "trigger": "当前状态无法识别的内容，或 KeepFirst 时根值之后的内容", "sample": "{\"a\":1} garbage", "skipProse": false },
+          { "code": "R017", "name": "DropExtraCloser", "severity": "info", "action": "remove", "trigger": "根值结束后、栈空时出现多余的 } 或 ]", "sample": "{\"a\":1}}", "skipProse": false },
+          { "code": "R018", "name": "MergeDuplicateKey", "severity": "info/warning", "action": "merge", "trigger": "对象中同一个键被赋值两次（合法 JSON 的语义歧义）", "sample": "{\"a\":1,\"a\":2}", "skipProse": false },
+          { "code": "R019", "name": "ConcatStrings", "severity": "info", "action": "merge", "trigger": "相邻字符串用 + 拼接", "sample": "{\"a\":\"x\"+\"y\"}", "skipProse": false },
+          { "code": "R020", "name": "DropEllipsis", "severity": "warning", "action": "remove", "trigger": "独立的 ... 裸词占位符", "sample": "{\"a\":...}", "skipProse": false },
+          { "code": "R021", "name": "SkipProse", "severity": "info", "action": "remove", "trigger": "skip_prose=true 且第一个 { 或 [ 之前存在非空白文字", "sample": "Sure, here is the JSON you asked for:\n{\"a\":1}", "skipProse": true },
+          { "code": "R022", "name": "NormalizeLiteral", "severity": "info", "action": "normalize", "trigger": "字面量只是 ASCII 大小写变体（True、FALSE、nUll）", "sample": "{\"a\":True}", "skipProse": false }
+        ],
+        "gatePresets": [
+          { "id": "decl-truncated", "mode": "decl", "label": "截断的参数 → E010", "policy": "agent", "args": "{\"query\":\"MoonBit\",\"limit\":", "schema": "{!query:string,!limit:integer}" },
+          { "id": "decl-whole", "mode": "decl", "label": "补齐的参数 → 放行", "policy": "agent", "args": "{\"query\":\"MoonBit\",\"limit\":10}", "schema": "{!query:string,!limit:integer}" },
+          { "id": "decl-missing", "mode": "decl", "label": "缺必填成员", "policy": "agent", "args": "{\"query\":\"MoonBit\"}", "schema": "{!query:string,!limit:integer}" },
+          { "id": "decl-wrongkind", "mode": "decl", "label": "类型不对：limit 是字符串", "policy": "agent", "args": "{\"query\":\"MoonBit\",\"limit\":\"ten\"}", "schema": "{!query:string,!limit:integer}" },
+          { "id": "decl-constraint", "mode": "decl", "label": "值约束：limit ≥ 0", "policy": "agent", "args": "{\"limit\":-1}", "schema": "{!limit:integer(minimum:0)}" },
+          { "id": "decl-ambiguous", "mode": "decl", "label": "相邻字符串 → E011", "policy": "agent", "args": "{\"words\":[\"colour\" \"color\"]}", "schema": "{!words:[string]}" },
+          { "id": "decl-dup", "mode": "decl", "label": "重复键 → 语义歧义", "policy": "execution", "args": "{\"a\":1,\"a\":2}", "schema": "" },
+          { "id": "json-truncated", "mode": "json", "label": "inputSchema：截断的金额", "policy": "agent", "args": "{\"amount\":100,\"currency\":\"USD\"", "schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"amount\": { \"type\": \"number\" },\n    \"currency\": { \"type\": \"string\" }\n  },\n  \"required\": [\"amount\"]\n}" },
+          { "id": "json-whole", "mode": "json", "label": "inputSchema：完整参数", "policy": "agent", "args": "{\"amount\":100,\"currency\":\"USD\"}", "schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"amount\": { \"type\": \"number\" },\n    \"currency\": { \"type\": \"string\" }\n  },\n  \"required\": [\"amount\"]\n}" },
+          { "id": "decl-schema-error", "mode": "decl", "label": "声明写错 → E070", "policy": "agent", "args": "{\"a\":1}", "schema": "{!query:string" },
+          { "id": "json-ref", "mode": "json", "label": "不支持的 $ref → E070", "policy": "agent", "args": "{\"amount\":100}", "schema": "{ \"$ref\": \"#/$defs/Invoice\" }" }
+        ],
+        "streamScenarios": [
+          { "id": "longtail", "label": "长尾参数：30% 就能停", "schema": "{!query:string,!limit:integer}", "text": "{\"query\":\"MoonBit\",\"limit\":10,\"note\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}" },
+          { "id": "ambiguous", "label": "相邻字符串：E011 拒绝", "schema": "{!words:[string]}", "text": "{\"words\":[\"colour\" \"color\"]}" },
+          { "id": "truncated", "label": "截断的字符串：E010 拒绝", "schema": "{!path:string}", "text": "{\"path\":\"/tmp/x" }
+        ],
+        "readinessScenarios": [
+          { "id": "early", "label": "长尾参数（30% 定稿）", "schema": "{!query:string,!limit:integer}", "text": "{\"query\":\"MoonBit\",\"limit\":10,\"note\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}" },
+          { "id": "small", "label": "短文档（只能等到结尾）", "schema": "{!query:string,!limit:integer}", "text": "{\"query\":\"MoonBit\",\"limit\":10}" },
+          { "id": "reject", "label": "值约束拒绝（11.7% 就知道不行）", "schema": "{!limit:integer(minimum:0)}", "text": "{\"limit\":-1,\"tail\":\"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\"}" },
+          { "id": "wrongkind", "label": "类型不对（13.3% 就知道不行）", "schema": "{!limit:integer}", "text": "{\"limit\":\"ten\",\"tail\":\"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"}" }
+        ],
+        "exitCodes": [
+          { "code": "0", "meaning": "成功（可能有修复）" },
+          { "code": "1", "meaning": "--check 发现需要修复" },
+          { "code": "2", "meaning": "用法错误（含声明写错 E050/E070）" },
+          { "code": "3", "meaning": "输入无效（E001/E002/E040/E060）" },
+          { "code": "4", "meaning": "资源限制（E020/E021/E022）" },
+          { "code": "5", "meaning": "严格模式违规 / 歧义 / 骨架不符（E010/E011/E070 计划内拒绝）" },
+          { "code": "70", "meaning": "内部错误（E030）" }
+        ],
+        "errors": [
+          { "code": "E001", "variant": "EmptyInput", "exit": 3, "summary": "输入为空或只有空白" },
+          { "code": "E002", "variant": "NoJsonFound", "exit": 3, "summary": "没有任何可识别的 JSON 值" },
+          { "code": "E010", "variant": "StrictViolation", "exit": 5, "summary": "修复超出 max_loss 或 strict 模式下的第一条记录" },
+          { "code": "E011", "variant": "AmbiguousRepair", "exit": 5, "summary": "修复有第二种读法（reject_ambiguous）" },
+          { "code": "E020", "variant": "DepthLimit", "exit": 4, "summary": "嵌套超过 max_depth" },
+          { "code": "E021", "variant": "SizeLimit", "exit": 4, "summary": "输入超过 max_input_len" },
+          { "code": "E022", "variant": "TokenLimit", "exit": 4, "summary": "单个 token 超过 max_token_len" },
+          { "code": "E030", "variant": "InvalidState", "exit": 70, "summary": "调用顺序错误（feed/finish 生命周期）" },
+          { "code": "E040", "variant": "InvalidUtf8", "exit": 3, "summary": "非法 UTF-8 或未完成的序列" },
+          { "code": "E050", "variant": "InvalidOption", "exit": 2, "summary": "选项取值越界" },
+          { "code": "E060", "variant": "InvalidEvent", "exit": 3, "summary": "provider 事件流无法识别" },
+          { "code": "E070", "variant": "SchemaError", "exit": "2 / 5", "summary": "骨架声明写错（2）或计划内骨架/JSON Schema 不符（5）" }
+        ],
+        "cli": {
+          "subcommands": [
+            { "id": "repair", "label": "repair（默认动作）" },
+            { "id": "explain", "label": "explain（完整分析）" },
+            { "id": "readiness", "label": "readiness（字段就绪曲线）" },
+            { "id": "llm", "label": "llm（provider 事件流）" },
+            { "id": "serve", "label": "serve（长驻 stdio 协议）" },
+            { "id": "mcp", "label": "mcp（MCP stdio server）" }
+          ],
+          "flags": [
+            { "flag": "--strict", "cmds": ["repair", "explain"], "desc": "严格模式：需要修复就报错（退出码 5）" },
+            { "flag": "--check", "cmds": ["repair"], "desc": "只检查不输出；需要修复时退出码 1" },
+            { "flag": "--report", "cmds": ["repair"], "desc": "把修复记录写到标准错误" },
+            { "flag": "--explain", "cmds": ["repair"], "desc": "逐条解释修复并打印精确度小结" },
+            { "flag": "--json", "cmds": ["explain", "readiness"], "desc": "打印机器可读的 JSON 计划" },
+            { "flag": "--policy", "arg": "execution", "cmds": ["repair", "explain", "readiness", "serve"], "desc": "安全档位：permissive/interactive/execution/agent/strict" },
+            { "flag": "--schema", "arg": "{!query:string,!limit:integer}", "cmds": ["repair", "explain", "readiness"], "desc": "骨架声明，检查必填成员、类型与值约束" },
+            { "flag": "--skip-prose", "cmds": ["repair", "explain", "llm"], "desc": "跳过 JSON 之前的说明文字" },
+            { "flag": "--for-execution", "cmds": ["repair", "explain"], "desc": "执行档：max_loss cosmetic + reject_ambiguous" },
+            { "flag": "--reject-ambiguous", "cmds": ["repair", "explain"], "desc": "拒绝有第二种读法的修复，报 E011" },
+            { "flag": "--retry-hint", "cmds": ["repair", "explain"], "desc": "拒绝时打印可直接回灌模型的提示" },
+            { "flag": "--indent", "arg": "2", "cmds": ["repair"], "desc": "输出缩进空格数，默认紧凑输出" },
+            { "flag": "--multi-root", "arg": "array", "cmds": ["repair"], "desc": "多个根值：first/array/error" },
+            { "flag": "--chunk", "arg": "64", "cmds": ["repair", "explain", "readiness"], "desc": "每次喂 N 个码元，验证流式路径" },
+            { "flag": "--batch", "cmds": ["repair"], "desc": "逐行读 {id,input} JSON，逐行输出结果" },
+            { "flag": "--step", "arg": "8", "cmds": ["readiness"], "desc": "每 N 个码元观察一次" },
+            { "flag": "--provider", "arg": "anthropic", "cmds": ["llm"], "desc": "anthropic（默认）或 openai" },
+            { "flag": "--sse", "cmds": ["llm"], "desc": "输入是 SSE 文本" },
+            { "flag": "--follow", "cmds": ["llm"], "desc": "每次增量都输出一行" }
+          ]
+        },
+        "surfaces": [
+          {
+            "title": "MCP · 模型主动调用",
+            "tag": "jsonmend mcp",
+            "cmd": "claude mcp add jsonmend -- jsonmend mcp",
+            "note": "四个工具：jsonmend_repair / jsonmend_analyze / jsonmend_validate / jsonmend_readiness。Claude Code、Cursor、Codex CLI、Gemini CLI、Cline、Windsurf 都能发现。"
+          },
+          {
+            "title": "stdio 协议 · 宿主应用",
+            "tag": "jsonmend serve",
+            "cmd": "jsonmend serve",
+            "note": "每行一个请求 JSON、每行一个响应 JSON 的长驻协议 v1；高频调用与流式场景的首选。方法：hello、repair、analyze、validate、readiness、watch.*、llm.*、shutdown。"
+          },
+          {
+            "title": "npm · Node / TypeScript",
+            "tag": "jsonmend-moonbit",
+            "cmd": "npm install ./code/npm",
+            "note": "装完 import { analyze, repair } from \"jsonmend-moonbit\"，在执行工具参数前过闸。包名尚未发布到 npm 仓库，按仓库路径安装。"
+          },
+          {
+            "title": "pip · Python",
+            "tag": "jsonmend-moonbit",
+            "cmd": "pip install ./code/python",
+            "note": "from jsonmend import Client：复用同一个 jsonmend serve 进程，executable 为 false 时把 retry.prompt 原样回灌模型。"
+          },
+          {
+            "title": "HTTP · n8n / Dify / Coze",
+            "tag": "jsonmend-http",
+            "cmd": "jsonmend-http --port 8080",
+            "note": "随 Python 包一起安装的 HTTP facade，给不会起子进程的工作流引擎用。"
+          },
+          {
+            "title": "MoonBit 库 · 进程内",
+            "tag": "moon add zhanshishan/jsonmend",
+            "cmd": "let p = @jsonmend.PartialParser::new()",
+            "note": "不想起子进程时直接用库：PartialParser 逐个码元喂，analyze 给出同一份执行门判断。mooncakes 对应 0.9.0（尚未上传），与 1.2.0 除版本字符串外逐字节相同。"
+          }
+        ]
+      }
+    </script>
 
     <script>
       // Host hooks: the MoonBit bundle calls these from its main function.
@@ -138,56 +960,1200 @@
         globalThis.jsonmend[name] = fn;
       };
       globalThis.jsonmendRegister2 = globalThis.jsonmendRegister1;
-      // `live` takes three arguments; the hook shape is the same, since the
-      // bundle passes them positionally.
       globalThis.jsonmendRegister3 = globalThis.jsonmendRegister1;
     </script>
-    <script src="./jsonmend.js"></script>
+    <script src="./jsonmend.js" onerror="window.__jmBundleFailed = true"></script>
     <script>
-      const $ = (id) => document.getElementById(id);
-      const input = $("input");
+      (() => {
+        "use strict";
 
-      function refresh() {
-        const text = input.value;
-        $("upto").max = String(text.length);
-        if (Number($("upto").value) > text.length) {
-          $("upto").value = String(text.length);
+        const $ = (id) => document.getElementById(id);
+        const F = JSON.parse($("jm-fixtures").textContent);
+        const engine = globalThis.jsonmend || null;
+        const api = (name) =>
+          engine && typeof engine[name] === "function" ? engine[name] : null;
+        const hasEngine = Boolean(api("analyze") && api("live"));
+
+        const el = (tag, cls, text) => {
+          const node = document.createElement(tag);
+          if (cls) node.className = cls;
+          if (text !== undefined) node.textContent = text;
+          return node;
+        };
+        const clear = (node) => {
+          while (node.firstChild) node.removeChild(node.firstChild);
+        };
+        const parseJson = (raw) => {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        };
+        const pct = (p) =>
+          typeof p === "number" && p >= 0 ? (p / 10).toFixed(1) + "%" : "—";
+        const joinPath = (path) => (path && path.length ? path : "—");
+        const verdictClass = (plan) => {
+          if (!plan) return "";
+          if (plan.executable) return "ok";
+          if (
+            plan.decision === "ambiguous" ||
+            plan.decision === "invalid" ||
+            plan.decision === "lossy_repair"
+          )
+            return "bad";
+          return "warn";
+        };
+
+        async function copyText(text) {
+          try {
+            await navigator.clipboard.writeText(text);
+            return true;
+          } catch {
+            try {
+              const area = document.createElement("textarea");
+              area.value = text;
+              area.setAttribute("readonly", "");
+              area.style.position = "fixed";
+              area.style.opacity = "0";
+              document.body.appendChild(area);
+              area.select();
+              const ok = document.execCommand("copy");
+              area.remove();
+              return ok;
+            } catch {
+              return false;
+            }
+          }
         }
-        $("out").textContent = globalThis.jsonmend.repair(text);
-        $("report").textContent = globalThis.jsonmend.report(text);
-        const upto = Number($("upto").value);
-        $("upto-label").textContent = "N = " + upto + " / " + text.length;
-        $("snapshot").textContent = globalThis.jsonmend.snapshot(text, upto);
-      }
 
-      function load(text) {
-        input.value = text;
-        $("upto").value = String(text.length);
-        refresh();
-      }
+        function feedback(button, ok, fallback) {
+          const old = button.textContent;
+          button.textContent = ok ? "已复制" : fallback || "请手动复制";
+          setTimeout(() => {
+            button.textContent = old;
+          }, 1500);
+        }
 
-      input.addEventListener("input", refresh);
-      $("run").addEventListener("click", refresh);
-      $("upto").addEventListener("input", refresh);
+        // ---- engine status -------------------------------------------------
+        const status = $("engine-status");
+        if (hasEngine) {
+          status.textContent = "引擎已加载";
+          document.body.classList.remove("no-engine");
+        } else {
+          status.textContent = "引擎未加载";
+          document.body.classList.add("no-engine");
+          $("no-engine-banner").hidden = false;
+        }
 
-      $("sample-valid").addEventListener("click", () =>
-        load('{"name":"MoonBit","tags":["json","repair"],"meta":{"ok":true,"n":1.5e3}}'),
-      );
-      $("sample-truncated").addEventListener("click", () => load('{"name":"Mo'));
-      $("sample-prose").addEventListener("click", () =>
-        load('Sure! Here is the JSON you asked for:\n{"a":1,"b":[1,2,]}'),
-      );
+        // ---- theme ---------------------------------------------------------
+        const themeButton = $("theme-toggle");
+        const storedTheme = (() => {
+          try {
+            return localStorage.getItem("jsonmend-theme");
+          } catch {
+            return null;
+          }
+        })();
+        const prefersDark =
+          globalThis.matchMedia &&
+          globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
+        const applyTheme = (theme) => {
+          document.documentElement.dataset.theme = theme;
+          themeButton.textContent = theme === "dark" ? "☀ 浅色" : "☾ 深色";
+          themeButton.setAttribute("aria-pressed", String(theme === "dark"));
+        };
+        applyTheme(storedTheme || (prefersDark ? "dark" : "light"));
+        themeButton.addEventListener("click", () => {
+          const next =
+            document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+          applyTheme(next);
+          try {
+            localStorage.setItem("jsonmend-theme", next);
+          } catch {
+            /* private mode: the page still works */
+          }
+        });
 
-      $("cli").textContent = [
-        "$ jsonmend < broken.json > fixed.json",
-        "$ jsonmend --report --indent 2 broken.json",
-        "$ jsonmend --check broken.json ; echo $?",
-        "$ jsonmend --strict broken.json ; echo $?",
-      ].join("\n");
+        // ---- evidence strip ------------------------------------------------
+        const strip = $("evidence-strip");
+        for (const item of F.evidence) {
+          const card = el("div", "stat");
+          card.appendChild(el("b", "", item.n));
+          card.appendChild(el("span", "", item.label));
+          strip.appendChild(card);
+        }
 
-      $("upto").max = String(input.value.length);
-      $("upto").value = String(input.value.length);
-      refresh();
+        // ---- shared selects ------------------------------------------------
+        function fillPolicies(select, value) {
+          for (const p of F.policies) {
+            const opt = el("option", "", p.label);
+            opt.value = p.id;
+            select.appendChild(opt);
+          }
+          select.value = value;
+        }
+        fillPolicies($("wb-policy"), "permissive");
+        fillPolicies($("gate-policy"), "agent");
+        const policyHint = () => {
+          const p = F.policies.find((x) => x.id === $("wb-policy").value);
+          $("wb-policy-hint").textContent =
+            (p ? p.hint : "") +
+            " 执行门始终按精确度判定，档位决定它是拒绝（E010/E011）还是只报告。";
+        };
+        $("wb-policy").addEventListener("change", () => {
+          policyHint();
+          runWorkbench();
+        });
+        policyHint();
+
+        // ---- workbench -----------------------------------------------------
+        let wbLastPanel = "output";
+        const wbInput = $("wb-input");
+
+        function setWbTab(name) {
+          wbLastPanel = name;
+          for (const button of document.querySelectorAll("[data-wb-tab]")) {
+            button.setAttribute(
+              "aria-pressed",
+              String(button.dataset.wbTab === name),
+            );
+          }
+          for (const panel of ["output", "plan", "repairs"]) {
+            $("wb-panel-" + panel).hidden = panel !== name;
+          }
+          $("wb-copy-output").dataset.copy =
+            name === "output" ? "wb-output" : name === "plan" ? "wb-plan" : "wb-repairs";
+        }
+        for (const button of document.querySelectorAll("[data-wb-tab]")) {
+          button.addEventListener("click", () => setWbTab(button.dataset.wbTab));
+        }
+
+        function renderRepairs(plan) {
+          const body = $("wb-repairs-body");
+          clear(body);
+          const repairs = (plan && plan.repairs) || [];
+          if (!repairs.length) {
+            const tr = el("tr");
+            const td = el(
+              "td",
+              "",
+              plan && plan.error
+                ? "没有修复记录：本次在 " + plan.error.code + " 处失败。"
+                : "没有修复记录：输入已经是合法 JSON，或在当前档位下没有可记录的修复。",
+            );
+            td.colSpan = 6;
+            tr.appendChild(td);
+            body.appendChild(tr);
+            return;
+          }
+          for (const r of repairs) {
+            const tr = el("tr");
+            const code = el("td", "nowrap");
+            code.appendChild(el("code", "", r.rule));
+            code.appendChild(el("span", "", " " + (r.name || "")));
+            tr.appendChild(code);
+            const severity = el("td");
+            severity.appendChild(
+              el(
+                "span",
+                "pill " + (r.severity === "warning" ? "warn" : "info"),
+                r.severity,
+              ),
+            );
+            tr.appendChild(severity);
+            tr.appendChild(el("td", "", r.action));
+            tr.appendChild(
+              el("td", "nowrap", (r.line || 0) + ":" + (r.column || 0)),
+            );
+            tr.appendChild(el("td", "", r.ambiguity || "unambiguous"));
+            tr.appendChild(
+              el(
+                "td",
+                "",
+                (r.confidence || "—") +
+                  (typeof r.confidence_value === "number"
+                    ? " (" + r.confidence_value + ")"
+                    : ""),
+              ),
+            );
+            body.appendChild(tr);
+          }
+        }
+
+        function renderWorkbenchPlan(plan) {
+          const verdict = $("wb-verdict");
+          clear(verdict);
+          verdict.className = "verdict " + verdictClass(plan);
+          verdict.appendChild(el("span", "", plan.label || plan.decision || "—"));
+          if (plan.error) {
+            verdict.appendChild(
+              el(
+                "span",
+                "sub",
+                plan.error.code + " · " + (plan.error.message || ""),
+              ),
+            );
+          } else if (plan.repairs_truncated) {
+            verdict.appendChild(el("span", "sub", "修复记录已截断"));
+          }
+          $("wb-decision").textContent = plan.decision || "—";
+          $("wb-exactness").textContent = plan.exactness || "—";
+          $("wb-ambiguity").textContent = plan.ambiguity || "—";
+          $("wb-execution").textContent = plan.execution || "—";
+          $("wb-valid").textContent = String(plan.valid_json);
+          $("wb-normalized").textContent = String(plan.normalized);
+          $("wb-output").textContent =
+            typeof plan.text === "string" && plan.text.length
+              ? plan.text
+              : plan.error
+                ? "没有可输出的修复文本：" + plan.error.code + " " + plan.error.message
+                : "（空）";
+          $("wb-plan").textContent = JSON.stringify(plan, null, 2);
+          renderRepairs(plan);
+          const retry = $("wb-retry");
+          if (plan.retry && plan.retry.prompt) {
+            retry.hidden = false;
+            $("wb-retry-text").textContent = plan.retry.prompt;
+          } else {
+            retry.hidden = true;
+            $("wb-retry-text").textContent = "—";
+          }
+          $("wb-meta").textContent =
+            "输入 " +
+            wbInput.value.length +
+            " 码元 · policy " +
+            $("wb-policy").value +
+            " · repairs " +
+            ((plan.repairs && plan.repairs.length) || 0) +
+            (plan.error ? " · " + plan.error.code : "") +
+            " · valid_json " +
+            plan.valid_json +
+            " · normalized " +
+            plan.normalized;
+        }
+
+        function workbenchFailure(message) {
+          const verdict = $("wb-verdict");
+          verdict.className = "verdict bad";
+          verdict.textContent = "无法分析";
+          $("wb-meta").textContent = message;
+          $("wb-output").textContent = message;
+          $("wb-plan").textContent = message;
+          $("wb-retry").hidden = true;
+          renderRepairs(null);
+        }
+
+        function runWorkbench() {
+          const analyze = api($("wb-skip-prose").checked ? "analyze_prose" : "analyze");
+          if (!analyze) {
+            workbenchFailure(
+              "jsonmend.js 没有加载。请通过 HTTP 打开本页，或先运行 bash static/demo/build.sh。",
+            );
+            return;
+          }
+          let plan;
+          try {
+            plan = parseJson(analyze(wbInput.value, $("wb-policy").value, ""));
+          } catch (error) {
+            plan = null;
+          }
+          if (!plan) {
+            workbenchFailure("引擎返回了无法解析的结果。");
+            return;
+          }
+          renderWorkbenchPlan(plan);
+        }
+
+        let wbTimer = 0;
+        wbInput.addEventListener("input", () => {
+          clearTimeout(wbTimer);
+          wbTimer = setTimeout(runWorkbench, wbInput.value.length > 20000 ? 800 : 300);
+        });
+        $("wb-run").addEventListener("click", runWorkbench);
+        $("wb-clear").addEventListener("click", () => {
+          wbInput.value = "";
+          runWorkbench();
+        });
+        for (const type of ["dragenter", "dragover"]) {
+          wbInput.addEventListener(type, (event) => event.preventDefault());
+        }
+        wbInput.addEventListener("drop", async (event) => {
+          event.preventDefault();
+          const file = event.dataTransfer && event.dataTransfer.files[0];
+          if (!file) return;
+          wbInput.value = await file.text();
+          runWorkbench();
+        });
+
+        const sampleBox = $("wb-samples");
+        for (const sample of F.workbenchSamples) {
+          const button = el("button", "pill", sample.label);
+          button.type = "button";
+          button.dataset.sample = sample.id;
+          button.addEventListener("click", () => {
+            wbInput.value = sample.text;
+            $("wb-policy").value = sample.policy;
+            $("wb-skip-prose").checked = Boolean(sample.skipProse);
+            policyHint();
+            runWorkbench();
+            setWbTab("output");
+          });
+          sampleBox.appendChild(button);
+        }
+
+        // ---- execution gate ------------------------------------------------
+        const gateState = {
+          mode: "decl",
+          memory: { decl: null, json: null },
+          timer: 0,
+        };
+        const GATE_DECL_DEFAULT = {
+          args: "{\"query\":\"MoonBit\",\"limit\":10}",
+          schema: "{!query:string,!limit:integer}",
+          policy: "agent",
+        };
+        const GATE_JSON_DEFAULT = {
+          args: "{\"amount\":100,\"currency\":\"USD\"}",
+          schema:
+            '{\n  "type": "object",\n  "properties": {\n    "amount": { "type": "number" },\n    "currency": { "type": "string" }\n  },\n  "required": ["amount"]\n}',
+          policy: "agent",
+        };
+
+        function updateGateMode() {
+          for (const button of document.querySelectorAll("[data-gate-mode]")) {
+            button.setAttribute(
+              "aria-pressed",
+              String(button.dataset.gateMode === gateState.mode),
+            );
+          }
+          const isJson = gateState.mode === "json";
+          $("gate-schema-label").textContent = isJson
+            ? "工具 inputSchema（JSON Schema 子集）"
+            : "骨架声明";
+          $("gate-schema-hint").textContent = isJson
+            ? "支持 type / properties / required / items / enum / const / 数值与长度约束；不支持的关键字报 E070。"
+            : "例：{!query:string,!limit:integer} 或 {!limit:integer(minimum:0)}。";
+        }
+
+        function setGateMode(mode) {
+          gateState.memory[gateState.mode] = {
+            args: $("gate-args").value,
+            schema: $("gate-schema").value,
+            policy: $("gate-policy").value,
+          };
+          gateState.mode = mode;
+          const remembered = gateState.memory[mode];
+          const fallback = mode === "json" ? GATE_JSON_DEFAULT : GATE_DECL_DEFAULT;
+          const value = remembered || fallback;
+          $("gate-args").value = value.args;
+          $("gate-schema").value = value.schema;
+          $("gate-policy").value = value.policy;
+          updateGateMode();
+          runGate();
+        }
+
+        function renderGateChecklist(plan) {
+          const box = $("gate-checklist");
+          clear(box);
+          if (plan.error && !plan.decision) {
+            box.appendChild(
+              el("span", "chip miss", "声明无法解析：" + plan.error),
+            );
+            return;
+          }
+          if (!plan.schema_total) {
+            box.appendChild(el("span", "chip", "未声明骨架：只做语法与执行判定"));
+            if (plan.error) {
+              box.appendChild(
+                el("span", "chip miss", plan.error.code + " " + plan.error.message),
+              );
+            }
+            return;
+          }
+          box.appendChild(
+            el(
+              "span",
+              plan.schema_satisfied === plan.schema_total ? "chip ready" : "chip",
+              "满足 " + plan.schema_satisfied + " / " + plan.schema_total + " 个必填成员",
+            ),
+          );
+          for (const missing of plan.schema_missing || []) {
+            box.appendChild(el("span", "chip miss", "缺失 " + missing));
+          }
+          if (plan.error) {
+            box.appendChild(
+              el("span", "chip miss", plan.error.code + " " + plan.error.message),
+            );
+          }
+        }
+
+        function renderGate(plan) {
+          const verdict = $("gate-verdict");
+          clear(verdict);
+          if (plan.error && !plan.decision) {
+            verdict.className = "verdict bad";
+            verdict.appendChild(el("span", "", "声明无法解析（E070）"));
+            verdict.appendChild(el("span", "sub", String(plan.error)));
+            $("gate-decision").textContent = "—";
+            $("gate-execution").textContent = "—";
+            $("gate-schema-count").textContent = "—";
+            $("gate-exactness").textContent = "—";
+            renderGateChecklist(plan);
+            $("gate-retry").hidden = true;
+            $("gate-plan").textContent = JSON.stringify(plan, null, 2);
+            $("gate-meta").textContent = "声明本身不能使用；不支持的关键字不会被静默丢掉。";
+            return;
+          }
+          verdict.className = "verdict " + verdictClass(plan);
+          if (plan.executable) {
+            verdict.appendChild(el("span", "", "EXECUTION: READY"));
+            verdict.appendChild(el("span", "sub", plan.label));
+          } else if (plan.decision === "ambiguous") {
+            verdict.appendChild(el("span", "", "EXECUTION: BLOCKED"));
+            verdict.appendChild(el("span", "sub", "两种读法 — 先问模型要唯一写法"));
+          } else {
+            verdict.appendChild(el("span", "", "EXECUTION: BLOCKED"));
+            verdict.appendChild(el("span", "sub", plan.label));
+          }
+          $("gate-decision").textContent = plan.decision || "—";
+          $("gate-execution").textContent = plan.execution || "—";
+          $("gate-schema-count").textContent = plan.schema_total
+            ? plan.schema_satisfied + " / " + plan.schema_total
+            : "—";
+          $("gate-exactness").textContent = plan.exactness || "—";
+          renderGateChecklist(plan);
+          if (plan.retry && plan.retry.prompt) {
+            $("gate-retry").hidden = false;
+            $("gate-retry-text").textContent = plan.retry.prompt;
+          } else {
+            $("gate-retry").hidden = true;
+            $("gate-retry-text").textContent = "—";
+          }
+          $("gate-plan").textContent = JSON.stringify(plan, null, 2);
+          $("gate-meta").textContent =
+            "policy " +
+            $("gate-policy").value +
+            " · " +
+            (plan.label || "") +
+            (plan.error ? " · " + plan.error.code + " " + plan.error.message : "") +
+            (plan.executable ? " · 宿主可以执行" : " · 把 retry.prompt 原样回灌模型");
+        }
+
+        function runGate() {
+          const fn =
+            gateState.mode === "json"
+              ? api("analyze_json_schema")
+              : api("analyze");
+          if (!fn) {
+            $("gate-verdict").className = "verdict bad";
+            $("gate-verdict").textContent = "jsonmend.js 没有加载";
+            $("gate-plan").textContent = "需要先加载引擎 bundle。";
+            return;
+          }
+          let plan;
+          try {
+            plan = parseJson(
+              fn($("gate-args").value, $("gate-policy").value, $("gate-schema").value),
+            );
+          } catch {
+            plan = null;
+          }
+          if (!plan) {
+            $("gate-verdict").className = "verdict bad";
+            $("gate-verdict").textContent = "引擎返回了无法解析的结果";
+            $("gate-plan").textContent = "—";
+            return;
+          }
+          renderGate(plan);
+        }
+
+        for (const button of document.querySelectorAll("[data-gate-mode]")) {
+          button.addEventListener("click", () =>
+            setGateMode(button.dataset.gateMode),
+          );
+        }
+        $("gate-run").addEventListener("click", runGate);
+        $("gate-args").addEventListener("input", () => {
+          clearTimeout(gateState.timer);
+          gateState.timer = setTimeout(runGate, 300);
+        });
+        $("gate-schema").addEventListener("input", () => {
+          clearTimeout(gateState.timer);
+          gateState.timer = setTimeout(runGate, 300);
+        });
+        $("gate-policy").addEventListener("change", runGate);
+
+        const presetBox = $("gate-presets");
+        for (const preset of F.gatePresets) {
+          const button = el("button", "pill", preset.label);
+          button.type = "button";
+          button.dataset.gatePreset = preset.id;
+          button.addEventListener("click", () => {
+            gateState.mode = preset.mode;
+            $("gate-args").value = preset.args;
+            $("gate-schema").value = preset.schema;
+            $("gate-policy").value = preset.policy;
+            updateGateMode();
+            runGate();
+          });
+          presetBox.appendChild(button);
+        }
+        updateGateMode();
+
+        // Defaults for the gate after the mode buttons exist.
+        $("gate-args").value = GATE_DECL_DEFAULT.args;
+        $("gate-schema").value = GATE_DECL_DEFAULT.schema;
+        $("gate-policy").value = GATE_DECL_DEFAULT.policy;
+
+        // ---- hero gate -----------------------------------------------------
+        function renderHero() {
+          if (!api("analyze_json_schema")) {
+            $("hero-verdict").className = "verdict warn";
+            $("hero-verdict").textContent = "引擎未加载 — 打开方式见页首提示";
+            $("hero-code").textContent = "—";
+            $("hero-decision").textContent = "—";
+            $("hero-retry").textContent = "—";
+            return;
+          }
+          const args = '{"amount":100,"currency":"USD"';
+          const schema = JSON.stringify({
+            type: "object",
+            properties: {
+              amount: { type: "number" },
+              currency: { type: "string" },
+            },
+            required: ["amount"],
+          });
+          const plan = parseJson(api("analyze_json_schema")(args, "agent", schema));
+          if (!plan || !plan.decision) {
+            $("hero-verdict").className = "verdict bad";
+            $("hero-verdict").textContent = "判定失败";
+            return;
+          }
+          const box = $("hero-verdict");
+          clear(box);
+          box.className = "verdict " + verdictClass(plan);
+          box.appendChild(el("span", "", plan.executable ? "EXECUTION: READY" : "EXECUTION: BLOCKED"));
+          box.appendChild(el("span", "sub", plan.label));
+          $("hero-code").textContent = plan.error ? plan.error.code : "none";
+          $("hero-decision").textContent = plan.decision;
+          $("hero-retry").textContent =
+            plan.retry && plan.retry.prompt
+              ? plan.retry.prompt
+              : "放行：宿主可以执行这组参数。";
+        }
+
+        // ---- stream --------------------------------------------------------
+        const stState = {
+          scenario: null,
+          upto: 0,
+          playing: false,
+          timer: 0,
+          factor: 1,
+        };
+
+        function stLength() {
+          return stState.scenario ? stState.scenario.text.length : 0;
+        }
+        function stopStream() {
+          stState.playing = false;
+          clearTimeout(stState.timer);
+          $("st-play").textContent = "▶ 播放";
+          $("st-play").setAttribute("aria-pressed", "false");
+          $("st-text").classList.remove("busy");
+        }
+        function renderStream() {
+          if (!stState.scenario) return;
+          const scene = stState.scenario;
+          const len = scene.text.length;
+          const upto = Math.max(0, Math.min(len, stState.upto));
+          stState.upto = upto;
+          const live = api("live");
+          if (!live) {
+            $("st-text").textContent = "jsonmend.js 没有加载";
+            $("st-meta").textContent = "需要引擎 bundle 才能逐帧重放。";
+            return;
+          }
+          const frame = parseJson(live(scene.text, upto, scene.schema));
+          if (!frame || frame.error) {
+            $("st-text").textContent = "无法解析当前前缀";
+            $("st-meta").textContent = frame && frame.error ? frame.error : "—";
+            return;
+          }
+          $("st-text").textContent = scene.text.slice(0, upto) || "（空）";
+          $("st-text").classList.toggle("busy", upto < len && stState.playing);
+          const structure = $("st-structure");
+          structure.textContent = frame.snapshot || "—";
+          if (frame.open_path) {
+            structure.textContent += "\nopen_path: " + frame.open_path;
+          }
+          const members = $("st-members");
+          clear(members);
+          if (!frame.members || !frame.members.length) {
+            members.appendChild(el("span", "chip", "尚无成员"));
+          } else {
+            for (const member of frame.members) {
+              members.appendChild(
+                el(
+                  "span",
+                  "chip " + (member.ready ? "ready" : "open"),
+                  (member.ready ? "✓ " : "◐ ") + member.key,
+                ),
+              );
+            }
+          }
+          $("st-syntax").textContent = pct(frame.syntax_ready);
+          $("st-schema").textContent = pct(frame.schema_ready);
+          $("st-settled").textContent = pct(frame.settled_ready);
+          $("st-declared").textContent =
+            typeof frame.declared === "number"
+              ? frame.declared + " / " + frame.declared_total
+              : "—";
+          const plan = frame.schema || frame.plan;
+          const verdict = $("st-verdict");
+          clear(verdict);
+          if (frame.execution_ready) {
+            verdict.className = "verdict ok";
+            verdict.appendChild(el("span", "", "EXECUTION: READY"));
+            verdict.appendChild(el("span", "sub", "已可以停止生成并执行"));
+          } else if (plan && plan.decision === "ambiguous") {
+            verdict.className = "verdict bad";
+            verdict.appendChild(el("span", "", "EXECUTION: BLOCKED"));
+            verdict.appendChild(el("span", "sub", "两种读法"));
+          } else if (frame.completeness === "Complete") {
+            verdict.className = "verdict " + (plan && plan.executable ? "ok" : "bad");
+            verdict.appendChild(el("span", "", "EXECUTION: " + (plan ? plan.label : "—")));
+          } else {
+            verdict.className = "verdict warn";
+            verdict.appendChild(el("span", "", "EXECUTION: WAIT"));
+            verdict.appendChild(el("span", "sub", plan ? plan.label : "还没定稿"));
+          }
+          const retry = $("st-retry");
+          if (
+            plan &&
+            plan.retry &&
+            plan.retry.prompt &&
+            !frame.execution_ready &&
+            (frame.completeness === "Complete" || plan.decision === "ambiguous")
+          ) {
+            retry.hidden = false;
+            $("st-retry-text").textContent = plan.retry.prompt;
+          } else {
+            retry.hidden = true;
+          }
+          const deltas = api("deltas") ? parseJson(api("deltas")(scene.text, upto)) : null;
+          const log = $("st-deltas");
+          clear(log);
+          const list = deltas && deltas.deltas ? deltas.deltas : [];
+          if (!list.length) {
+            log.appendChild(el("div", "empty", "当前前缀还没有结构 delta"));
+          } else {
+            for (const delta of list) {
+              const row = el("div");
+              row.appendChild(el("span", "at", "@" + delta.at));
+              row.appendChild(el("span", "op", delta.op));
+              const ptr = el("span", "ptr");
+              ptr.textContent =
+                delta.pointer +
+                (delta.op === "append_text" && delta.text
+                  ? "  +" + JSON.stringify(delta.text)
+                  : delta.value
+                    ? "  = " + delta.value
+                    : "");
+              row.appendChild(ptr);
+              log.appendChild(row);
+            }
+            log.scrollTop = log.scrollHeight;
+          }
+          $("st-meta").textContent =
+            "consumed " +
+            upto +
+            " / " +
+            len +
+            " 码元 · " +
+            frame.completeness +
+            " · members ready " +
+            frame.ready +
+            " / " +
+            frame.seen +
+            (frame.open_path ? " · open_path " + frame.open_path : "") +
+            (frame.execution_ready ? " · 可以停止生成" : "");
+          $("st-range").max = String(len);
+          $("st-range").value = String(upto);
+        }
+
+        function streamTick() {
+          if (!stState.playing || !stState.scenario) return;
+          const len = stLength();
+          if (stState.upto >= len) {
+            stopStream();
+            return;
+          }
+          const base = Math.max(1, Math.round(len / 130));
+          stState.upto = Math.min(len, stState.upto + Math.max(1, Math.round(base * stState.factor)));
+          renderStream();
+          if (stState.upto >= len) {
+            stopStream();
+          } else {
+            stState.timer = setTimeout(streamTick, 38);
+          }
+        }
+        function toggleStream() {
+          if (!stState.scenario) return;
+          if (stState.playing) {
+            stopStream();
+            return;
+          }
+          if (stState.upto >= stLength()) stState.upto = 0;
+          stState.playing = true;
+          $("st-play").textContent = "⏸ 暂停";
+          $("st-play").setAttribute("aria-pressed", "true");
+          streamTick();
+        }
+        $("st-play").addEventListener("click", toggleStream);
+        $("st-step").addEventListener("click", () => {
+          stopStream();
+          const len = stLength();
+          stState.upto = Math.min(
+            len,
+            stState.upto + Math.max(1, Math.round(len / 80)),
+          );
+          renderStream();
+        });
+        $("st-reset").addEventListener("click", () => {
+          stopStream();
+          stState.upto = 0;
+          renderStream();
+        });
+        $("st-speed").addEventListener("change", () => {
+          stState.factor = Number($("st-speed").value) || 1;
+        });
+        $("st-range").addEventListener("input", () => {
+          stopStream();
+          stState.upto = Number($("st-range").value) || 0;
+          renderStream();
+        });
+
+        const stScenarios = $("st-scenarios");
+        for (const scenario of F.streamScenarios) {
+          const button = el("button", "pill", scenario.label);
+          button.type = "button";
+          button.dataset.streamScenario = scenario.id;
+          button.addEventListener("click", () => {
+            stopStream();
+            stState.scenario = scenario;
+            stState.upto = 0;
+            for (const other of stScenarios.querySelectorAll("button")) {
+              other.setAttribute(
+                "aria-pressed",
+                String(other.dataset.streamScenario === scenario.id),
+              );
+            }
+            renderStream();
+          });
+          stScenarios.appendChild(button);
+        }
+        if (F.streamScenarios.length) {
+          stState.scenario = F.streamScenarios[0];
+          stScenarios.querySelector("button").setAttribute("aria-pressed", "true");
+        }
+
+        // ---- rules ---------------------------------------------------------
+        const verifiedRules = new Set();
+        const rulesBody = $("rules-body");
+
+        function ruleMatches(rule, query, filter) {
+          if (filter !== "all") {
+            if (filter === "info" || filter === "warning") {
+              if (!rule.severity.split("/").includes(filter)) return false;
+            } else if (rule.action !== filter) {
+              return false;
+            }
+          }
+          if (!query) return true;
+          const haystack = (
+            rule.code +
+            " " +
+            rule.name +
+            " " +
+            rule.trigger +
+            " " +
+            rule.sample
+          ).toLowerCase();
+          return haystack.includes(query.toLowerCase());
+        }
+
+        function renderRules() {
+          const query = $("rules-search").value.trim();
+          const filter = $("rules-filter").value;
+          clear(rulesBody);
+          let visible = 0;
+          for (const rule of F.rules) {
+            if (!ruleMatches(rule, query, filter)) continue;
+            visible += 1;
+            const tr = el("tr");
+            tr.dataset.rule = rule.code;
+            const code = el("td", "nowrap");
+            code.appendChild(el("code", "", rule.code));
+            if (verifiedRules.has(rule.code)) {
+              code.appendChild(el("span", "pill ok", "✓"));
+            }
+            code.appendChild(el("br"));
+            code.appendChild(el("span", "", rule.name));
+            tr.appendChild(code);
+            const severity = el("td");
+            for (const part of rule.severity.split("/")) {
+              severity.appendChild(
+                el("span", "pill " + (part === "warning" ? "warn" : "info"), part),
+              );
+            }
+            tr.appendChild(severity);
+            tr.appendChild(el("td", "", rule.action));
+            tr.appendChild(el("td", "", rule.trigger));
+            const sample = el("td", "rule-sample");
+            sample.textContent = rule.sample.replace(/\n/g, "⏎");
+            tr.appendChild(sample);
+            const action = el("td");
+            const tryButton = el("button", "", "试用");
+            tryButton.type = "button";
+            tryButton.dataset.ruleTry = rule.code;
+            tryButton.addEventListener("click", () => {
+              wbInput.value = rule.sample;
+              $("wb-policy").value = "permissive";
+              $("wb-skip-prose").checked = Boolean(rule.skipProse);
+              policyHint();
+              runWorkbench();
+              setWbTab("repairs");
+              document
+                .getElementById("workbench")
+                .scrollIntoView({ behavior: "smooth", block: "start" });
+              const first = $("wb-repairs-body").querySelector("tr");
+              if (first) {
+                first.classList.add("flash");
+                setTimeout(() => first.classList.remove("flash"), 1200);
+              }
+            });
+            action.appendChild(tryButton);
+            tr.appendChild(action);
+            rulesBody.appendChild(tr);
+          }
+          $("rules-count").textContent =
+            visible === F.rules.length
+              ? F.rules.length + " 条规则"
+              : visible + " / " + F.rules.length + " 条规则";
+        }
+        $("rules-search").addEventListener("input", renderRules);
+        $("rules-filter").addEventListener("change", renderRules);
+        $("rules-verify").addEventListener("click", () => {
+          if (!api("analyze")) {
+            $("rules-verify-out").textContent = "引擎未加载";
+            return;
+          }
+          const failed = [];
+          for (const rule of F.rules) {
+            const fn = api(rule.skipProse ? "analyze_prose" : "analyze");
+            const plan = fn
+              ? parseJson(fn(rule.sample, "permissive", ""))
+              : null;
+            const ok =
+              plan &&
+              (plan.repairs || []).some((repair) => repair.rule === rule.code);
+            if (ok) verifiedRules.add(rule.code);
+            else failed.push(rule.code);
+          }
+          $("rules-verify-out").textContent = failed.length
+            ? "自检 " +
+              (F.rules.length - failed.length) +
+              "/" +
+              F.rules.length +
+              " 通过；失败：" +
+              failed.join(", ")
+            : "自检 " + F.rules.length + "/" + F.rules.length + " 通过";
+          renderRules();
+        });
+
+        // ---- readiness -----------------------------------------------------
+        const rdState = { scenario: null };
+        function rdRender() {
+          if (!rdState.scenario) return;
+          const fn = api("readiness");
+          if (!fn) {
+            $("rd-verdict").className = "verdict bad";
+            $("rd-verdict").textContent = "jsonmend.js 没有加载";
+            return;
+          }
+          const parsed = parseJson(fn(rdState.scenario.text, $("rd-schema").value));
+          if (!parsed || parsed.error) {
+            $("rd-verdict").className = "verdict bad";
+            $("rd-verdict").textContent = "声明或输入无法解析";
+            $("rd-meta").textContent = parsed && parsed.error ? parsed.error : "—";
+            $("rd-syntax").textContent = "—";
+            $("rd-schema-ready").textContent = "—";
+            $("rd-settled").textContent = "—";
+            clear($("rd-fields"));
+            clear($("rd-events"));
+            clear($("rd-timeline"));
+            return;
+          }
+          $("rd-syntax").textContent = pct(parsed.syntax_permille);
+          $("rd-schema-ready").textContent = pct(parsed.schema_permille);
+          $("rd-settled").textContent = pct(parsed.settled_permille);
+          const verdict = $("rd-verdict");
+          clear(verdict);
+          const v = parsed.verdict || { ok: false, total: 0, satisfied: 0, missing: [], mismatched: [] };
+          if (v.ok) {
+            verdict.className = "verdict ok";
+            verdict.appendChild(el("span", "", "ALL DECLARED MEMBERS SATISFIED"));
+            verdict.appendChild(el("span", "sub", v.satisfied + " / " + v.total + " 个必填成员"));
+          } else {
+            verdict.className = "verdict bad";
+            verdict.appendChild(el("span", "", "NOT EXECUTABLE"));
+            const details = [];
+            if (v.missing && v.missing.length) details.push("缺失 " + v.missing.join(", "));
+            for (const m of v.mismatched || []) {
+              details.push(m.path + " 期望 " + m.expected + "，得到 " + m.got);
+            }
+            verdict.appendChild(el("span", "sub", details.join(" · ") || "见事件流"));
+          }
+          const fields = $("rd-fields");
+          clear(fields);
+          const fieldList = parsed.fields || [];
+          if (!fieldList.length) {
+            fields.appendChild(el("div", "hint", "没有顶级字段"));
+          }
+          for (const field of fieldList) {
+            const row = el("div", "bar-row");
+            row.appendChild(el("span", "name", field.key));
+            const bar = el("div", "bar");
+            const fill = el("i");
+            fill.style.width = Math.max(0, Math.min(100, field.permille / 10)) + "%";
+            bar.appendChild(fill);
+            row.appendChild(bar);
+            row.appendChild(el("span", "val", pct(field.permille)));
+            fields.appendChild(row);
+          }
+          const events = $("rd-events");
+          clear(events);
+          const timeline = $("rd-timeline");
+          clear(timeline);
+          timeline.appendChild(el("span", "end", "100%"));
+          const evs = parsed.events || [];
+          const labels = {
+            field_ready: "ready",
+            field_invalid: "invalid",
+            field_rejected: "reject",
+            field_incomplete: "incomplete",
+            root_ready: "root",
+            root_invalid: "root✗",
+          };
+          for (const item of evs) {
+            const e = item.event || {};
+            const tr = el("tr");
+            const kind = el("td");
+            const good = e.kind === "field_ready" || e.kind === "root_ready";
+            const bad = e.kind === "field_invalid" || e.kind === "field_rejected" || e.kind === "root_invalid";
+            kind.appendChild(
+              el("span", "pill " + (good ? "ok" : bad ? "bad" : "warn"), e.kind || "—"),
+            );
+            tr.appendChild(kind);
+            tr.appendChild(el("td", "", e.path || "—"));
+            tr.appendChild(el("td", "nowrap", pct(item.permille)));
+            const detail = [];
+            if (e.expected) detail.push("expected " + e.expected);
+            if (e.got) detail.push("got " + e.got);
+            if (typeof e.offset === "number") detail.push("offset " + e.offset);
+            tr.appendChild(el("td", "", detail.join(" · ") || "—"));
+            events.appendChild(tr);
+
+            if (e.kind !== "field_incomplete" && e.path !== undefined) {
+              const tick = el("span", "tick " + (good ? "ok" : bad ? "bad" : ""));
+              tick.style.left = Math.max(0, Math.min(99.8, item.permille / 10)) + "%";
+              const label = el("em", "", (labels[e.kind] || e.kind || "") + (e.path ? " " + e.path : ""));
+              tick.appendChild(label);
+              timeline.appendChild(tick);
+            }
+          }
+          $("rd-meta").textContent =
+            "输入 " +
+            rdState.scenario.text.length +
+            " 码元 · " +
+            evs.length +
+            " 个事件 · " +
+            fieldList.length +
+            " 个顶级字段";
+        }
+        const rdSamples = $("rd-samples");
+        for (const scenario of F.readinessScenarios) {
+          const button = el("button", "pill", scenario.label);
+          button.type = "button";
+          button.dataset.rdSample = scenario.id;
+          button.addEventListener("click", () => {
+            rdState.scenario = scenario;
+            $("rd-schema").value = scenario.schema;
+            for (const other of rdSamples.querySelectorAll("button")) {
+              other.setAttribute(
+                "aria-pressed",
+                String(other.dataset.rdSample === scenario.id),
+              );
+            }
+            rdRender();
+          });
+          rdSamples.appendChild(button);
+        }
+        if (F.readinessScenarios.length) {
+          rdState.scenario = F.readinessScenarios[0];
+          $("rd-schema").value = rdState.scenario.schema;
+          rdSamples.querySelector("button").setAttribute("aria-pressed", "true");
+        }
+        $("rd-run").addEventListener("click", rdRender);
+
+        // ---- CLI -----------------------------------------------------------
+        const cliState = { cmd: "repair", flags: new Set() };
+        const cliCmd = $("cli-cmd");
+        for (const sub of F.cli.subcommands) {
+          const opt = el("option", "", sub.label);
+          opt.value = sub.id;
+          cliCmd.appendChild(opt);
+        }
+        cliCmd.value = "repair";
+
+        function quoteArg(value) {
+          return /[^\w@%+=:,./-]/.test(value) ? "'" + value.replace(/'/g, "'\\''") + "'" : value;
+        }
+        function cliBuild() {
+          const parts = ["jsonmend"];
+          if (cliState.cmd !== "repair") parts.push(cliState.cmd);
+          for (const flag of F.cli.flags) {
+            if (!cliState.flags.has(flag.flag)) continue;
+            if (!flag.cmds.includes(cliState.cmd)) continue;
+            parts.push(flag.flag);
+            if (flag.arg) parts.push(quoteArg(flag.arg));
+          }
+          if (["repair", "explain", "readiness", "llm"].includes(cliState.cmd)) {
+            parts.push($("cli-file").value.trim() || "-");
+          }
+          $("cli-out").textContent = parts.join(" ");
+        }
+        function renderCliFlags() {
+          const box = $("cli-flags");
+          clear(box);
+          for (const flag of F.cli.flags) {
+            if (!flag.cmds.includes(cliState.cmd)) continue;
+            const label = el("label", "check");
+            label.title = flag.desc;
+            const input = document.createElement("input");
+            input.type = "checkbox";
+            input.dataset.cliFlag = flag.flag;
+            input.checked = cliState.flags.has(flag.flag);
+            input.addEventListener("change", () => {
+              if (input.checked) cliState.flags.add(flag.flag);
+              else cliState.flags.delete(flag.flag);
+              cliBuild();
+            });
+            label.appendChild(input);
+            label.appendChild(el("span", "", flag.flag + (flag.arg ? " " + flag.arg : "")));
+            box.appendChild(label);
+          }
+          cliBuild();
+        }
+        cliCmd.addEventListener("change", () => {
+          cliState.cmd = cliCmd.value;
+          renderCliFlags();
+        });
+        $("cli-file").addEventListener("input", cliBuild);
+        renderCliFlags();
+
+        const exitBody = $("cli-exit-body");
+        for (const item of F.exitCodes) {
+          const tr = el("tr");
+          tr.appendChild(el("td", "nowrap", item.code));
+          tr.appendChild(el("td", "", item.meaning));
+          exitBody.appendChild(tr);
+        }
+        const errorBody = $("cli-error-body");
+        for (const item of F.errors) {
+          const tr = el("tr");
+          tr.appendChild(el("td", "nowrap", item.code));
+          tr.appendChild(el("td", "", item.variant));
+          tr.appendChild(el("td", "nowrap", String(item.exit)));
+          tr.appendChild(el("td", "", item.summary));
+          errorBody.appendChild(tr);
+        }
+
+        // ---- surfaces ------------------------------------------------------
+        const surfaceList = $("surface-list");
+        F.surfaces.forEach((surface, index) => {
+          const card = el("div", "card surface");
+          card.appendChild(el("h3", "", surface.title));
+          card.appendChild(el("span", "pill info", surface.tag));
+          const line = el("div", "cmdline");
+          const pre = el("pre", "short", surface.cmd);
+          pre.id = "surface-cmd-" + index;
+          const button = el("button", "", "复制");
+          button.type = "button";
+          button.dataset.copyTarget = pre.id;
+          button.dataset.copy = pre.id;
+          line.appendChild(pre);
+          line.appendChild(button);
+          card.appendChild(line);
+          card.appendChild(el("p", "", surface.note));
+          surfaceList.appendChild(card);
+        });
+
+        // ---- delegated copy buttons ---------------------------------------
+        document.addEventListener("click", async (event) => {
+          const button = event.target.closest("[data-copy-target]");
+          if (!button) return;
+          const target = $(button.dataset.copyTarget || button.dataset.copy);
+          if (!target) return;
+          feedback(button, await copyText(target.textContent));
+        });
+
+        // ---- nav highlight -------------------------------------------------
+        const navLinks = new Map();
+        for (const link of document.querySelectorAll("[data-nav]")) {
+          navLinks.set(link.dataset.nav, link);
+        }
+        if ("IntersectionObserver" in globalThis) {
+          const observer = new IntersectionObserver(
+            (entries) => {
+              for (const entry of entries) {
+                if (!entry.isIntersecting) continue;
+                for (const link of navLinks.values()) link.classList.remove("active");
+                const link = navLinks.get(entry.target.id);
+                if (link) link.classList.add("active");
+              }
+            },
+            { rootMargin: "-45% 0px -50% 0px", threshold: 0 },
+          );
+          for (const section of document.querySelectorAll("section.band")) {
+            observer.observe(section);
+          }
+        }
+
+        // ---- global shortcut ----------------------------------------------
+        document.addEventListener("keydown", (event) => {
+          if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+            event.preventDefault();
+            runWorkbench();
+          }
+        });
+
+        // ---- initial render ------------------------------------------------
+        renderHero();
+        if (F.workbenchSamples.length) {
+          wbInput.value = F.workbenchSamples[0].text;
+          $("wb-policy").value = F.workbenchSamples[0].policy;
+          $("wb-skip-prose").checked = Boolean(F.workbenchSamples[0].skipProse);
+          policyHint();
+        }
+        renderRules();
+        runWorkbench();
+        runGate();
+        renderStream();
+        rdRender();
+      })();
     </script>
   </body>
 </html>

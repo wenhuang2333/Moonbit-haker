@@ -468,6 +468,14 @@ test "E021 and E022 offsets are absolute across chunks" {
   let p = PartialParser::new(options=small)
   assert_eq(feed_try(p, "[1,2,"), "")
   assert_eq(feed_try(p, "3,4"), "")
+  // The byte fast path must enforce the same limits and offsets.
+  let pb = PartialParser::new(options=small)
+  assert_eq(feed_bytes_try(pb, b"\"aaaaaaaaaaaa\""), "E021(10,@10)")
+  let pt = PartialParser::new(options={
+    ..Options::default(),
+    max_token_len: 5,
+  })
+  assert_eq(feed_bytes_try(pt, b"\"abcdef\""), "E022(5,@0)")
   assert_eq(feed_try(p, "5,6]"), "E021(10,@10)")
   let tok5 : Options = { ..Options::default(), max_token_len: 5, }
   assert_eq(attempt("[\"abcdef\"]", tok5).err, "E022(5,@1)")

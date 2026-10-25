@@ -148,6 +148,9 @@ fn options_of(o : CliOpts, agent_protocol? : Bool) -> @mend.Options {
     max_prose_buffer: o.max_prose_buffer,
     max_loss: o.max_loss,
     reject_ambiguous: o.reject_ambiguous,
+    // `--check` answers with the records and the exit code; rendering the
+    // repaired text would copy the whole document for nothing.
+    want_text: !o.check,
   }
   if o.policy == "" {
     base
@@ -195,7 +198,7 @@ fn run() -> Unit {
     }
     Version => {
       // Keep in sync with `version` in moon.mod; cli_smoke.sh checks it.
-      println("jsonmend 1.1.1")
+      println("jsonmend 1.2.0")
       quit(0)
     }
     Llm => {
@@ -284,6 +287,40 @@ fn run() -> Unit {
             }
           _ => raise e
         }
+    }
+    // A skeleton on the default path is a gate, not a decoration: `--check`
+    // and `repair` both refuse a value that does not satisfy it. `explain` and
+    // `readiness` add the two readiness fractions on top of this check.
+    if o.schema != "" {
+      match schema_of(o) {
+        Some(s) => {
+          let verdict = s.evaluate(fin.value)
+          if !verdict.ok {
+            eprintln(
+              "jsonmend: schema not satisfied (" +
+              verdict.satisfied.to_string() +
+              "/" +
+              verdict.total.to_string() +
+              ")",
+            )
+            for m in verdict.missing {
+              eprintln("  missing " + m)
+            }
+            for m in verdict.mismatched {
+              eprintln(
+                "  mismatch " +
+                m.path +
+                " expected " +
+                m.expected +
+                " got " +
+                m.got,
+              )
+            }
+            quit(5)
+          }
+        }
+        None => ()
+      }
     }
     if o.explain {
       explain(fin.repairs, @utf8.decode_lossy(Bytes::from_array(prefix[:])[:]))

@@ -145,10 +145,20 @@ priv struct Engine {
   /// Whether an ambiguous repair was seen (FR-27), updated even when records
   /// are not collected.
   mut ambiguous : Bool
+  /// Whether a `DropUnexpected` repair was seen. The `skip_prose` retry uses
+  /// this to tell a scalar root apart from prose that happens to begin with a
+  /// scalar (`42 is the answer`): the latter drops the tail, and must stay
+  /// refused. Kept even when records are not collected.
+  mut saw_dropped_content : Bool
   /// Deltas recorded since the last `drain_deltas` (FR-18).
   mut deltas : Array[Delta]
   /// Code units of the string being scanned already reported as `AppendText`.
   mut delta_str_reported : Int32
+  /// Cursor into `parts` for the next `AppendText` tail. Without it every
+  /// drain would rescan the whole string, which is quadratic when a long
+  /// string is drained once per small chunk.
+  mut delta_part_idx : Int32
+  mut delta_part_off : Int32
 }
 
 ///|
@@ -308,8 +318,11 @@ fn Engine::make(opts : Options) -> Engine {
     fed_bytes: 0,
     exactness: Exact,
     ambiguous: false,
+    saw_dropped_content: false,
     deltas: [],
     delta_str_reported: 0,
+    delta_part_idx: 0,
+    delta_part_off: 0,
   }
   if opts.multi_root is AsArray {
     let f = new_frame(FArr, start, true)
@@ -341,6 +354,9 @@ fn Engine::report(
   let severity = match severity {
     Some(s) => s
     None => code.severity_in(slot)
+  }
+  if code is DropUnexpected {
+    self.saw_dropped_content = true
   }
   if self.opts.mode is Strict || !self.opts.rules.is_enabled(code) {
     raise StrictViolation(code, p, code.message())
@@ -442,7 +458,14 @@ fn Engine::push_run(
   to : Int32,
 ) -> Unit raise MendError {
   let len = to - from
-  self.parts.push(s[from:to].to_owned())
+  // A whole-string run (the byte fast path always passes one) can be stored
+  // as-is; slicing would copy it again.
+  let part = if from == 0 && to == s.length() {
+    s
+  } else {
+    s[from:to].to_owned()
+  }
+  self.parts.push(part)
   self.parts_len = self.parts_len + len
   if self.parts_len > self.opts.max_token_len {
     raise TokenLimit(self.opts.max_token_len, self.tok_start.offset)
@@ -494,10 +517,44 @@ fn Engine::step(self : Engine, u : UInt16) -> Unit raise MendError {
 /// input, counted across every `feed_bytes` call, so the diagnostic does not
 /// depend on how the caller split the stream into chunks (BR-22).
 fn Engine::feed_bytes(self : Engine, bs : Bytes) -> Unit raise MendError {
-  for i = 0; i < bs.length(); i = i + 1 {
-    self.feed_byte(bs[i].to_char().to_int(), i)
+  let n = bs.length()
+  let mut i = 0
+  while i < n {
+    let mut batched = false
+    // Same fast path as `feed_str`: inside a plain string, a run of ASCII
+    // content is appended in one piece. Bytes >= 0x80, escapes and an
+    // unfinished multibyte sequence fall through to `feed_byte`, so UTF-8
+    // validation and its absolute offsets are unchanged.
+    if self.utf8_need == 0 && self.esc == 0 && self.pending_high == 0 {
+      match self.tok {
+        TStr(kind, _) => {
+          let mut j = i
+          while j < n {
+            let b = bs[j].to_int()
+            if b >= 0x80 || !is_plain_str_cu(b.to_uint16(), kind) {
+              break
+            }
+            j = j + 1
+          }
+          while j > i && self.pos.offset + (j - i) > self.opts.max_input_len {
+            j = j - 1
+          }
+          if j > i {
+            let run = @utf8.decode_lossy(bs[i:j])
+            self.push_run(run, 0, j - i)
+            i = j
+            batched = true
+          }
+        }
+        _ => ()
+      }
+    }
+    if !batched {
+      self.feed_byte(bs[i].to_char().to_int(), i)
+      i = i + 1
+    }
   }
-  self.fed_bytes = self.fed_bytes + bs.length()
+  self.fed_bytes = self.fed_bytes + n
 }
 
 ///|

@@ -167,6 +167,28 @@ test "TC-S-UTF8-01 feed_bytes matches feed for multibyte input" {
   let fin = p.finish()
   assert_eq(fin.text, one.text)
   assert_eq(fin.completeness == Complete, true)
+  // The byte path batches plain ASCII runs; a long string fed in odd-sized
+  // byte chunks must still match the one-shot string path.
+  let sb = StringBuilder()
+  sb.write_string("{\"s\":\"")
+  for i = 0; i < 4000; i = i + 1 {
+    sb.write_char('a')
+  }
+  sb.write_string("\"}")
+  let long = sb.to_string()
+  let long_bytes = @utf8.encode(long)
+  let q = PartialParser::new()
+  let mut j = 0
+  while j < long_bytes.length() {
+    let end = if j + 7 < long_bytes.length() {
+      j + 7
+    } else {
+      long_bytes.length()
+    }
+    q.feed_bytes(long_bytes[j:end].to_owned())
+    j = end
+  }
+  assert_eq(q.finish().text, repair(long).text)
 }
 
 ///|

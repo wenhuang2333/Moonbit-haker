@@ -172,23 +172,29 @@ fn Engine::delta_pending_key(self : Engine) -> Unit {
 
 ///|
 /// Text of the string being scanned that has not been reported yet.
+///
+/// The cursor (`delta_part_idx` / `delta_part_off`) records where the previous
+/// tail stopped, so a drain costs one pass over the newly appended parts and
+/// never rescans the prefix. `delta_str_reported` remains the total length and
+/// is what `flush_delta_text` compares against.
 fn Engine::delta_text_tail(self : Engine) -> String {
   let sb = StringBuilder()
-  let mut acc = 0
-  for part in self.parts {
+  let mut idx = self.delta_part_idx
+  let mut off = self.delta_part_off
+  while idx < self.parts.length() {
+    let part = self.parts[idx]
     let n = part.length()
-    if acc + n <= self.delta_str_reported {
-      acc = acc + n
+    if off >= n {
+      idx = idx + 1
+      off = 0
       continue
     }
-    let start = if self.delta_str_reported > acc {
-      self.delta_str_reported - acc
-    } else {
-      0
-    }
-    sb.write_string(part[start:n].to_owned())
-    acc = acc + n
+    sb.write_substring(part, off, n - off)
+    idx = idx + 1
+    off = 0
   }
+  self.delta_part_idx = idx
+  self.delta_part_off = off
   sb.to_string()
 }
 

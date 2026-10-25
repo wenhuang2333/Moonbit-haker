@@ -467,6 +467,30 @@ test "AppendText flushes the string tail at drain time" {
     fin.value.stringify(),
     msg="tail flush replay",
   )
+  // Many small tails: the cursor must advance through `parts` without
+  // skipping or repeating a character.
+  let q = PartialParser::new(options=Options::for_llm())
+  let long_ops : Array[Delta] = []
+  q.feed("{\"s\":\"")
+  for i = 0; i < 50; i = i + 1 {
+    q.feed("abcdefghij")
+    for d in q.drain_deltas() {
+      long_ops.push(d)
+    }
+  }
+  q.feed("\"}")
+  for d in q.drain_deltas() {
+    long_ops.push(d)
+  }
+  let long_fin = q.finish()
+  for d in q.drain_deltas() {
+    long_ops.push(d)
+  }
+  assert_eq(
+    dj_render(dj_replay(long_ops)),
+    long_fin.value.stringify(),
+    msg="long tail replay",
+  )
 }
 
 ///|

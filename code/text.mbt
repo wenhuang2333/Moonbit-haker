@@ -209,6 +209,41 @@ fn is_number_shaped(text : String) -> Bool {
 }
 
 ///|
+/// Whether the normalization accepted by `normalize_number` changes the
+/// *value*, not just the spelling. Every rewrite except an incomplete exponent
+/// denotes the same number: `+1`, `01`, `1.`, `.5` and `-01` all keep their
+/// value, so the repair is notation (`Info`). `1e` and `1e+` lose the exponent
+/// and are `Warning`.
+fn number_repair_loses_value(text : String) -> Bool {
+  let n = text.length()
+  let mut i = 0
+  if i < n && (cu(text, i) == 0x2B || cu(text, i) == 0x2D) {
+    i = i + 1
+  }
+  while i < n && is_digit(text.at(i)) {
+    i = i + 1
+  }
+  if i < n && cu(text, i) == 0x2E {
+    i = i + 1
+    while i < n && is_digit(text.at(i)) {
+      i = i + 1
+    }
+  }
+  if i < n && (cu(text, i) == 0x65 || cu(text, i) == 0x45) {
+    i = i + 1
+    if i < n && (cu(text, i) == 0x2B || cu(text, i) == 0x2D) {
+      i = i + 1
+    }
+    let digits_start = i
+    while i < n && is_digit(text.at(i)) {
+      i = i + 1
+    }
+    return i == digits_start
+  }
+  false
+}
+
+///|
 /// Normalise a number lexeme per BR-11: drop a leading `+`, drop leading
 /// zeros, pad `.5` to `0.5`, drop a bare trailing dot, drop an incomplete
 /// exponent. Returns `None` when the text carries no valid numeric prefix at

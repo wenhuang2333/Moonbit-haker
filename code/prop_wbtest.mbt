@@ -645,26 +645,31 @@ test "TC-P-03 chunk invariance" {
 
 ///|
 /// Valid documents whose root is a scalar, in the shapes a model emits: a bare
-/// literal, one padded with whitespace, and strings including a surrogate pair.
+/// literal, one padded with whitespace, strings including a surrogate pair, and
+/// scalars that need a value-preserving repair (`'ok'`, `True`, `+1`, a fenced
+/// `42`, a trailing comment). The last group is what `Options::for_agent()` and
+/// `explain` used to refuse: `skip_prose` finds no `{`/`[` and the old retry
+/// demanded a clean replay.
 fn tc_scalar_root_docs() -> Array[String] {
   [
     "true", "false", "null", "0", "-1", "42", "-1.5e10", "3.14", "\"ok\"", "\"\"",
-    "\"MoonBit\"", "  true  ", "\ntrue\n", "\"🎯\"", "\"a🎯b\"",
+    "\"MoonBit\"", "  true  ", "\ntrue\n", "\"🎯\"", "\"a🎯b\"", "'ok'", "True",
+    "False", "None", "+1", ".5", "1.", "007", "42 // done", "```json\n42\n```",
   ]
 }
 
 ///|
 /// Text that is *not* one JSON document, however much JSON it contains. These
-/// must stay refused: the retry is accepted only when replaying the skipped
-/// prelude is clean, and a repair record means it was not clean. Where the
-/// prose ends and the value begins is not decidable, so `The answer is 42` is
-/// refused here exactly as the one-shot `repair` path has always refused it.
-/// A fenced scalar is refused by the fence path itself, with `skip_prose` off
-/// as well, so it is not a `skip_prose` question at all.
+/// must stay refused: a bare word at the root still raises `E002`, and prose
+/// that happens to begin with a scalar drops its tail (`R016`) and is rejected
+/// by the retry. Where the prose ends and the value begins is not decidable, so
+/// `The answer is 42` is refused here exactly as the one-shot `repair` path has
+/// always refused it.
 fn tc_scalar_root_refusals() -> Array[String] {
   [
     "hello world", "maybe later", "The answer is 42", "Verdict: true", "答案：正确\nfalse",
-    "前缀 🎯 null", "返回值为 \"MoonBit\" 。", "```json\ntrue\n```", "Here you go:\n```json\ntrue\n```",
+    "前缀 🎯 null", "返回值为 \"MoonBit\" 。", "Here you go:\n```json\ntrue\n```",
+    "42 is the answer", "None of the above", "true story", "'ok' please", "42 43",
   ]
 }
 
@@ -728,8 +733,9 @@ test "TC-P-09 skip_prose recovers a scalar root under every chunking" {
 
 ///|
 /// TC-P-09 (b). Refusing prose is the behaviour that must not change: the
-/// retry is only accepted when it is clean, so text that is not JSON is still
-/// refused, and refusing it does not depend on the chunking either.
+/// retry only accepts a prelude it consumed as one value without dropping
+/// content, so text that is not JSON is still refused, and refusing it does
+/// not depend on the chunking either.
 test "TC-P-09 skip_prose still refuses what is not JSON" {
   let opts : Options = { ..Options::default(), skip_prose: true, }
   for doc in tc_scalar_root_refusals() {

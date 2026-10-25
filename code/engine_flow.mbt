@@ -694,6 +694,8 @@ fn Engine::start_string(
   self.esc = 0
   self.pending_high = 0
   self.delta_str_reported = 0
+  self.delta_part_idx = 0
+  self.delta_part_off = 0
   if self.opts.collect_deltas {
     self.delta_open_string(is_key)
   }
@@ -1057,7 +1059,14 @@ fn Engine::classify_bare(
     match normalize_number(text) {
       Some(txt) => {
         if txt != text {
-          self.report(FixNumber, start)
+          // A value-preserving rewrite (`+1`, `01`, `1.`, `.5`) is notation;
+          // only an incomplete exponent (`1e`) actually drops information.
+          let level = if number_repair_loses_value(text) {
+            Warning
+          } else {
+            Info
+          }
+          self.report(FixNumber, start, severity=Some(level))
         }
         self.value_done(build_number(txt))
       }
@@ -1382,11 +1391,18 @@ fn Engine::unwind_top(self : Engine) -> Bool raise MendError {
 /// `finish`, which is chunk-invariant, so the replay reproduces the one-shot
 /// positions exactly instead of approximating them.
 ///
-/// The retry is accepted only when it is *clean*: no repair record at all.
-/// Without that guard `hello world` would be repaired into `"hello"` and a
-/// document JSONMend refuses today would start being accepted — a behaviour
-/// change nobody asked for. `None` means "nothing changed, refuse as before".
-fn Engine::retry_prelude(self : Engine) -> FinalResult? {
+/// The retry is accepted when it consumed the whole prelude as one value and
+/// dropped no content. A scalar root that needed a *value-preserving* repair
+/// (`'ok'`, `True`, `+1`, a fenced `42`, a trailing comment) is therefore
+/// recovered, which is what `Options::for_agent()` and `explain` rely on.
+/// The `DropUnexpected` guard is what keeps prose out: a bare word at the root
+/// still raises `E002`, and prose that happens to begin with a scalar
+/// (`42 is the answer`, `None of the above`) drops its tail and is refused as
+/// before. Real refusals from the retry (a `max_loss` gate, an ambiguity, a
+/// resource limit) are re-raised rather than hidden behind the original
+/// `E002`, so the caller sees the same verdict the unskipped path would give.
+/// `None` means "nothing recoverable, refuse as before".
+fn Engine::retry_prelude(self : Engine) -> FinalResult? raise MendError {
   if !self.opts.skip_prose ||
     self.prose_overflow ||
     !self.saw_content ||
@@ -1394,27 +1410,30 @@ fn Engine::retry_prelude(self : Engine) -> FinalResult? {
     return None
   }
   let retry = Engine::make({ ..self.opts, skip_prose: false, })
-  try {
+  let result = try {
     for u in self.prose_buf {
       retry.step(u)
     }
-    let result = retry.finish_engine()
-    if result.repairs.length() == 0 {
-      // The retry is a second engine, so its delta stream has to be adopted or
-      // the caller would hold a value with no deltas describing it — and the
-      // contract that replaying the deltas reproduces the value would be false
-      // for exactly the documents this retry exists to recover. The prelude
-      // emits no delta of its own, so appending cannot interleave two streams.
-      for d in retry.deltas {
-        self.deltas.push(d)
-      }
-      Some(result)
-    } else {
-      None
-    }
+    retry.finish_engine()
   } catch {
-    _ => None
+    e =>
+      match e {
+        NoJsonFound(_) | EmptyInput => return None
+        _ => raise e
+      }
   }
+  if retry.saw_dropped_content {
+    return None
+  }
+  // The retry is a second engine, so its delta stream has to be adopted or
+  // the caller would hold a value with no deltas describing it — and the
+  // contract that replaying the deltas reproduces the value would be false
+  // for exactly the documents this retry exists to recover. The prelude
+  // emits no delta of its own, so appending cannot interleave two streams.
+  for d in retry.deltas {
+    self.deltas.push(d)
+  }
+  Some(result)
 }
 
 ///|
