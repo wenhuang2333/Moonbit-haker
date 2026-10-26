@@ -39,7 +39,7 @@
 > **60 秒动线**：① 读完上面一句话 → ② 打开
 > [live.html](https://wenhuang2333.github.io/Moonbit-haker/live.html)，看「截断 → E010 拒绝 →
 > 回灌重试 → 放行」逐帧重放 → ③ 一行接入 agent：`claude mcp add jsonmend -- jsonmend mcp`
-> → ④ 五个数字：**212** 条测试 × **4** 个后端各 212/212（共 848 次）· 真值评测 **1200** 条
+> → ④ 五个数字：**217** 条测试 × **4** 个后端各 217/217（共 868 次）· 真值评测 **1200** 条
 > 恢复率 **100.00%** · 差分 **402** 例 **202** 处差异全部归因（未解释 0）· 协议一致性
 > **19** 组 Linux/macOS/Windows 同跑 · wasm-gc 产物 **108.1 KiB** → ⑤ 亲手复现：
 > `cd code && moon test`——`.github/workflows/ci.yml` 跑的就是这一套。
@@ -115,7 +115,7 @@ export PATH="$HOME/.moon/bin:$PATH"
 git clone https://github.com/wenhuang2333/Moonbit-haker.git
 cd Moonbit-haker/code
 moon check --deny-warn   # 0 warning
-moon test                # 212 个测试全部通过
+moon test                # 217 个测试全部通过
 ```
 
 ```moonbit
@@ -309,20 +309,21 @@ Suggested retry:
 | 增量流重放 | 400 份生成文档 + 400 份变异输入 | 「增量重放 == 快照」全部成立 |
 | 大模型适配器 | 9 个夹具 × 双 provider | 通过（含截断、转义切分、代理对切分、多路并发） |
 | 公共面与选项测试 | 22 个 R 码 + 12 个 E 码逐一检查 | 通过 |
-| 四个后端 | wasm-gc / native / JS / wasm（每条命令跑同一套测试） | 各 212/212 通过（共 848 次） |
+| 四个后端 | wasm-gc / native / JS / wasm（每条命令跑同一套测试） | 各 217/217 通过（共 868 次） |
 | 命令行冒烟 | 102 项断言（含全部退出码、`llm` 子命令、`explain` 的 14 条、6 项版本一致性与前言缓冲诊断，以及四个资源上限开关的正反两侧） | 通过 |
 | **协议一致性** | 19 组 `serve`/MCP 用例（`tests/conformance/`） | 全部通过；Linux/macOS/Windows 同一套 |
 | **npm 包** | 10 个 Node 测试（ESM/CJS/类型/无 stdout 污染） | 通过 |
 | **Python 包** | 17 个测试（客户端 11 + HTTP 6） | 通过 |
 | 示例对照 | 6 组输入/期望输出 | 逐字节一致 |
 | 差分测试（对照 `jsonrepair`、`json-repair`） | 402 条用例 | 202 处差异**全部有文档解释**，未解释 0 |
-| 库代码行覆盖率 | 根包 3717/3952、`llm` 包 337/391 | 94.0% / 86.2%；覆盖率门按「有未覆盖行的文件」口径计 3984/4273 = **93.2%** |
+| 库代码行覆盖率 | 根包 3748/3983、`llm` 包 337/391 | 94.1% / 86.2%；覆盖率门按「有未覆盖行的文件」口径计 4015/4304 = **93.3%** |
 | **独立第三方语料** | `nst/JSONTestSuite` 318 文件（MIT，commit `1ef36fa0`） | `y_` 误修 **2/95**（重复键），`n_` 有效值 **165/188** vs `json_repair` 166、`jsonrepair` 144 |
 | **骨架就绪表** | 10 个场景 | 6 个存在落差（最小 713‰、最大 **908‰**：992‰ 语法就绪 vs 84‰ 答案定稿），4 个两层同时到达末尾 |
 | **安全层单价** | 4.9 KiB × 20 次调用 | `analyze` = `repair` 的 0.95–1.01×，`for_agent` 1.05–1.12×，`+schema` 1.06–1.12× |
 | 吞吐（Apple M5，release，单机多次观测中位数） | 合法 JSON native 42–47 MB/s、JS 30–38 MB/s | 达标（阈值 20 / 5；10 MB 档 native 45.3、JS 23.2 MB/s） |
 | 首个可见值（流式） | 工具调用文档中位数 | 文档长度的 **0.7%** 处即可渲染，并同时拿到标签 |
 | 命令行吞吐（12.95 MiB 输入，64 KB 分块） | 35.0–36.7 MB/s（峰值 RSS 177.8 MB） | `Position` 不再逐码元构造后 +25% |
+| 长文本输入（单条字符串吃掉整篇文档） | 4 Mi 码元 CJK（`Mu/s` = 百万 UTF-16 码元/秒）：`feed_bytes` **220.8 Mu/s**（修复前 39.0）；CLI 读 25.17 MB 单条 CJK 字符串 0.04 s、`--check` 峰值 RSS 46–54 MB（1.9–2.2 × 输入，此前 9.5 ×） | 字节入口对完整 UTF-8 序列批量并入；按字节算 CJK 与 ASCII 同价（662 / 599 MB/s） |
 | wasm-gc 产物体积 | 108.1 KiB | 达标（上限 150 KB） |
 
 ```bash
@@ -428,7 +429,7 @@ mooncakes 页面核对**，原文引用保留英文）：
 | JSONL 批处理 | **无**（CLI 有 `--batch`，但那是评测用的一次性批量；库内无 `repair_jsonl`） | **有**（`repair_jsonl`，10 000 行上限，空行报错） |
 | 严格模式 | 有（`E010`，退出码 5） | `Options::strict`（原文："No heuristic is enabled in strict mode."） |
 | 三条不变量（输出合法 / 幂等 / 分块不变） | 由属性测试强制，见 `prop_wbtest.mbt` | 未承诺 |
-| 四后端一致性 | wasm-gc / native / JS / wasm 各 212/212 同一套测试 | 未声明 |
+| 四后端一致性 | wasm-gc / native / JS / wasm 各 217/217 同一套测试 | 未声明 |
 | 浏览器演示 | 有（`static/demo/index.html`，bundle 由 CI 校验同步） | 未提及 |
 | 差分证据 | 402 例对照 `jsonrepair` 与 `json-repair`，202 处差异全归因 | 未提及 |
 | 真值评测（与真值比，不与参照比） | 有（1200 条，协议先冻结，恢复率 100%） | 未提及 |
@@ -451,7 +452,7 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
   而且每个状态转移都是 `match` 的一个分支，22 条规则各自独立可测；
 - **`raise` 错误系统**直接承载 10 个 `E` 码，错误载荷（`limit`、`offset`、`RepairCode`、`Position`）
   随类型走，调用方不需要解析字符串；
-- **四后端一条命令**：`moon test` / `--target native` / `--target js` / `--target wasm` 跑同一套 212 个测试，
+- **四后端一条命令**：`moon test` / `--target native` / `--target js` / `--target wasm` 跑同一套 217 个测试，
   同一份引擎源码产出 wasm-gc 108.1 KiB 的库、native CLI 和浏览器 bundle —— 这在别的语言里
   要三套构建与三套测试；
 - **零第三方依赖**：无正则、无外部解析器，wasm-gc 产物只含引擎与 core 的必要部分；
@@ -491,6 +492,7 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 - 前言重放接受「整段前言被读成一个值且没有 `R016`」的结果，所以 `'ok'`、`True`、`+1`、`42 // done`、围栏标量都能恢复；标量根前言（`Sure!\n42`）仍**有意拒绝**（前言在哪里结束不可判定），以标量开头但带尾巴的 `42 is the answer` 也仍拒绝（`R016`）。
 - 前言超过 `max_prose_buffer`（64 KiB）时引擎放弃重放并回退 `E002`（`prose_overflow`），CLI 的全文回退在「整份输入本来就是合法 JSON」时补位。
 - 峰值内存按 `repair()` 计约为输入的 13.7 倍（12.95 MB → 177.8 MB），未达到「≤ 4 倍输入」的预算：只要保留完整 `Json` 树就无法达标，需要「只产出文本、不建树」的模式。`--check` 不渲染输出，峰值降到 7.6 倍；CLI 的 ASCII 批量路径把单个 10 MB 字符串从 38 倍降到 9.4 倍。
+- **长文本（单条字符串吃掉整篇文档）**：字节入口对完整的多字节 UTF-8 序列批量并入之后，CJK 按字节与 ASCII 同价（4 Mi 码元 220.8 Mu/s，此前 39.0；25.17 MB 单条 CJK 字符串 `--check` 峰值 RSS 46–54 MB ≈ 2 × 输入，此前 9.5 ×）。仍未做到的三点：转义密集文本 311.6 Mu/s（先到先服务地按 run 拆分，`\n` 每行断一次）；按 1 字节分块喂入时批量条件不成立，退化为逐码元（25.17 MB 从 0.04 s 升到 0.43 s，真实流不触发）；单个 token 超过 `--max-token-len`（默认 16 Mi 码元）报 `E022`，与总输入上限无关。见本地文档 `code/docs/BENCHMARK.md`「长文本输入」。
 - 命令行仅支持 native 后端；解析器实例非线程安全，每个流用一个实例。
 - **`serve` / `mcp` 每条连接只支持一个 `watch` 流和一个 `llm` 流**（`hello` 的 `streams: 1`）：足够覆盖一次工具调用，但并发多流需要多条连接或等 v2 的 `stream_id`。
 - **JSON Schema 桥是受控子集**：`$ref`、`oneOf`/`anyOf`/`allOf`、`not`、`format`、`patternProperties`、`minItems` 等会报 `E070`；`additionalProperties: false` 也拒绝（骨架不封闭对象），`true` 是 no-op。
@@ -622,10 +624,10 @@ repaired, complete what is truncated, and record every change with a code and a 
 - **Guarantees enforced by property tests**: output is always valid JSON, repair is idempotent,
   and streaming is chunk invariant.
 - **Verified**: 126 golden cases, 21 streaming cases, 8 property groups × 400 cases,
-  212 tests on each of wasm-gc / native / JS / wasm, 102 CLI assertions (including six that keep every
+  217 tests on each of wasm-gc / native / JS / wasm, 102 CLI assertions (including six that keep every
   stated version equal to `moon.mod`), and a 402-case differential
   corpus against `jsonrepair` and `json-repair` in which every one of the 202 divergences has
-  a documented cause. Library line coverage 94.0%; native throughput 42–47 MB/s
+  a documented cause. Library line coverage 94.1%; native throughput 42–47 MB/s
   (single-machine observation; CI reruns the same benchmark script).
 - **Live demo**: <https://wenhuang2333.github.io/Moonbit-haker/live.html> (four scenarios, frame
   by frame, with the three readiness numbers and the refusal-to-retry panel).

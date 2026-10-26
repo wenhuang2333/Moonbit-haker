@@ -37,6 +37,21 @@
 - **不变量保持**：输出合法 JSON、修复幂等、任意分块与一次性结果一致、任何字节
   序列不 panic，全部由原有 212 条测试 × 4 后端继续强制；新增的两条测试断言
   「视图流与物化流逐字段、逐路径解码一致」。
+- **字节入口对多字节 UTF-8 序列批量并入**：`feed_bytes` 的 ASCII 快路径（0.1.0 起）
+  只认 `b < 0x80`，非 ASCII 字节一个码元一次 `parts.push(c.to_string())`，
+  成本随字符数线性增长。现在第一段仍是原来的纯 ASCII 扫描（不带计数器，合进一个新
+  循环会让纯 ASCII 慢 15%），第二段用新增的 `plain_utf8_run` 判断「完整 + 最短形式
+  + `step_str` 会原样送入 `push_cu`」的序列并整段并入，码元数按 UTF-8 长度累计
+  （四字节算两个码元）。`plain_utf8_run` 复制而不是复用 `feed_byte` 的校验：它只决定
+  能不能批量，拒绝时一律退回逐字节路径，`E040` 仍由 `feed_byte` 以原来的绝对偏移报出。
+  一行 `{"text": "…"}` 的长文本，native 由 39.0 → 220.8 Mu/s、JS 由 10.9 →
+  78.5 Mu/s（4 Mi 码元，`bench -- longtext`），按字节算 CJK 与 ASCII 同价；CLI 读一份
+  25.17 MB 的单条 CJK 字符串由 0.22–0.24 s 降到 0.04 s，`--check` 峰值 RSS 由
+  228.0 MB（9.5 ×）降到 46–54 MB（1.9–2.2 ×，峰值 RSS 随调用上下文抖动）。
+  纯 ASCII 与转义密集文本的读数不变。
+  影响面限于喂字节的入口：CLI 的默认路径与 `batch` 子命令，以及直接调用
+  `feed_bytes` 的库调用方。`serve` 的 `repair` / `watch`、npm 包与浏览器 bundle 走
+  字符串入口 `feed`，本来就在快的那个路径上，本次未受影响。
 
 ### CLI
 
@@ -56,6 +71,11 @@
   100 ms 就退化成**一个样本**——正是扩张性检查用的大输入，一次 GC 停顿就能独占
   结果。新增按「五次独立单次调用的中位数」测量，JS `4n/2n` 由在 2.2–2.8 之间跳动
   变为稳定值。
+- **长文本 arm 与 arm 过滤器**：`bench/main.mbt` 新增 `longtext` 组（4 Mi 码元的纯
+  ASCII、CJK、转义密集三种单字符串文档，同时报 `feed` 与 `feed_bytes` 两个入口，单位是
+  UTF-16 码元/秒而不是 MB/s），并给 `main` 加了一个参数过滤器：4 MiB 的 CJK 文档会留下
+  足够多的垃圾让紧随其后的 JS 读数偏离 30%，所以文档引用的是单独跑的读数
+  （`moon run bench --target native --release -- longtext`）。
 - **新增 `tests/scaling.sh`**：把 `NFR-PERF-01`（native `2n/n`、`4n/2n` ≤ 2.3）与
   `NFR-PERF-05`（native `for_each_delta` 开销 ≤ 160% 基线）做成 `best-of-N` 比值
   棘轮，进 CI。比值按「先取各尺寸的最小时间、再求比」归约，而不是取比值的最小值：

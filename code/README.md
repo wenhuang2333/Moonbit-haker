@@ -417,7 +417,7 @@ moon run examples/agent_loop --target native --release
 | Ground-truth evaluation (protocol frozen first) | 1200 cases (19 mutation families + 1 control × 60) | recovery **100.00%**, 0 mislabelled, 4/4 pre-registered criteria PASS |
 | Command line smoke (exit codes 0/1/2/3/4/5/70) | 62 assertions, 14 of them `explain` | pass |
 | Differential corpus against `jsonrepair` / `json-repair` | 402 cases | 202 divergences, all documented, 0 unexplained |
-| Line coverage of the library | 3717/3952 lines (root), 337/391 (`llm`) | 94.0% / 86.2% (`moon coverage` cannot instrument the `cmd` package, which calls `quit()`; within the root package the weakest file is `llm/text.mbt` at 72.5% across the library and `hint.mbt` at 90.7% inside the root package) |
+| Line coverage of the library | 3748/3983 lines (root), 337/391 (`llm`) | 94.1% / 86.2% (`moon coverage` cannot instrument the `cmd` package, which calls `quit()`; within the root package the weakest file is `llm/text.mbt` at 72.5% across the library and `hint.mbt` at 90.7% inside the root package) |
 
 Cross-backend results are identical: 129 tests pass on wasm-gc, native and
 JavaScript. `.github/workflows/ci.yml` runs the same commands on every push, so
@@ -453,6 +453,7 @@ the left panel leaves the diagonal.
 ```sh
 moon run bench --target native --release
 moon run bench --target js --release
+moon run bench --target native --release -- longtext   # the long-text arms only
 ```
 
 On a 2026 Apple-silicon laptop, native measured 38–40 MB/s (valid), 74–80 MB/s
@@ -465,6 +466,24 @@ appears at 0.7% of the document (median over tool-call payloads), and enabling
 398.6 MB / 38.0 × to 99.0 MB / 9.4 ×, and a 13 MB object array `--check` from
 219.5 MB / 16.9 × to 146.2 MB / 11.3 ×. `repair()` still renders the output and
 remains at 13.7 ×.
+
+**Long text** — the shape where one string token *is* the document, which is what
+a model writes when it emits a file, a markdown answer or a translation — has its
+own arms (`longtext`: a 4 Mi code unit plain-ASCII string, the same length filled with
+CJK text, and an escape-dense markdown-shaped string, each through both entry
+points). They exist because the byte entry point used to batch only ASCII: every
+non-ASCII byte fell through to `push_char`, which allocated one `String` per
+character. That cost 5.4 × (native) / 7.1 × (JS) per code unit and grew with the
+text, while the parsed result was already correct — no functional test could see
+it. 1.3.0 batches complete multi-byte UTF-8 sequences in the same run batching the
+ASCII path uses, so a CJK long string now costs the same per *byte* as ASCII
+(662 MB/s vs 599 MB/s; 220.8 Mu/s vs 39.0 before). The 25.17 MB single-CJK-string
+file measures 0.04 s and 53.7 MB peak RSS with `--check` (2.2 × input, down from
+228.0 MB / 9.5 ×). Two floors remain, both documented rather than hidden: an
+escape-dense string is 311.6 Mu/s because every `\n` ends a run, and feeding one
+byte at a time defeats the batching entirely (0.43 s instead of 0.04 s) — real
+provider events are tens to thousands of bytes, so the second floor is only
+reachable from the CLI's `--chunk 1`.
 
 These figures are observations, not a guarantee: throughput depends on the input
 shape, chunk size, snapshot frequency, and the toolchain version. Memory

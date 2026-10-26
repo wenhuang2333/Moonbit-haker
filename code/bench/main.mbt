@@ -804,8 +804,139 @@ fn bench_delta_size() -> Unit {
 }
 
 ///|
-/// Every benchmark.
+/// A document whose only value is one long ASCII string. `n` is both the code
+/// unit count and the byte count.
+fn make_ascii_str(n : Int32) -> String {
+  let sb = StringBuilder()
+  sb.write_string("{\"text\":\"")
+  for _i = 0; _i < n; _i = _i + 1 {
+    sb.write_char('a')
+  }
+  sb.write_string("\"}")
+  sb.to_string()
+}
+
+///|
+/// The same shape filled with CJK text: one code unit per character, three
+/// UTF-8 bytes per code unit. This is the shape a model produces when it
+/// writes Chinese prose into a field, and the one the byte entry point has to
+/// decode rather than skip.
+fn make_cjk_str(n : Int32) -> String {
+  let sb = StringBuilder()
+  sb.write_string("{\"text\":\"")
+  for _i = 0; _i < n; _i = _i + 1 {
+    sb.write_char('中')
+  }
+  sb.write_string("\"}")
+  sb.to_string()
+}
+
+///|
+/// A markdown-shaped string: one short line then a `\n` escape, repeated.
+/// Escapes break every run, which is what makes this the worst case for the
+/// run batching both entry points do.
+fn make_escaped_str(lines : Int32) -> String {
+  let sb = StringBuilder()
+  sb.write_string("{\"markdown\":\"")
+  for i = 0; i < lines; i = i + 1 {
+    if i > 0 {
+      sb.write_string("\\n")
+    }
+    sb.write_string("line and some prose to make the run worth batching")
+  }
+  sb.write_string("\"}")
+  sb.to_string()
+}
+
+///|
+/// Streaming parse through the byte entry point — the one the CLI and every
+/// language wrapper use — with `chunk` bytes per call.
+fn run_stream_bytes(bs : Bytes, chunk : Int32) -> Unit {
+  try {
+    let parser = @mend.PartialParser::new()
+    let n = bs.length()
+    let mut i = 0
+    while i < n {
+      let to = if i + chunk < n { i + chunk } else { n }
+      parser.feed_bytes(Bytes::makei(to - i, j => bs[i + j]))
+      i = to
+    }
+    ignore(parser.finish())
+  } catch {
+    _ => ()
+  }
+}
+
+///|
+/// Long-text handling: the shapes where one string token dominates the
+/// document.
+///
+/// Two entry points are reported for every shape, because they do not cost the
+/// same thing and only the slower one is on the paths users actually run:
+/// `repair()` feeds a `String` (`feed_str`), while the CLI and the npm/PyPI
+/// wrappers feed `Bytes` (`feed_bytes`). A gap between the two columns is a
+/// defect in the byte path, not in the corpus.
+///
+/// The third column is UTF-16 code units per second rather than MB/s, because
+/// the same code unit count is three times as many bytes in UTF-8 — MB/s would
+/// make CJK look slower than it is per unit of work.
+fn bench_long_text() -> Unit {
+  let n = 4194304
+  let shapes : Array[(String, String)] = [
+    ("ascii 4Mi", make_ascii_str(n)),
+    ("cjk 4Mi", make_cjk_str(n)),
+    ("escapes 4Mi", make_escaped_str(n / 50)),
+  ]
+  for shape in shapes {
+    let (name, doc) = shape
+    let units = doc.length()
+    let bytes = @utf8.encode(doc)
+    let ms_str = median5_single(() => run_repair(doc))
+    let ms_bytes = median5_single(() => run_stream_bytes(bytes, 65536))
+    println(
+      "longtext\t" +
+      name +
+      "\t" +
+      units.to_string() +
+      " units, " +
+      bytes.length().to_string() +
+      " B\tstr " +
+      round1(ms_str) +
+      " ms\t" +
+      round1(units.to_double() / 1000.0 / ms_str) +
+      " Mu/s\tbytes " +
+      round1(ms_bytes) +
+      " ms\t" +
+      round1(units.to_double() / 1000.0 / ms_bytes) +
+      " Mu/s",
+    )
+  }
+}
+
+///|
+/// Every benchmark, or just the arms whose name matches the first argument.
+///
+/// A filter exists because the arms are not independent measurements: a 4 MiB
+/// CJK document allocates enough to leave the JavaScript heap in a different
+/// state for whatever runs next, and the reported medians are single calls.
+/// `moon run bench --target native --release -- longtext` therefore measures
+/// the long-text arms on their own, which is the number the documents quote.
 fn main {
+  // The argument vector has a different length on every runtime (`node` passes
+  // the script path), so the filter is a search rather than an index.
+  let argv = @env.args()
+  let mut only = ""
+  for a in argv {
+    if a == "longtext" {
+      only = "longtext"
+    }
+  }
+  if only != "" {
+    if only == "longtext" {
+      bench_long_text()
+      return
+    }
+  }
   for target in [1024, 102400, 1048576, 10485760] {
     bench_throughput("valid", make_valid(target))
   }
@@ -844,4 +975,5 @@ fn main {
   bench_readiness()
   bench_gate()
   bench_delta_size()
+  bench_long_text()
 }

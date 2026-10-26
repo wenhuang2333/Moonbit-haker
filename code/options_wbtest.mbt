@@ -192,6 +192,210 @@ test "TC-S-UTF8-01 feed_bytes matches feed for multibyte input" {
 }
 
 ///|
+/// Feed `bytes` in `chunk` sized pieces and return the finished text.
+fn feed_bytes_chunked(bytes : Bytes, chunk : Int32) -> String raise {
+  let p = PartialParser::new()
+  let mut i = 0
+  while i < bytes.length() {
+    let end = if i + chunk < bytes.length() {
+      i + chunk
+    } else {
+      bytes.length()
+    }
+    p.feed_bytes(bytes[i:end].to_owned())
+    i = end
+  }
+  p.finish().text
+}
+
+///|
+/// A CJK/emoji document whose one string token is long enough that the byte
+/// fast path has to batch complete multi-byte sequences rather than fall back
+/// to one `push_char` per byte.
+fn utf8_doc(repeat : Int32) -> String {
+  let sb = StringBuilder()
+  sb.write_string("{\"文本\":\"")
+  for _i = 0; _i < repeat; _i = _i + 1 {
+    sb.write_string("中文内容🙂")
+  }
+  sb.write_string("\"}")
+  sb.to_string()
+}
+
+///|
+test "TC-S-UTF8-03 byte fast path batches multibyte runs" {
+  // The byte entry point is the one the CLI and both language wrappers use, so
+  // its cost has to match the string entry point's on text that is not ASCII.
+  // Before the run batching, every non-ASCII byte fell through to `push_char`
+  // and allocated one `String` per character: 25x slower than `feed` on the
+  // same document, and the gap grew with the length of the text.
+  let text = utf8_doc(500)
+  let bytes = @utf8.encode(text)
+  let want = repair(text).text
+  for chunk in [1, 2, 3, 5, 7, 64, 4096] {
+    assert_eq(
+      feed_bytes_chunked(bytes, chunk),
+      want,
+      msg="byte path chunk " + chunk.to_string(),
+    )
+  }
+  // A supplementary code point is one four-byte sequence but two code units;
+  // the run must advance the position by units, not bytes, or every later
+  // offset (and `max_input_len`) would be wrong.
+  let emoji = "{\"e\":\"" + "🙂".repeat(300) + "\"}"
+  assert_eq(
+    feed_bytes_chunked(@utf8.encode(emoji), 6),
+    repair(emoji).text,
+    msg="supplementary code points",
+  )
+  // Curly quotes close a string too, and they are three-byte sequences: a run
+  // must not swallow one, or the string would never end.
+  let curly = "{\u{201C}key\u{201D}:\u{201C}" + "值".repeat(200) + "\u{201D}}"
+  assert_eq(
+    feed_bytes_chunked(@utf8.encode(curly), 4),
+    repair(curly).text,
+    msg="curly quote terminator",
+  )
+}
+
+///|
+test "TC-S-UTF8-03b byte run batching allocates per run, not per character" {
+  // The observable-result tests above cannot see the defect this change fixes:
+  // before it, every non-ASCII byte went through `push_char`, which allocates
+  // one `String` per character and stores it in `parts`. The text came out the
+  // same; the cost was 5.4x (native) / 7.1x (JS) and grew with the text length.
+  //
+  // Counting `parts` is the deterministic form of that statement -- no clock,
+  // so it cannot flake -- and it fails the moment the batching is undone. The
+  // string is left open on purpose: `finish_string` clears `parts` by moving
+  // them into the value, so only an unfinished token shows the accumulation.
+  let units = 200000
+  let prefix = "{\"文本\":\""
+  let body = "中文内容".repeat(units / 4)
+  let open_doc = prefix + body
+  let p = PartialParser::new()
+  p.feed_bytes(@utf8.encode(open_doc))
+  // A document cannot be abandoned mid-token, but the parser can be inspected
+  // first: `parts` is the buffer the scanner has accumulated so far.
+  let parts = p.engine.parts.length()
+  assert_eq(
+    parts <= 4,
+    true,
+    msg="expected one part per run, got " + parts.to_string(),
+  )
+  // The same text through the string entry point is one run as well, so the
+  // two entry points now cost the same per code unit.
+  let q = PartialParser::new()
+  q.feed(open_doc)
+  assert_eq(q.engine.parts.length(), parts)
+}
+
+///|
+test "TC-S-UTF8-04 byte run batching keeps limits in code units" {
+  // `max_input_len` counts UTF-16 code units, not bytes. A CJK document is
+  // three bytes per unit, so a byte-counted limit would fire two thirds early.
+  let text = "\"中文内容中文内容\""
+  let small : Options = { ..Options::default(), max_input_len: 5, }
+  let from_str = attempt(text, small)
+  let p = PartialParser::new(options=small)
+  let err = try {
+    p.feed_bytes(@utf8.encode(text))
+    ""
+  } catch {
+    e => err_text(e)
+  }
+  assert_eq(from_str.err, "E021(5,@5)")
+  assert_eq(err, from_str.err, msg="byte path limit offset")
+  // A supplementary code point straddling the limit is two steps: the first
+  // fits, the second raises at the same offset the string path reports.
+  let emoji = "\"a🙂🙂🙂\""
+  let p2 = PartialParser::new(options=small)
+  let err2 = try {
+    p2.feed_bytes(@utf8.encode(emoji))
+    ""
+  } catch {
+    e => err_text(e)
+  }
+  assert_eq(err2, attempt(emoji, small).err, msg="surrogate pair limit offset")
+}
+
+///|
+test "TC-S-UTF8-05 invalid sequences still raise E040 from the run scanner" {
+  // The run scanner must reject exactly what `feed_byte` rejects, so that the
+  // error is raised by the one validator that owns it, with its own offset.
+  let cases : Array[Bytes] = [
+    b"{\"s\":\"a\xc0\x80\"}", // overlong encoding of NUL
+     b"{\"s\":\"a\xf5\x80\x80\x80\"}", // lead byte out of range
+     b"{\"s\":\"a\x80\"}", // lone continuation byte
+     b"{\"s\":\"a\xe4\xb8\"}", // truncated at end of input
+  ]
+  for bs in cases {
+    let p = PartialParser::new()
+    let err = try {
+      p.feed_bytes(bs)
+      try {
+        ignore(p.finish())
+        ""
+      } catch {
+        e => err_text(e)
+      }
+    } catch {
+      e => err_text(e)
+    }
+    assert_eq(err[:4] == "E040", true, msg="expected E040, got " + err)
+  }
+  // A surrogate encoded in UTF-8 is *not* rejected: it decodes to a lone half
+  // pair, which R014 repairs to U+FFFD and records as `FixEscape`. That is the
+  // behaviour of `feed_byte`, and the batcher must not change it — it declines
+  // the sequence (`is_plain_str_cu` rejects surrogates) and lets the byte path
+  // produce the same record.
+  let lone : Bytes = b"{\"s\":\"a\xed\xa0\x80\"}"
+  let p = PartialParser::new()
+  p.feed_bytes(lone)
+  let fin = p.finish()
+  assert_eq(fin.text, "{\"s\":\"a\ufffd\"}")
+  assert_eq(fin.repairs.length(), 1, msg="R014 is recorded once")
+  // The same document through the string entry point, for comparison: the
+  // string path receives the decoded code unit directly.
+  assert_eq(fin.text, repair("{\"s\":\"a\\uD800\"}").text)
+}
+
+///|
+test "TC-S-UTF8-06 byte batching does not change the delta stream" {
+  // Batching changes how many `parts` entries a string has, so the only thing
+  // that may stay the same is the observable result: the replay of the deltas
+  // must still equal the snapshot, for byte chunk sizes that cut sequences.
+  let text = utf8_doc(40)
+  let bytes = @utf8.encode(text)
+  let base = PartialParser::new(options=Options::for_llm())
+  base.feed(text)
+  let want = base.snapshot().value
+  for chunk in [1, 3, 5, 17] {
+    let p = PartialParser::new(options=Options::for_llm())
+    let ops : Array[Delta] = []
+    let mut i = 0
+    while i < bytes.length() {
+      let end = if i + chunk < bytes.length() {
+        i + chunk
+      } else {
+        bytes.length()
+      }
+      p.feed_bytes(bytes[i:end].to_owned())
+      for d in p.drain_deltas() {
+        ops.push(d)
+      }
+      i = end
+    }
+    ignore(p.finish())
+    assert_eq(
+      dj_render(dj_replay(ops)),
+      dj_render(want),
+      msg="replay after byte chunk " + chunk.to_string(),
+    )
+  }
+}
+
+///|
 test "TC-S-UTF8-02 invalid bytes raise E040" {
   let bad : Bytes = b"\x7b\x22\xff\x22\x7d"
   let p = PartialParser::new()

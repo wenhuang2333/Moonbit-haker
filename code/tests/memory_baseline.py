@@ -97,6 +97,25 @@ def make_document(target_bytes: int) -> str:
     return "[" + ",".join(parts) + "]"
 
 
+def make_long_text(target_bytes: int) -> str:
+    """A long-text document: one object, one member, one very long CJK string.
+
+    This is the shape a model produces when it writes a file, a markdown answer
+    or a translation, and it is measured separately because it spends memory
+    differently from the object array above: the value tree is two nodes, and
+    everything else is string buffer. `--check` therefore separates the string
+    buffers from the rendered copy without any help from the tree.
+    """
+    unit = "中文内容"
+    unit_bytes = len(unit.encode())
+    body = []
+    n = 0
+    while n < target_bytes:
+        body.append(unit)
+        n += unit_bytes
+    return '{"text":"' + "".join(body) + '"}'
+
+
 def make_events(doc: str, path: str) -> int:
     """Write the document as an Anthropic `text_delta` stream; return its size.
 
@@ -280,6 +299,33 @@ def main() -> int:
         baseline = next((a["peak"] for a in cross if a["name"].startswith("node")), None)
 
         # ------------------------------------------------------------------
+        # The long-text shape (TC-B-11).
+        #
+        # Same byte size as the object array, so the ratio columns are
+        # comparable; a completely different allocation profile, which is the
+        # point. Two arms only: `--check` (builds the tree, renders nothing) and
+        # `repair` (renders the whole output).
+        # ------------------------------------------------------------------
+        long_doc = make_long_text(size)
+        long_bytes = len(long_doc.encode())
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".json", delete=False, encoding="utf-8"
+        ) as lf:
+            lf.write(long_doc)
+            long_path = lf.name
+        long_arms = []
+        for arm, argv in (
+            ("--check（建树、不渲染）", [args.cli, "--check", long_path]),
+            ("repair（渲染输出）", [args.cli, long_path]),
+        ):
+            peak, _o, rc, err = peak_rss(argv)
+            long_arms.append({
+                "arm": arm,
+                "peak": peak if rc in (0, 1) else None,
+                "note": "" if rc in (0, 1) else "failed (rc=%d) %s" % (rc, err.strip()),
+            })
+
+        # ------------------------------------------------------------------
         # The document.
         # ------------------------------------------------------------------
         now = datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
@@ -424,11 +470,68 @@ def main() -> int:
         )
         lines.append("")
 
+        lines.append("## 五、长文本形状：单条字符串吃掉整篇文档（TC-B-11）")
+        lines.append("")
+        lines.append(
+            "上面四节用的是对象数组：成本主要是**值树**。LLM 场景里另一种形状同样常见——"
+            "模型写文件、写 markdown 回答、写译文时，参数里几乎只有一个超长字符串，"
+            "此时值树只有两个节点，成本几乎全是**字符串缓冲**。这一节用同样的字节量测这种形状："
+            "`{\"text\":\"中文内容…\"}`，%d B（%.2f MB，%d 个码元）。"
+            % (long_bytes, long_bytes / 1048576.0, len(long_doc))
+        )
+        lines.append("")
+        lines.append("| 模式 | 峰值 RSS | 相对输入 |")
+        lines.append("| --- | --- | --- |")
+        for arm in long_arms:
+            if arm["peak"] is None:
+                lines.append("| %s | 未测得 | — |" % arm["arm"])
+                continue
+            lines.append(
+                "| %s | %.1f MB | %.1f × |"
+                % (arm["arm"], arm["peak"], arm["peak"] / (long_bytes / 1048576.0))
+            )
+        lines.append("")
+        lines.append(
+            "1.3.0 改动的是这一形状的成本结构，不是结果：字节入口 `feed_bytes` 过去只批量纯 ASCII 段，"
+            "非 ASCII 字节一个码元一次 `parts.push(c.to_string())`，于是长文本文档的峰值随**字符数**"
+            "而不是字节数增长。现在完整的 UTF-8 序列并成一次 run，一条 25 171 907 字节、"
+            "8 388 619 码元的 CJK 文档实测由 239 075 328 B（228.0 MB，9.5 ×）降到 46–54 MB"
+            "（1.9–2.2 ×，`--check`；峰值 RSS 随调用上下文抖动约 8 MB），`repair` 由 "
+            "289 521 664 B（276.1 MB）降到 89.8–94.3 MB。那两个「修复前」数字**不是本次运行测的**"
+            "——当前二进制已经修好——"
+            "是同一批文件用改动前的二进制测出来的，记录在 `docs/BENCHMARK.md`「长文本输入」。"
+        )
+        lines.append("")
+        long_check = long_arms[0]["peak"]
+        long_repair = long_arms[1]["peak"]
+        if long_check and check_peak:
+            lines.append(
+                "同一尺寸下两种形状可以直接比：%d B 的对象数组 `--check` 是 %.1f MB（%.1f ×，"
+                "见第一节），同字节量的长文本 `--check` 是 %.1f MB（%.1f ×）——长文本省下的是值树，"
+                "留下的是两份 UTF-16 文本（`parts` 与 `Json::string`）。"
+                "但这个比值也不要与 25 MB 文件的 1.9–2.2 × 直接对比：峰值里有一部分与输入大小无关"
+                "（运行时本身、主路径保留的 1 MiB 错误摘录前缀），它在较小的文档里占比更大。"
+                % (
+                    actual,
+                    check_peak,
+                    check_peak / (actual / 1048576.0),
+                    long_check,
+                    long_check / (long_bytes / 1048576.0),
+                )
+            )
+            lines.append("")
+        lines.append("")
+        lines.append(
+            "`repair` 与 `--check` 之差是渲染输出的边际成本：长文本下它是整整第二份文本，"
+            "所以这一形状的 `repair` 峰值明显高于 `--check`，与对象数组形状的结论一致。"
+        )
+        lines.append("")
+
         with open(args.out, "w", encoding="utf-8") as fh:
             fh.write("\n".join(lines))
         print("\n".join(lines))
     finally:
-        for p in (path, events_path):
+        for p in (path, events_path, locals().get("long_path", path)):
             try:
                 os.unlink(p)
             except OSError:
