@@ -477,7 +477,7 @@ character. That cost 5.4 × (native) / 7.1 × (JS) per code unit and grew with t
 text, while the parsed result was already correct — no functional test could see
 it. 1.3.0 batches complete multi-byte UTF-8 sequences in the same run batching the
 ASCII path uses, so a CJK long string now costs the same per *byte* as ASCII
-(662 MB/s vs 599 MB/s; 220.8 Mu/s vs 39.0 before). The 25.17 MB single-CJK-string
+(662 MB/s vs 599 MB/s; 209.7-220.8 Mu/s vs 38.5-39.6 before). The 25.17 MB single-CJK-string
 file measures 0.04 s and 53.7 MB peak RSS with `--check` (2.2 × input, down from
 228.0 MB / 9.5 ×). Two floors remain, both documented rather than hidden: an
 escape-dense string is 311.6 Mu/s because every `\n` ends a run, and feeding one

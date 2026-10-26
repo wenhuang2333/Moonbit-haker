@@ -44,8 +44,8 @@
   + `step_str` 会原样送入 `push_cu`」的序列并整段并入，码元数按 UTF-8 长度累计
   （四字节算两个码元）。`plain_utf8_run` 复制而不是复用 `feed_byte` 的校验：它只决定
   能不能批量，拒绝时一律退回逐字节路径，`E040` 仍由 `feed_byte` 以原来的绝对偏移报出。
-  一行 `{"text": "…"}` 的长文本，native 由 39.0 → 220.8 Mu/s、JS 由 10.9 →
-  78.5 Mu/s（4 Mi 码元，`bench -- longtext`），按字节算 CJK 与 ASCII 同价；CLI 读一份
+  一行 `{"text": "…"}` 的长文本，native 由 38.5–39.6 → 209.7–220.8 Mu/s、JS 由 10.8–11.0 →
+  76.3–79.1 Mu/s（4 Mi 码元，`bench -- longtext`，三次运行的区间），按字节算 CJK 与 ASCII 同价；CLI 读一份
   25.17 MB 的单条 CJK 字符串由 0.22–0.24 s 降到 0.04 s，`--check` 峰值 RSS 由
   228.0 MB（9.5 ×）降到 46–54 MB（1.9–2.2 ×，峰值 RSS 随调用上下文抖动）。
   纯 ASCII 与转义密集文本的读数不变。
