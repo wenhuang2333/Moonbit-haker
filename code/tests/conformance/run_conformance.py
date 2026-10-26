@@ -97,6 +97,46 @@ class Connection:
                 pass
 
 
+def declared_engine() -> str:
+    """The engine version, from the one place that declares it: `code/moon.mod`."""
+    mod_path = HERE.parents[1] / "moon.mod"
+    for line in mod_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("version"):
+            return line.split("=", 1)[1].strip().strip('"')
+    raise SystemExit(f"cannot read the version from {mod_path}")
+
+
+def declared_registry() -> str:
+    """The mooncakes version the README channel table maps the engine to."""
+    engine = declared_engine()
+    readme = HERE.parents[2] / "README.md"
+    for line in readme.read_text(encoding="utf-8").splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) >= 2 and cells[0] == f"`v{engine}`":
+            return cells[1].strip("`")
+    raise SystemExit(f"README.md has no channel-table row for v{engine}")
+
+
+def resolve_versions(value: Any) -> Any:
+    """Replace the `$engine` / `$registry` placeholders in an expectation.
+
+    A release bump used to require editing `cases.jsonl` as well as the sources,
+    so the corpus carried last release's version string until someone noticed.
+    The placeholders keep the first case about the *shape* of `hello`; the
+    `reported versions` group is what pins the two strings to the declarations,
+    and it reads them from the same two files this substitution does.
+    """
+    if isinstance(value, str):
+        return {"$engine": declared_engine(), "$registry": declared_registry()}.get(
+            value, value
+        )
+    if isinstance(value, dict):
+        return {k: resolve_versions(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [resolve_versions(v) for v in value]
+    return value
+
+
 def check_reported_versions(binary: str) -> list[str]:
     """The versions the protocol advertises must be the versions we publish.
 
@@ -153,9 +193,10 @@ def run_serve_case(binary: str, case: dict[str, Any]) -> list[str]:
         if "raw" in case:
             connection.send_raw(case["raw"])
             response = connection.read()
-            if not subset(response, case["expect"]):
+            expect = resolve_versions(case["expect"])
+            if not subset(response, expect):
                 failures.append(
-                    f"raw line: expected {json.dumps(case['expect'], ensure_ascii=False)}, "
+                    f"raw line: expected {json.dumps(expect, ensure_ascii=False)}, "
                     f"got {json.dumps(response, ensure_ascii=False)}"
                 )
         for step in case.get("steps", []):
@@ -164,10 +205,11 @@ def run_serve_case(binary: str, case: dict[str, Any]) -> list[str]:
             response = connection.read()
             if "id" in request and response.get("id") != request["id"]:
                 failures.append(f"id mismatch: sent {request['id']}, got {response.get('id')}")
-            if not subset(response, step["expect"]):
+            expect = resolve_versions(step["expect"])
+            if not subset(response, expect):
                 failures.append(
                     f"step {request.get('method')}: expected "
-                    f"{json.dumps(step['expect'], ensure_ascii=False)}, got "
+                    f"{json.dumps(expect, ensure_ascii=False)}, got "
                     f"{json.dumps(response, ensure_ascii=False)}"
                 )
     finally:

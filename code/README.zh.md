@@ -5,10 +5,10 @@
 | | |
 | --- | --- |
 | 模块 | `zhanshishan/jsonmend` |
-| 版本 | 1.2.0 |
+| 版本 | 1.3.0 |
 | 许可证 | Apache-2.0 |
 | 首选后端 | `wasm`（同时支持 `native` 与 `js`） |
-| 预编译产物 | [Release `v1.2.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.2.0)——Linux / macOS arm64 / Windows 三个 CLI、wasm 探针、浏览器包、`SHA256SUMS` |
+| 预编译产物 | [Release `v1.3.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.3.0)——Linux / macOS arm64 / Windows 三个 CLI、wasm 探针、浏览器包、`SHA256SUMS` |
 | 发行渠道 | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
 
 ## 特性

@@ -1,6 +1,6 @@
 # JSONMend — LLM JSON 的执行门（流式修复 · 纯 MoonBit）
 
-**版本**：1.2.0
+**版本**：1.3.0
 
 [![CI](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml/badge.svg)](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](code/LICENSE)
@@ -552,7 +552,8 @@ JSONMend 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_los
 
 | GitHub tag | mooncakes.io | 关系 |
 | --- | --- | --- |
-| `v1.2.0` | `0.9.0` | **当前发布**：minor 版；修 89 条标量根误拒、按值分级 `R011`、加速 CLI 字节路径与增量文本 drain，并让默认路径执行 `--schema`。mooncakes 现阶段只接受 `0.x.y`：patch 位一一对应，minor 位按发布序顺延（`1.0.x` ↔ `0.7.x`、`1.1.x` ↔ `0.8.x`、`1.2.x` ↔ `0.9.x`）。**0.9.0 尚未上传 mooncakes**，此处登记的是对应号 |
+| `v1.3.0` | `0.10.0` | **当前发布**：minor 版；三块结构性重构（当前位置与历史位置分离、增量日志改并行数组 + 路径 arena、CLI 暴露三个资源上限）加一处字节入口缺陷修复（非 ASCII 文本每码元一次 `String` 分配 → 多字节 UTF-8 序列批量并入）。公开 API 只增不减：`DeltaView`、`drain_views`、`for_each_delta`、`delta_path`、`delta_pointer`、`Engine::position/advance`。mooncakes 现阶段只接受 `0.x.y`：patch 位一一对应，minor 位按发布序顺延（`1.0.x` ↔ `0.7.x`、`1.1.x` ↔ `0.8.x`、`1.2.x` ↔ `0.9.x`、`1.3.x` ↔ `0.10.x`）。**0.10.0 尚未上传 mooncakes**，此处登记的是对应号 |
+| `v1.2.0` | `0.9.0` | 修 89 条标量根误拒、按值分级 `R011`、加速 CLI 字节路径与增量文本 drain，并让默认路径执行 `--schema`。**0.9.0 未上传 mooncakes** |
 | `v1.1.1` | `0.8.1` | 补丁版；修好 1.1.0 的 Release 漏挂 Windows 产物，并补齐演示资产与文档数字 |
 | `v1.1.0` | `0.8.0` | 接入面首发（`serve`/`mcp`/npm/pip/Windows + JSON Schema 桥）。**已知缺陷**：Release 的 `SHA256SUMS` 列了 `jsonmend-windows-x86_64.exe`，但该文件没有随 Release 发布——见 `code/CHANGELOG.md` 1.1.1 一节 |
 | `v1.0.0` | `0.7.0` | 公开面冻结版；行为与 1.1.x 相同（除新增接入面） |
@@ -565,10 +566,10 @@ Release 的资产是否与 `SHA256SUMS` 一致，由 `code/tests/release_assets.
 
 ## 路线图
 
-- **GitHub**：tag `v0.5.0` … `v1.2.0` 已推送，`release.yml` 产出 **6 个资产**：Linux CLI、macOS arm64 CLI、**Windows CLI**、wasm 探针、演示 bundle 与 `SHA256SUMS`（`SHA256SUMS` 覆盖全部 5 个产物，附件集合与它由 `code/tests/release_assets.sh` 校验）。
-- **mooncakes.io**：`zhanshishan/jsonmend` 0.3.0 … **0.8.1** 已发布。1.2.0 在 mooncakes 上对应
-  **0.9.0**（平台只接受 `0.x.y`），两者除版本字符串外逐字节相同；**0.9.0 尚未上传**，
-  发布后本段与渠道表会同步。
+- **GitHub**：tag `v0.5.0` … `v1.3.0` 已推送，`release.yml` 产出 **6 个资产**：Linux CLI、macOS arm64 CLI、**Windows CLI**、wasm 探针、演示 bundle 与 `SHA256SUMS`（`SHA256SUMS` 覆盖全部 5 个产物，附件集合与它由 `code/tests/release_assets.sh` 校验）。
+- **mooncakes.io**：`zhanshishan/jsonmend` 0.3.0 … **0.8.1** 已发布。1.2.0 与 1.3.0 在 mooncakes 上分别对应
+  **0.9.0** 与 **0.10.0**（平台只接受 `0.x.y`），两者除版本字符串外逐字节相同；**0.9.0 与
+  0.10.0 都尚未上传**，发布后本段与渠道表会同步。
   1.0.0/1.1.x/1.2.x 的 GitHub 标签代表「公开面已冻结」的承诺；渠道对应关系见
   `产品文档-精简版.md` §11.1c（本地文档）。
   0.7.0 的 CLI 上传路径曾失败（`receiver is gone`），改用同一份已校验产物 POST 官方端点成功；

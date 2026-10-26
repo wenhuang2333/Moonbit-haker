@@ -5,12 +5,13 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布]
+## [1.3.0] - 2026-10-26
 
-结构性重构，目标是把三处「每条变更都付一次代价」的设计换成按 token / 按记录付费。
-默认行为不变：`repair`、`parse`、`snapshot`、`drain_deltas` 的输出与 1.2.0 逐字节
-一致，只有新增 API 与一处 CLI 默认值变化。下一版为 **1.3.0**（GitHub）↔ **0.10.0**
-（mooncakes）——新增公开 API 属 minor，不能当 1.2.x 补丁。
+结构性重构，目标是把三处「每条变更都付一次代价」的设计换成按 token / 按记录付费，
+另修一处只影响成本、不影响结果的字节入口缺陷。默认行为不变：`repair`、`parse`、
+`snapshot`、`drain_deltas` 的输出与 1.2.0 逐字节一致，只有新增 API 与一处 CLI 默认值
+变化。版本对应 **1.3.0**（GitHub）↔ **0.10.0**（mooncakes）——新增公开 API 属 minor，
+不能当 1.2.x 补丁。
 
 ### 引擎
 

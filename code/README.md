@@ -5,10 +5,10 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 | | |
 | --- | --- |
 | Module | `zhanshishan/jsonmend` |
-| Version | 1.2.0 |
+| Version | 1.3.0 |
 | License | Apache-2.0 |
 | Preferred target | `wasm` (also builds for `native` and `js`) |
-| Prebuilt binaries | [Release `v1.2.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.2.0) — Linux, macOS arm64 and Windows CLIs, wasm probe, browser bundle, `SHA256SUMS` |
+| Prebuilt binaries | [Release `v1.3.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.3.0) — Linux, macOS arm64 and Windows CLIs, wasm probe, browser bundle, `SHA256SUMS` |
 | Registry | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
 
 ## Features
