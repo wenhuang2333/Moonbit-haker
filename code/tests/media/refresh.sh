@@ -33,6 +33,9 @@ bash static/demo/build.sh
 echo "refresh.sh: screenshots and page smoke"
 python3 code/tests/media/demo_visual_smoke.py
 
+echo "refresh.sh: console smoke"
+python3 code/tests/media/index_console_smoke.py
+
 echo "refresh.sh: MCP transcript GIF"
 python3 code/tests/media/render_mcp_gif.py
 
