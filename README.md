@@ -415,7 +415,7 @@ Suggested retry:
 | 首个可见值（流式） | 工具调用文档中位数 | 文档长度的 **0.7%** 处即可渲染，并同时拿到标签 |
 | 命令行吞吐（12.95 MiB 输入，64 KB 分块） | 35.0–36.7 MB/s（峰值 RSS 177.8 MB） | `Position` 不再逐码元构造后 +25% |
 | 长文本输入（单条字符串吃掉整篇文档） | 4 Mi 码元 CJK（`Mu/s` = 百万 UTF-16 码元/秒）：`feed_bytes` **209.7–220.8 Mu/s**（修复前 38.5–39.6）；CLI 读 25.17 MB 单条 CJK 字符串 0.04 s、`--check` 峰值 RSS 46–54 MB（1.9–2.2 × 输入，此前 9.5 ×） | 字节入口对完整 UTF-8 序列批量并入；按字节算 CJK 与 ASCII 同价（662 / 599 MB/s） |
-| wasm-gc 产物体积 | 108.1 KiB | 达标（上限 150 KB） |
+| wasm-gc 产物体积 | 109.1 KiB | 达标（上限 150 KB） |
 
 ```bash
 cd code
@@ -523,7 +523,7 @@ mooncakes 页面核对**，原文引用保留英文）：
 | 差分证据 | 402 例对照 `jsonrepair` 与 `json-repair`，202 处差异全归因 | 未提及 |
 | 真值评测（与真值比，不与参照比） | 有（1200 条，协议先冻结，恢复率 100%） | 未提及 |
 | AI 使用披露 | `code/docs/AI_USAGE.md` | 有（原文指向 `docs/provenance.md`） |
-| wasm-gc 体积 | 108.1 KiB | 未声明 |
+| wasm-gc 体积 | 109.1 KiB | 未声明 |
 
 客观地说，对方的**可重放编辑**（带范围校验的 `Edit` 重放）与**库内 JSONL 批处理**是 InterJSON
 目前没有的能力；而 InterJSON 的差异化压在它的边界上：**流式增量**、**截断补全**、**更宽的修复面**、
@@ -542,7 +542,7 @@ InterJSON 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_lo
 - **`raise` 错误系统**直接承载 10 个 `E` 码，错误载荷（`limit`、`offset`、`RepairCode`、`Position`）
   随类型走，调用方不需要解析字符串；
 - **四后端一条命令**：`moon test` / `--target native` / `--target js` / `--target wasm` 跑同一套 217 个测试，
-  同一份引擎源码产出 wasm-gc 108.1 KiB 的库、native CLI 和浏览器 bundle —— 这在别的语言里
+  同一份引擎源码产出 wasm-gc 109.1 KiB 的库、native CLI 和浏览器 bundle —— 这在别的语言里
   要三套构建与三套测试；
 - **零第三方依赖**：无正则、无外部解析器，wasm-gc 产物只含引擎与 core 的必要部分；
 - **工具链自带覆盖率与基准**：`moon coverage report` 与 `moon build --release` 就是
