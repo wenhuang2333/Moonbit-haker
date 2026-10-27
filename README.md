@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml/badge.svg)](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](code/LICENSE)
-[![Live demo](https://img.shields.io/badge/demo-live-2ea44f.svg)](https://wenhuang2333.github.io/Moonbit-haker/live.html)
+[![Interactive console](https://img.shields.io/badge/demo-console-2ea44f.svg)](https://wenhuang2333.github.io/Moonbit-haker/)
 
 **InterJSON 是 LLM 输出的执行门：模型给出的工具参数与结构化结果，先过它，再决定能不能执行。**
 
@@ -62,8 +62,10 @@ server，把被 `max_tokens` 截断的工具参数交给执行门，收到 **E01
 
 [English](#english) · [详细文档](#文档索引) · [演示页](#演示页) · [测试证据](#质量与证据)
 
-**一键演示 · Try it live**：<https://wenhuang2333.github.io/Moonbit-haker/live.html>
-（[演示目录](https://wenhuang2333.github.io/Moonbit-haker/) · [本地打开](#演示页) · [80 秒录屏](static/demo/demo.mp4)）
+**一键演示 · Try it live**：<https://wenhuang2333.github.io/Moonbit-haker/>
+（交互控制台：修复工作台、执行门、流式重放、22 条规则、就绪曲线、CLI 与本地 MCP 接入 ·
+[逐帧演示 live.html](https://wenhuang2333.github.io/Moonbit-haker/live.html) ·
+[本地打开](#演示页) · [80 秒录屏](static/demo/demo.mp4)）
 
 ![live.html 的一条场景：截断的参数 → E010 拒绝 → 重试 → 执行](static/demo/live-demo.gif)
 
@@ -437,8 +439,9 @@ python3 tests/gen_llm_fixtures.py --check
 
 ## 演示页
 
-**线上（一键打开）**：<https://wenhuang2333.github.io/Moonbit-haker/live.html>
-· 目录页 <https://wenhuang2333.github.io/Moonbit-haker/>
+**线上（一键打开）**：<https://wenhuang2333.github.io/Moonbit-haker/> —— `index.html` 交互控制台
+· 逐帧演示 <https://wenhuang2333.github.io/Moonbit-haker/live.html>
+· MCP 接管演示 <https://wenhuang2333.github.io/Moonbit-haker/mcp.html>
 
 页面里的每一帧都来自同一个 `PartialParser` 与 `analyze`，用 MoonBit 编译成的 `interjson.js`
 在浏览器里直接跑；**没有第二个解析器，也没有为演示写的特例**。
@@ -447,11 +450,13 @@ python3 tests/gen_llm_fixtures.py --check
 
 `static/demo/index.html` 是交互控制台，由 MoonBit 的 JavaScript 后端产物直接驱动
 （`code/examples/web/main.mbt` 把 `repair` / `report` / `snapshot` / `live` /
-`analyze` / `analyze_json_schema` / `analyze_prose` / `readiness` / `deltas`
-注册到页面），**页面里没有第二份实现**，所有结论都在浏览器里现场算出来。七个板块：
-修复工作台（五种安全档位、skip-prose、计划 / 记录 / 回灌提示）、执行门（骨架声明与工具
-`inputSchema`）、流式重放（delta 事件流与 `syntax` / `schema` / `settled` 三个数字）、
-22 条修复规则一键试用与自检、字段就绪曲线、CLI 命令构造器与退出码表、六种接入方式。
+`analyze` / `analyze_json_schema` / `analyze_prose` / `analyze_json_schema_prose` /
+`readiness` / `deltas` 注册到页面），**页面里没有第二份实现**，所有结论都在浏览器里
+现场算出来。八个板块：本地 MCP 执行门（四个只读工具、`interjson mcp --print-config`
+的七种客户端配置、真实 JSON-RPC 往返）、修复工作台（五种安全档位、skip-prose、
+计划 / 记录 / 回灌提示）、执行门（骨架声明与工具 `inputSchema`）、流式重放（delta
+事件流与 `syntax` / `schema` / `settled` 三个数字）、22 条修复规则一键试用与自检、
+字段就绪曲线、CLI 命令构造器与退出码表、六种接入方式。
 直接用浏览器打开即可，无需服务器；重新生成 bundle 用 `bash static/demo/build.sh`。
 
 [`static/demo/live.html`](static/demo/live.html) 是实时演示：四条真实场景逐帧重放
@@ -519,7 +524,7 @@ mooncakes 页面核对**，原文引用保留英文）：
 | 严格模式 | 有（`E010`，退出码 5） | `Options::strict`（原文："No heuristic is enabled in strict mode."） |
 | 三条不变量（输出合法 / 幂等 / 分块不变） | 由属性测试强制，见 `prop_wbtest.mbt` | 未承诺 |
 | 四后端一致性 | wasm-gc / native / JS / wasm 各 217/217 同一套测试 | 未声明 |
-| 浏览器演示 | 有（`static/demo/index.html`，bundle 由 CI 校验同步） | 未提及 |
+| 浏览器演示 | 有（`static/demo/index.html` 交互控制台 + `live.html` 逐帧演示，bundle 由 CI 校验同步） | 未提及 |
 | 差分证据 | 402 例对照 `jsonrepair` 与 `json-repair`，202 处差异全归因 | 未提及 |
 | 真值评测（与真值比，不与参照比） | 有（1200 条，协议先冻结，恢复率 100%） | 未提及 |
 | AI 使用披露 | `code/docs/AI_USAGE.md` | 有（原文指向 `docs/provenance.md`） |
@@ -765,8 +770,10 @@ profiles (`agent` / `execution`) both are refused rather than executed and regre
   corpus against `jsonrepair` and `json-repair` in which every one of the 202 divergences has
   a documented cause. Library line coverage 94.1%; native throughput 42–47 MB/s
   (single-machine observation; CI reruns the same benchmark script).
-- **Live demo**: <https://wenhuang2333.github.io/Moonbit-haker/live.html> (four scenarios, frame
-  by frame, with the three readiness numbers and the refusal-to-retry panel).
+- **Live demo**: <https://wenhuang2333.github.io/Moonbit-haker/> — the interactive console (MCP
+  entry point, repair workbench, execution gate, stream replay, 22 rules, readiness curve, CLI);
+  <https://wenhuang2333.github.io/Moonbit-haker/live.html> — four scenarios, frame by frame, with
+  the three readiness numbers and the refusal-to-retry panel.
 - **CLI** (`interjson`) with `--report`, `--check`, `--strict`, `--indent`, `--multi-root`,
   `--max-repairs`, chunked streaming input, and a browser demo driven by the MoonBit JS build.
 

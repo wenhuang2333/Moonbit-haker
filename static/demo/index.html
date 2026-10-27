@@ -313,6 +313,7 @@
           <span>InterJSON <small>v1.4.0</small></span>
         </a>
         <nav class="links" aria-label="页面章节">
+          <a href="#mcp" data-nav="mcp">MCP</a>
           <a href="#workbench" data-nav="workbench">工作台</a>
           <a href="#gate" data-nav="gate">执行门</a>
           <a href="#stream" data-nav="stream">流式</a>
@@ -339,18 +340,20 @@
 
       <section class="hero wrap" aria-labelledby="hero-title">
         <div>
-          <span class="kicker">LLM JSON 的执行门 · 纯 MoonBit</span>
+          <span class="kicker">LLM 输出的执行门 · 本地 MCP</span>
           <h1 id="hero-title">不要等合法 JSON，<br />先问<em>我已经知道了什么</em>。</h1>
           <p class="lead">
-            InterJSON 修复正在生成中的坏 JSON：能修就修、修不了就补全，并在一次调用里回答
-            「这份结果能不能直接执行、为什么不能、怎么让模型改」。这一页的每一次修复、每一帧快照、
-            每一个判定，都由 <code>code/examples/web/main.mbt</code> 编译出的
-            <code>interjson.js</code> 在浏览器里现场完成，页面里没有第二份实现。
+            InterJSON 是 LLM 输出的执行门：模型给出的工具参数与结构化结果，先过它，再决定能不能执行。
+            它以一个本地 MCP server（<code>interjson mcp</code>）运行 —— 不联网、不需要 API key、
+            被检查的文本不离开本机。底层是纯 MoonBit 的流式 JSON 修复与部分解析引擎：这一页的每一次修复、
+            每一帧快照、每一个判定，都由同一份引擎编译出的 <code>interjson.js</code> 在浏览器里现场完成，
+            页面里没有第二份实现。
           </p>
           <div class="hero-actions">
-            <a class="pill info" href="#workbench">从工作台开始 ↓</a>
-            <a class="pill" href="./live.html">逐帧实时演示 live.html</a>
-            <a class="pill" href="./mcp.html">MCP 接入 mcp.html</a>
+            <a class="pill info" href="#mcp">MCP 接入 ↓</a>
+            <a class="pill" href="#workbench">修复工作台</a>
+            <a class="pill" href="./live.html">逐帧演示 live.html</a>
+            <a class="pill" href="./mcp.html">MCP 接管演示 mcp.html</a>
           </div>
         </div>
         <aside class="hero-card" aria-label="执行门现场判定">
@@ -374,9 +377,90 @@
         <div class="stats" id="evidence-strip" aria-label="质量与证据"></div>
       </div>
 
-      <section class="band wrap" id="workbench" aria-labelledby="wb-title">
+      <section class="band wrap" id="mcp" aria-labelledby="mcp-title">
         <div class="band-head">
           <span class="band-num">01</span>
+          <h2 class="band-title" id="mcp-title">本地 MCP 执行门</h2>
+          <span class="band-tag">interjson mcp · 四个只读工具 · JSON-RPC 2.0 / stdio</span>
+        </div>
+        <p class="band-sub">
+          InterJSON 的主入口是一个本地 MCP server：模型在执行工具参数前调用
+          <code>interjson_gate</code>，拿到 <code>executable</code> 与 <code>retry.prompt</code>。
+          它不联网、不需要 API key、被检查的文本不离开本机；四个工具都是只读的
+          （<code>readOnlyHint</code>），协议 <code>2025-06-18</code>，同时接受
+          <code>2024-11-05</code>。下面是一段真实 <code>interjson mcp</code> 的 JSON-RPC 往返。
+        </p>
+
+        <div class="grid g-2">
+          <div class="card">
+            <h3>四个只读工具</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>工具</th><th>用途</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td class="nowrap"><code>interjson_gate</code><br /><span class="hint">首选</span></td>
+                    <td>执行门。不传 <code>profile</code> 时默认 <code>agent</code>；返回
+                      <code>executable</code> / <code>decision</code> / <code>exactness</code> /
+                      <code>ambiguity</code> / <code>value</code> / <code>retry.prompt</code>。</td>
+                  </tr>
+                  <tr><td class="nowrap"><code>interjson_repair</code></td><td>修复并返回文本与修复记录。要的是文档，不是一个裁决。</td></tr>
+                  <tr><td class="nowrap"><code>interjson_validate</code></td><td>只校验、不修复：可修的文档仍然算 invalid，并指出宽松档会做哪条修复。</td></tr>
+                  <tr><td class="nowrap"><code>interjson_readiness</code></td><td>每个声明字段在流里何时定稿：<code>syntax</code> / <code>schema</code> / <code>settled</code> 三个比例。</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <h3 style="margin-top: 14px">gate 的结果字段</h3>
+            <div class="pills">
+              <span class="pill ok">executable</span>
+              <span class="pill">decision</span>
+              <span class="pill">exactness</span>
+              <span class="pill">ambiguity</span>
+              <span class="pill">value</span>
+              <span class="pill info">retry.prompt</span>
+            </div>
+            <p class="meta">文本通道 <code>content[0].text</code> 与 <code>structuredContent</code> 是同一个对象；
+              不支持 MCP 2025-06-18 的客户端退回文本通道即可。</p>
+          </div>
+
+          <div class="card">
+            <h3>真实 JSON-RPC 往返</h3>
+            <div class="tabs" role="tablist" aria-label="MCP 消息示例">
+              <button type="button" data-mcp-tab="refused" aria-pressed="true">截断参数 → E010</button>
+              <button type="button" data-mcp-tab="allowed" aria-pressed="false">完整参数 → 放行</button>
+              <button type="button" data-mcp-tab="init" aria-pressed="false">initialize</button>
+            </div>
+            <pre id="mcp-msg" class="tall">—</pre>
+            <p class="meta" id="mcp-meta">—</p>
+          </div>
+        </div>
+
+        <div class="grid g-2" style="margin-top: 16px">
+          <div class="card">
+            <h3>客户端配置 · <code>interjson mcp --print-config</code></h3>
+            <div class="row" style="margin-bottom: 8px">
+              <label for="mcp-client">客户端</label>
+              <select id="mcp-client" style="max-width: 13rem"></select>
+              <button id="mcp-copy" type="button" data-copy="mcp-config">复制配置</button>
+            </div>
+            <pre id="mcp-config" class="short">—</pre>
+            <p class="hint">这是 CLI 的真实输出；<code>CLIENT</code> 省略时默认 <code>json</code>。</p>
+          </div>
+          <div class="card">
+            <h3>一行接入</h3>
+            <pre id="mcp-oneline" class="short">claude mcp add interjson -- interjson mcp</pre>
+            <div class="row" style="margin-top: 8px">
+              <button type="button" data-copy="mcp-oneline">复制</button>
+            </div>
+            <p class="meta">别名 <code>interjson-mcp</code> 等价于 <code>interjson mcp</code>；
+              支持 claude / cursor / vscode / codex / windsurf / zed / json 七种配置。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="band wrap" id="workbench" aria-labelledby="wb-title">
+        <div class="band-head">
+          <span class="band-num">02</span>
           <h2 class="band-title" id="wb-title">修复工作台</h2>
           <span class="band-tag">repair · analyze · 五种安全档位</span>
         </div>
@@ -460,7 +544,7 @@
 
       <section class="band wrap" id="gate" aria-labelledby="gate-title">
         <div class="band-head">
-          <span class="band-num">02</span>
+          <span class="band-num">03</span>
           <h2 class="band-title" id="gate-title">执行门 · 工具参数</h2>
           <span class="band-tag">analyze · JSON Schema 子集 · retry.prompt</span>
         </div>
@@ -527,7 +611,7 @@
 
       <section class="band wrap" id="stream" aria-labelledby="stream-title">
         <div class="band-head">
-          <span class="band-num">03</span>
+          <span class="band-num">04</span>
           <h2 class="band-title" id="stream-title">流式部分解析</h2>
           <span class="band-tag">PartialParser · Delta 协议 · 三个就绪数字</span>
         </div>
@@ -599,7 +683,7 @@
 
       <section class="band wrap" id="rules" aria-labelledby="rules-title">
         <div class="band-head">
-          <span class="band-num">04</span>
+          <span class="band-num">05</span>
           <h2 class="band-title" id="rules-title">22 条修复规则</h2>
           <span class="band-tag">R001–R022 · 单次左到右扫描</span>
         </div>
@@ -643,7 +727,7 @@
 
       <section class="band wrap" id="readiness" aria-labelledby="rd-title">
         <div class="band-head">
-          <span class="band-num">05</span>
+          <span class="band-num">06</span>
           <h2 class="band-title" id="rd-title">字段就绪曲线</h2>
           <span class="band-tag">watch_readiness · ReadinessEvent</span>
         </div>
@@ -692,7 +776,7 @@
 
       <section class="band wrap" id="cli" aria-labelledby="cli-title">
         <div class="band-head">
-          <span class="band-num">06</span>
+          <span class="band-num">07</span>
           <h2 class="band-title" id="cli-title">命令行</h2>
           <span class="band-tag">interjson · 退出码 0/1/2/3/4/5/70</span>
         </div>
@@ -739,13 +823,13 @@
 
       <section class="band wrap" id="surfaces" aria-labelledby="sf-title">
         <div class="band-head">
-          <span class="band-num">07</span>
+          <span class="band-num">08</span>
           <h2 class="band-title" id="sf-title">六种接入方式</h2>
           <span class="band-tag">MCP · stdio · npm · pip · HTTP · MoonBit</span>
         </div>
         <p class="band-sub">
-          按「谁来决定使用」区分：模型主动调用的 MCP、宿主应用的长驻协议、两个语言包、HTTP facade，
-          以及进程内直接用的 MoonBit 库。每一条命令都能从仓库检出直接跑。
+          按「谁来决定使用」区分：模型主动调用的 MCP（上面第 01 节，默认入口）、宿主应用的长驻协议、
+          两个语言包、HTTP facade，以及进程内直接用的 MoonBit 库。每一条命令都能从仓库检出直接跑。
         </p>
         <div class="surfaces" id="surface-list"></div>
       </section>
@@ -757,7 +841,7 @@
             <ul>
               <li>输出必合法 JSON · 修复幂等 · 任意分块与一次性结果一致 · 快照是稳定前缀 · 任何字节序列不 panic。</li>
               <li>页面里的每个数字都来自 <code>static/demo/interjson.js</code>（<code>code/examples/web/main.mbt</code> 的 MoonBit → JS 产物），没有为演示写的特例，也没有第二份解析器。</li>
-              <li>规则、错误码与退出码取自 <code>code/docs/RULES.md</code>、<code>code/docs/ERRORS.md</code>；质量数字取自 README 的证据表。</li>
+              <li>规则、错误码与退出码取自 <code>code/docs/RULES.md</code>、<code>code/docs/ERRORS.md</code>；MCP 工具表与 <code>--print-config</code> 输出取自 <code>code/cmd/interjson/mcp.mbt</code> 与真实二进制的运行结果；质量数字取自 README 的证据表。</li>
             </ul>
           </div>
           <div>
@@ -778,12 +862,12 @@
       {
         "version": "1.4.0",
         "evidence": [
-          { "n": "210", "label": "条白盒测试" },
-          { "n": "4", "label": "个后端各 210/210" },
+          { "n": "217", "label": "条白盒测试" },
+          { "n": "868", "label": "次后端测试（4 个后端各 217/217）" },
           { "n": "1200", "label": "条真值评测 · 恢复率 100.00%" },
           { "n": "402", "label": "例差分 · 202 处差异全部归因" },
           { "n": "19", "label": "组协议一致性同跑" },
-          { "n": "108.1 KiB", "label": "wasm-gc 产物" }
+          { "n": "109.1 KiB", "label": "wasm-gc 产物 · 644.9 KiB 浏览器包" }
         ],
         "policies": [
           { "id": "permissive", "label": "permissive", "hint": "默认：能修就修，允许有损与第二种读法（显示通道）。" },
@@ -907,6 +991,15 @@
             { "flag": "--chunk", "arg": "64", "cmds": ["repair"], "desc": "仅与 --batch 同用：把每条输入按 N 个码元分块喂入" },
             { "flag": "--batch", "cmds": ["repair"], "desc": "逐行读 {id,input} JSON，逐行输出结果" },
             { "flag": "--step", "arg": "8", "cmds": ["readiness"], "desc": "每 N 个码元观察一次" },
+            { "flag": "--max-loss", "arg": "cosmetic", "cmds": ["repair", "explain"], "desc": "精确度上限：exact、cosmetic 或 lossy；超出即拒绝（退出码 5）" },
+            { "flag": "--max-input-len", "arg": "1048576", "cmds": ["repair", "explain"], "desc": "最多接受多少码元，超过报 E021（默认 67108864）" },
+            { "flag": "--max-depth", "arg": "64", "cmds": ["repair", "explain"], "desc": "容器最大嵌套深度，超过报 E020（默认 512）" },
+            { "flag": "--max-token-len", "arg": "65536", "cmds": ["repair", "explain"], "desc": "单个 token 的最大码元数，超过报 E022（默认 16777216）" },
+            { "flag": "--max-repairs", "arg": "10000", "cmds": ["repair", "explain"], "desc": "最多记录多少条修复记录（默认 10000）" },
+            { "flag": "--max-prose-buffer", "arg": "65536", "cmds": ["repair", "explain"], "desc": "跳过前言时最多缓存多少码元供结束回放（默认 65536）" },
+            { "flag": "--quote-lookahead", "cmds": ["repair", "explain"], "desc": "启用引号歧义前瞻" },
+            { "flag": "--with-text", "cmds": ["explain"], "desc": "与 explain --json 同用时在计划里带上修复后的全文" },
+            { "flag": "--text", "cmds": ["llm"], "desc": "读取文本增量（delta.content / text_delta）而不是工具调用参数" },
             { "flag": "--print-config", "cmds": ["mcp"], "desc": "打印客户端配置后退出；客户端用等号指定：--print-config=claude、cursor、vscode、codex、windsurf、zed、json（默认 json）" },
             { "flag": "--provider", "arg": "anthropic", "cmds": ["llm"], "desc": "anthropic（默认）或 openai" },
             { "flag": "--sse", "cmds": ["llm"], "desc": "输入是 SSE 文本" },
@@ -930,13 +1023,13 @@
             "title": "npm · Node / TypeScript",
             "tag": "interjson-moonbit",
             "cmd": "npm install ./code/npm",
-            "note": "装完 import { analyze, repair } from \"interjson-moonbit\"，在执行工具参数前过闸。包名尚未发布到 npm 仓库，按仓库路径安装。"
+            "note": "装完 import { analyze, repair } from \"interjson-moonbit\"，在执行工具参数前过闸。包名尚未发布到 npm 仓库，按仓库路径安装；包内还带一个 interjson-mcp 入口（需要 interjson 在 PATH 上，或用 INTERJSON_BIN 指向它）。包里的 vendor/interjson.js 是同一引擎的 JS 构建，供进程内调用，不能当 MCP server 用。"
           },
           {
             "title": "pip · Python",
             "tag": "interjson-moonbit",
             "cmd": "pip install ./code/python",
-            "note": "from interjson import Client：复用同一个 interjson serve 进程，executable 为 false 时把 retry.prompt 原样回灌模型。"
+            "note": "from interjson import Client：复用同一个 interjson serve 进程，executable 为 false 时把 retry.prompt 原样回灌模型。pip 包同样提供 interjson-mcp 与 interjson-http 两个入口；原生二进制需要在 PATH 上，或用 INTERJSON_BIN 指向它。"
           },
           {
             "title": "HTTP · n8n / Dify / Coze",
@@ -948,9 +1041,25 @@
             "title": "MoonBit 库 · 进程内",
             "tag": "moon add zhanshishan/interjson",
             "cmd": "let p = @interjson.PartialParser::new()",
-            "note": "不想起子进程时直接用库：PartialParser 逐个码元喂，analyze 给出同一份执行门判断。mooncakes 0.11.0 已发布（2026-10-27），与 1.4.0 除版本字符串外逐字节相同。"
+            "note": "不想起子进程时直接用库：PartialParser 逐个码元喂，analyze 给出同一份执行门判断。mooncakes 0.11.0 已发布（2026-10-27），与 1.4.0 除版本字符串外逐字节相同；0.9.0 / 0.10.0 尚未上传。"
           }
-        ]
+        ],
+        "mcp": {
+          "clients": [
+            { "id": "claude", "label": "Claude Code", "config": "claude mcp add interjson -- interjson mcp" },
+            { "id": "cursor", "label": "Cursor / Cline / Windsurf", "config": "{\"mcpServers\":{\"interjson\":{\"command\":\"interjson\",\"args\":[\"mcp\"]}}}" },
+            { "id": "vscode", "label": "VS Code", "config": "{\"servers\":{\"interjson\":{\"type\":\"stdio\",\"command\":\"interjson\",\"args\":[\"mcp\"]}}}" },
+            { "id": "codex", "label": "Codex CLI", "config": "[mcp_servers.interjson]\ncommand = \"interjson\"\nargs = [\"mcp\"]" },
+            { "id": "windsurf", "label": "Windsurf", "config": "{\"mcpServers\":{\"interjson\":{\"command\":\"interjson\",\"args\":[\"mcp\"]}}}" },
+            { "id": "zed", "label": "Zed", "config": "{\"context_servers\":{\"interjson\":{\"command\":{\"path\":\"interjson\",\"args\":[\"mcp\"]}}}}" },
+            { "id": "json", "label": "通用 mcpServers JSON（默认）", "config": "{\"mcpServers\":{\"interjson\":{\"command\":\"interjson\",\"args\":[\"mcp\"]}}}" }
+          ],
+          "messages": {
+            "refused": { "request": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"interjson_gate\",\"arguments\":{\"text\":\"{\\\"amount\\\":100,\\\"currency\\\":\\\"USD\\\"\",\"schema_json\":{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":\"number\"},\"currency\":{\"type\":\"string\"}},\"required\":[\"amount\"]}}}}", "response": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"decision\\\":\\\"lossy_repair\\\",\\\"label\\\":\\\"REJECT (a value was changed)\\\",\\\"exactness\\\":\\\"lossy\\\",\\\"ambiguous\\\":false,\\\"information_loss\\\":true,\\\"valid_json\\\":false,\\\"normalized\\\":true,\\\"ambiguity\\\":\\\"none\\\",\\\"execution\\\":\\\"blocked\\\",\\\"executable\\\":false,\\\"syntax_ready_permille\\\":-1,\\\"schema_total\\\":0,\\\"schema_satisfied\\\":0,\\\"schema_missing\\\":[],\\\"error\\\":{\\\"code\\\":\\\"E010\\\",\\\"message\\\":\\\"E010 StrictViolation at 1:31 (offset 30): R009 CloseContainer: exactness lossy exceeds max_loss cosmetic\\\"},\\\"repairs\\\":[{\\\"rule\\\":\\\"R009\\\",\\\"name\\\":\\\"CloseContainer\\\",\\\"action\\\":\\\"insert\\\",\\\"offset\\\":30,\\\"line\\\":1,\\\"column\\\":31,\\\"severity\\\":\\\"warning\\\",\\\"ambiguity\\\":\\\"unambiguous\\\",\\\"confidence\\\":\\\"refused\\\",\\\"confidence_value\\\":0,\\\"information_loss\\\":true}],\\\"retry\\\":{\\\"code\\\":\\\"E010\\\",\\\"prompt\\\":\\\"InterJSON refused the arguments: E010 R009 CloseContainer at line 1 column 31 (offset 30).\\\\nReason: exactness lossy exceeds max_loss cosmetic\\\\nContext: nt\\\\\\\":100,\\\\\\\"currency\\\\\\\":\\\\\\\"USD\\\\\\\"\\\\n                                 ^\\\\nRe-emit the arguments as valid JSON with exactly one reading.\\\"},\\\"repairs_truncated\\\":false,\\\"value\\\":null,\\\"text\\\":\\\"\\\"}\"}],\"isError\":false,\"structuredContent\":{\"decision\":\"lossy_repair\",\"label\":\"REJECT (a value was changed)\",\"exactness\":\"lossy\",\"ambiguous\":false,\"information_loss\":true,\"valid_json\":false,\"normalized\":true,\"ambiguity\":\"none\",\"execution\":\"blocked\",\"executable\":false,\"syntax_ready_permille\":-1,\"schema_total\":0,\"schema_satisfied\":0,\"schema_missing\":[],\"error\":{\"code\":\"E010\",\"message\":\"E010 StrictViolation at 1:31 (offset 30): R009 CloseContainer: exactness lossy exceeds max_loss cosmetic\"},\"repairs\":[{\"rule\":\"R009\",\"name\":\"CloseContainer\",\"action\":\"insert\",\"offset\":30,\"line\":1,\"column\":31,\"severity\":\"warning\",\"ambiguity\":\"unambiguous\",\"confidence\":\"refused\",\"confidence_value\":0,\"information_loss\":true}],\"retry\":{\"code\":\"E010\",\"prompt\":\"InterJSON refused the arguments: E010 R009 CloseContainer at line 1 column 31 (offset 30).\\nReason: exactness lossy exceeds max_loss cosmetic\\nContext: nt\\\":100,\\\"currency\\\":\\\"USD\\\"\\n                                 ^\\nRe-emit the arguments as valid JSON with exactly one reading.\"},\"repairs_truncated\":false,\"value\":null,\"text\":\"\"}}}" },
+            "allowed": { "request": "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"interjson_gate\",\"arguments\":{\"text\":\"{\\\"amount\\\":100,\\\"currency\\\":\\\"USD\\\"}\",\"schema_json\":{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":\"number\"},\"currency\":{\"type\":\"string\"}},\"required\":[\"amount\"]}}}}", "response": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"decision\\\":\\\"safe\\\",\\\"label\\\":\\\"SAFE TO EXECUTE\\\",\\\"exactness\\\":\\\"exact\\\",\\\"ambiguous\\\":false,\\\"information_loss\\\":false,\\\"valid_json\\\":true,\\\"normalized\\\":false,\\\"ambiguity\\\":\\\"none\\\",\\\"execution\\\":\\\"allowed\\\",\\\"executable\\\":true,\\\"syntax_ready_permille\\\":-1,\\\"schema_total\\\":2,\\\"schema_satisfied\\\":2,\\\"schema_missing\\\":[],\\\"error\\\":null,\\\"repairs\\\":[],\\\"retry\\\":null,\\\"repairs_truncated\\\":false,\\\"value\\\":{\\\"amount\\\":100,\\\"currency\\\":\\\"USD\\\"},\\\"text\\\":\\\"{\\\\\\\"amount\\\\\\\":100,\\\\\\\"currency\\\\\\\":\\\\\\\"USD\\\\\\\"}\\\"}\"}],\"isError\":false,\"structuredContent\":{\"decision\":\"safe\",\"label\":\"SAFE TO EXECUTE\",\"exactness\":\"exact\",\"ambiguous\":false,\"information_loss\":false,\"valid_json\":true,\"normalized\":false,\"ambiguity\":\"none\",\"execution\":\"allowed\",\"executable\":true,\"syntax_ready_permille\":-1,\"schema_total\":2,\"schema_satisfied\":2,\"schema_missing\":[],\"error\":null,\"repairs\":[],\"retry\":null,\"repairs_truncated\":false,\"value\":{\"amount\":100,\"currency\":\"USD\"},\"text\":\"{\\\"amount\\\":100,\\\"currency\\\":\\\"USD\\\"}\"}}}" },
+            "init": { "request": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"demo\",\"version\":\"0\"}}}", "response": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"interjson\",\"title\":\"InterJSON — the execution gate\",\"version\":\"1.4.0\"},\"instructions\":\"InterJSON is a local execution gate for model output. It runs on this machine over stdio and performs no network requests.\\n\\nBefore executing tool arguments or trusting structured output, call `interjson_gate` with the raw argument text and the tool's inputSchema as `schema_json`.\\n- `executable: true` means the arguments are safe to execute; `value` is the parsed object.\\n- `executable: false` means do not execute: send `retry.prompt` back to the model and use the re-emitted arguments.\\n\\n`interjson_repair` returns repaired text, `interjson_validate` reports legality without repairing, and `interjson_readiness` reports when streaming fields become final.\"}}" }
+          }
+        }
       }
     </script>
 
@@ -1084,6 +1193,68 @@
           card.appendChild(el("span", "", item.label));
           strip.appendChild(card);
         }
+
+        // ---- MCP (documentation: the real transcripts come from the CLI) ---
+        const mcpData = F.mcp || { clients: [], messages: {} };
+        const mcpSelect = $("mcp-client");
+        for (const client of mcpData.clients) {
+          const option = el("option", "", client.label);
+          option.value = client.id;
+          mcpSelect.appendChild(option);
+        }
+        const mcpConfig = (id) => {
+          const found = mcpData.clients.find((c) => c.id === id);
+          return found ? found.config : "—";
+        };
+        const renderMcpConfig = () => {
+          $("mcp-config").textContent = mcpConfig(mcpSelect.value);
+        };
+        mcpSelect.addEventListener("change", renderMcpConfig);
+        renderMcpConfig();
+
+        const mcpMessages = mcpData.messages || {};
+        const mcpTab = (name) => {
+          const pair = mcpMessages[name];
+          if (!pair) return;
+          for (const button of document.querySelectorAll("[data-mcp-tab]")) {
+            button.setAttribute(
+              "aria-pressed",
+              String(button.dataset.mcpTab === name),
+            );
+          }
+          const request = JSON.parse(pair.request);
+          const response = JSON.parse(pair.response);
+          const shown =
+            "→ 请求\n" +
+            JSON.stringify(request, null, 2) +
+            "\n\n← 响应\n" +
+            JSON.stringify(response, null, 2);
+          $("mcp-msg").textContent = shown;
+          const result = response && response.result;
+          const structured = result && result.structuredContent;
+          if (structured) {
+            $("mcp-meta").textContent =
+              "executable " +
+              structured.executable +
+              " · decision " +
+              structured.decision +
+              " · exactness " +
+              structured.exactness +
+              (structured.error ? " · " + structured.error.code : "") +
+              " · 文本通道与 structuredContent 是同一个对象";
+          } else {
+            $("mcp-meta").textContent =
+              "协议 " +
+              (response && response.result
+                ? response.result.protocolVersion
+                : "—") +
+              " · 协议版本 2025-06-18（同时接受 2024-11-05）";
+          }
+        };
+        for (const button of document.querySelectorAll("[data-mcp-tab]")) {
+          button.addEventListener("click", () => mcpTab(button.dataset.mcpTab));
+        }
+        mcpTab("refused");
 
         // ---- shared selects ------------------------------------------------
         function fillPolicies(select, value) {
