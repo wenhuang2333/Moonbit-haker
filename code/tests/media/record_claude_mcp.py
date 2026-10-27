@@ -4,8 +4,9 @@
 This script is the only producer of the judge-facing assets:
 
     static/demo/mcp-claude-session.txt   verbatim transcript of the capture
-    static/demo/mcp-claude-demo.gif      animation painted from the capture
-    static/demo/mcp-claude-poster.png    poster painted from the capture
+    static/demo/mcp-claude-session.txt   the transcript itself (committed)
+    static/demo/mcp-claude-demo.gif      animation painted from the capture (not committed)
+    static/demo/mcp-claude-poster.png    poster painted from the capture (not committed)
 
 Nothing is hand-written.  Every tool input, every tool response and every
 sentence of the final summary is read out of the `claude --output-format
