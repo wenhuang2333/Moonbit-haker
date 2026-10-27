@@ -18,7 +18,7 @@ fn can_extend_string(u : UInt16) -> Bool {
 
 ///|
 /// Dispatch on the document phase.
-fn Engine::step_idle(self : Engine, u : UInt16) -> Unit raise MendError {
+fn Engine::step_idle(self : Engine, u : UInt16) -> Unit raise InterJSONError {
   match self.phase {
     PPrelude => self.step_prelude(u)
     PBody => self.step_body(u)
@@ -31,7 +31,7 @@ fn Engine::step_idle(self : Engine, u : UInt16) -> Unit raise MendError {
 ///|
 /// Prelude: skip whitespace and BOM, optionally strip one code fence and
 /// optionally skip prose before the first `{` or `[` (D08 8.4).
-fn Engine::step_prelude(self : Engine, u : UInt16) -> Unit raise MendError {
+fn Engine::step_prelude(self : Engine, u : UInt16) -> Unit raise InterJSONError {
   if is_ws(u) {
     return
   }
@@ -67,7 +67,7 @@ fn Engine::step_prelude(self : Engine, u : UInt16) -> Unit raise MendError {
 
 ///|
 /// Trailing-junk policy after the first root value (D08 8.5).
-fn Engine::epilogue_drop(self : Engine) -> Unit raise MendError {
+fn Engine::epilogue_drop(self : Engine) -> Unit raise InterJSONError {
   match self.opts.multi_root {
     KeepFirst =>
       if !self.epilogue_reported {
@@ -87,7 +87,10 @@ fn Engine::epilogue_drop(self : Engine) -> Unit raise MendError {
 ///|
 /// Epilogue: whitespace, code fence, extra closers, otherwise the multi-root
 /// policy decides.
-fn Engine::step_epilogue(self : Engine, u : UInt16) -> Unit raise MendError {
+fn Engine::step_epilogue(
+  self : Engine,
+  u : UInt16,
+) -> Unit raise InterJSONError {
   if is_ws(u) {
     return
   }
@@ -128,7 +131,10 @@ fn Engine::step_epilogue(self : Engine, u : UInt16) -> Unit raise MendError {
 
 ///|
 /// Start whatever value `u` begins.
-fn Engine::start_value_char(self : Engine, u : UInt16) -> Unit raise MendError {
+fn Engine::start_value_char(
+  self : Engine,
+  u : UInt16,
+) -> Unit raise InterJSONError {
   let n = u.to_int()
   if n == 0x7B {
     self.enter(FObj)
@@ -143,7 +149,10 @@ fn Engine::start_value_char(self : Engine, u : UInt16) -> Unit raise MendError {
 
 ///|
 /// Start whatever key `u` begins.
-fn Engine::start_key_char(self : Engine, u : UInt16) -> Unit raise MendError {
+fn Engine::start_key_char(
+  self : Engine,
+  u : UInt16,
+) -> Unit raise InterJSONError {
   if is_quote_open(u) {
     self.start_string(u, true)
   } else {
@@ -155,7 +164,7 @@ fn Engine::start_key_char(self : Engine, u : UInt16) -> Unit raise MendError {
 /// Push a container frame, enforcing `max_depth` (E020). When delta tracking is
 /// on, the new container is announced at the path of the slot it occupies
 /// (FR-18).
-fn Engine::enter(self : Engine, kind : FrameKind) -> Unit raise MendError {
+fn Engine::enter(self : Engine, kind : FrameKind) -> Unit raise InterJSONError {
   let p = self.position()
   if self.stack.length() >= self.opts.max_depth {
     raise DepthLimit(self.opts.max_depth, p.offset)
@@ -175,7 +184,7 @@ fn Engine::enter(self : Engine, kind : FrameKind) -> Unit raise MendError {
 
 ///|
 /// Body dispatch: root, array and object positions.
-fn Engine::step_body(self : Engine, u : UInt16) -> Unit raise MendError {
+fn Engine::step_body(self : Engine, u : UInt16) -> Unit raise InterJSONError {
   if is_ws(u) {
     return
   }
@@ -227,7 +236,7 @@ fn Engine::step_in_array(
   idx : Int32,
   ctx : Ctx,
   u : UInt16,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   let n = u.to_int()
   if n == 0x2F {
     self.tok = TSlash
@@ -304,7 +313,7 @@ fn Engine::step_in_object(
   idx : Int32,
   ctx : Ctx,
   u : UInt16,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   let n = u.to_int()
   if n == 0x2F {
     self.tok = TSlash
@@ -405,7 +414,7 @@ fn Engine::fill_null_and_replay(
   self : Engine,
   idx : Int32,
   u : UInt16,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   self.report(FillNull, self.position())
   match self.stack[idx].last_key {
     Some(k) => self.assign(idx, k, Json::null())
@@ -422,7 +431,7 @@ fn Engine::fill_null_and_replay(
 fn Engine::close_container(
   self : Engine,
   mismatch : Bool,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   if mismatch {
     self.report(MismatchedCloser, self.position())
   }
@@ -519,7 +528,7 @@ fn Engine::concat_last(self : Engine, extra : String) -> Bool {
 /// Attach a completed value to the enclosing container, or finish the
 /// document when there is none. A pending `+` first tries to merge a string
 /// into the value delivered just before it (BR-21 / R019).
-fn Engine::value_done(self : Engine, v : Json) -> Unit raise MendError {
+fn Engine::value_done(self : Engine, v : Json) -> Unit raise InterJSONError {
   if self.concat_pending {
     self.concat_pending = false
     match v {
@@ -590,7 +599,7 @@ fn Engine::assign(
   idx : Int32,
   k : String,
   v : Json,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   let track = self.opts.collect_deltas
   if self.stack[idx].map.contains(k) {
     // Merging two duplicates only loses information when the two values differ.
@@ -653,7 +662,7 @@ fn Engine::start_string(
   self : Engine,
   u : UInt16,
   is_key : Bool,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   let p = self.position()
   if u.to_int() != 0x22 {
     self.report(NormalizeQuote, p)
@@ -674,7 +683,7 @@ fn Engine::start_string(
 
 ///|
 /// Append one code unit of string content, enforcing `max_token_len`.
-fn Engine::push_cu(self : Engine, u : UInt16) -> Unit raise MendError {
+fn Engine::push_cu(self : Engine, u : UInt16) -> Unit raise InterJSONError {
   if is_high_surrogate(u) {
     if self.pending_high != 0 {
       self.flush_lone_surrogate()
@@ -706,7 +715,7 @@ fn Engine::push_escaped_cu(
   self : Engine,
   v : Int32,
   p : Position,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   if v >= 0xD800 && v <= 0xDBFF {
     if self.pending_high != 0 {
       self.flush_lone_surrogate()
@@ -731,7 +740,10 @@ fn Engine::push_escaped_cu(
 
 ///|
 /// Append a scalar value.
-fn Engine::push_code_point(self : Engine, cp : Int32) -> Unit raise MendError {
+fn Engine::push_code_point(
+  self : Engine,
+  cp : Int32,
+) -> Unit raise InterJSONError {
   match cp.to_char() {
     Some(c) => self.push_char(c)
     None => ()
@@ -740,7 +752,10 @@ fn Engine::push_code_point(self : Engine, cp : Int32) -> Unit raise MendError {
 
 ///|
 /// Append an ASCII code unit.
-fn Engine::push_char_code(self : Engine, code : Int32) -> Unit raise MendError {
+fn Engine::push_char_code(
+  self : Engine,
+  code : Int32,
+) -> Unit raise InterJSONError {
   match code.to_char() {
     Some(c) => self.push_char(c)
     None => ()
@@ -749,7 +764,7 @@ fn Engine::push_char_code(self : Engine, code : Int32) -> Unit raise MendError {
 
 ///|
 /// Append plain (non-surrogate) content, flushing a pending half pair first.
-fn Engine::push_plain(self : Engine, code : Int32) -> Unit raise MendError {
+fn Engine::push_plain(self : Engine, code : Int32) -> Unit raise InterJSONError {
   if self.pending_high != 0 {
     self.flush_lone_surrogate()
   }
@@ -758,7 +773,7 @@ fn Engine::push_plain(self : Engine, code : Int32) -> Unit raise MendError {
 
 ///|
 /// Append a character and check the token length limit (E022).
-fn Engine::push_char(self : Engine, c : Char) -> Unit raise MendError {
+fn Engine::push_char(self : Engine, c : Char) -> Unit raise InterJSONError {
   self.parts.push(c.to_string())
   self.parts_len = self.parts_len + c.utf16_len()
   if self.parts_len > self.opts.max_token_len {
@@ -768,7 +783,7 @@ fn Engine::push_char(self : Engine, c : Char) -> Unit raise MendError {
 
 ///|
 /// A half surrogate pair never completed: replace it with U+FFFD (R014).
-fn Engine::flush_lone_surrogate(self : Engine) -> Unit raise MendError {
+fn Engine::flush_lone_surrogate(self : Engine) -> Unit raise InterJSONError {
   let p = self.pending_high_pos
   self.pending_high = 0
   self.report(FixEscape, p)
@@ -782,7 +797,7 @@ fn Engine::step_str(
   u : UInt16,
   kind : StrKind,
   is_key : Bool,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   if self.esc == 1 {
     self.esc = 0
     let n = u.to_int()
@@ -876,7 +891,7 @@ fn Engine::step_str_pending(
   u : UInt16,
   kind : StrKind,
   is_key : Bool,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   if is_ws(u) {
     match u.to_char() {
       Some(c) => self.pending_ws.write_char(c)
@@ -909,7 +924,10 @@ fn Engine::step_str_pending(
 
 ///|
 /// Complete the current string token, delivering it as a key or a value.
-fn Engine::finish_string(self : Engine, is_key : Bool) -> Unit raise MendError {
+fn Engine::finish_string(
+  self : Engine,
+  is_key : Bool,
+) -> Unit raise InterJSONError {
   if self.pending_high != 0 {
     self.flush_lone_surrogate()
   }
@@ -939,7 +957,7 @@ fn Engine::start_bare(
   self : Engine,
   u : UInt16,
   kind : BareKind,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   self.tok = TBare(kind)
   self.tok_start = self.position()
   self.bare.reset()
@@ -949,7 +967,7 @@ fn Engine::start_bare(
 
 ///|
 /// Append a code unit to the bare token, enforcing `max_token_len`.
-fn Engine::push_bare_cu(self : Engine, u : UInt16) -> Unit raise MendError {
+fn Engine::push_bare_cu(self : Engine, u : UInt16) -> Unit raise InterJSONError {
   match u.to_char() {
     Some(c) => self.bare.write_char(c)
     None => ()
@@ -966,7 +984,7 @@ fn Engine::step_bare(
   self : Engine,
   u : UInt16,
   kind : BareKind,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   if is_ident_char(u) {
     self.push_bare_cu(u)
     return
@@ -981,7 +999,7 @@ fn Engine::step_bare(
 fn Engine::classify_bare(
   self : Engine,
   kind : BareKind,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   let text = self.bare.to_string()
   let start = self.tok_start
   self.bare.reset()
@@ -1048,7 +1066,7 @@ fn Engine::emit_literal(
   exact : Bool,
   cased : Bool,
   start : Position,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   if !exact {
     // `True`/`FALSE` are re-cased and lose nothing (`NormalizeLiteral`, Info);
     // `tru`/`nul` are completed and do invent a value, which stays a
@@ -1105,7 +1123,7 @@ fn Engine::emit_non_finite(
   self : Engine,
   text : String,
   start : Position,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   match self.opts.non_finite {
     AsNull => {
       self.report(ConvertLiteral, start)
@@ -1130,7 +1148,7 @@ fn Engine::emit_non_finite(
 fn Engine::emit_numberless(
   self : Engine,
   start : Position,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   if self.stack.length() == 0 {
     raise NoJsonFound(start.offset)
   }
@@ -1160,7 +1178,7 @@ fn Engine::emit_bare_word(
   text : String,
   start : Position,
   kind : BareKind,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   match kind {
     BareKey => {
       self.report(QuoteBareWord, start)
@@ -1186,7 +1204,7 @@ fn Engine::emit_bare_word(
 
 ///|
 /// `/` seen: decide between line comment, block comment and a dropped slash.
-fn Engine::step_slash(self : Engine, u : UInt16) -> Unit raise MendError {
+fn Engine::step_slash(self : Engine, u : UInt16) -> Unit raise InterJSONError {
   let n = u.to_int()
   if n == 0x2F {
     self.tok = TLineComment
@@ -1226,7 +1244,7 @@ fn Engine::step_fence(
   self : Engine,
   u : UInt16,
   count : Int32,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   if u.to_int() == 0x60 {
     if count + 1 >= 3 {
       self.report(StripFence, self.fence_start)
@@ -1257,7 +1275,7 @@ fn Engine::finish_fence_line(self : Engine) -> Unit {
 
 ///|
 /// Flush the last unfinished token when the input ends (D08 8.11).
-fn Engine::finalize_token(self : Engine) -> Unit raise MendError {
+fn Engine::finalize_token(self : Engine) -> Unit raise InterJSONError {
   match self.tok {
     TIdle => ()
     TStr(_kind, is_key) => {
@@ -1290,7 +1308,7 @@ fn Engine::finalize_token(self : Engine) -> Unit raise MendError {
 
 ///|
 /// Close one still-open container at end of input (D08 8.11).
-fn Engine::unwind_top(self : Engine) -> Bool raise MendError {
+fn Engine::unwind_top(self : Engine) -> Bool raise InterJSONError {
   let idx = self.stack.length() - 1
   let f = self.stack[idx]
   if f.synthetic {
@@ -1360,7 +1378,7 @@ fn Engine::unwind_top(self : Engine) -> Bool raise MendError {
 /// resource limit) are re-raised rather than hidden behind the original
 /// `E002`, so the caller sees the same verdict the unskipped path would give.
 /// `None` means "nothing recoverable, refuse as before".
-fn Engine::retry_prelude(self : Engine) -> FinalResult? raise MendError {
+fn Engine::retry_prelude(self : Engine) -> FinalResult? raise InterJSONError {
   if !self.opts.skip_prose ||
     self.prose_overflow ||
     !self.saw_content ||
@@ -1395,7 +1413,7 @@ fn Engine::retry_prelude(self : Engine) -> FinalResult? raise MendError {
 }
 
 ///|
-fn Engine::finish_engine(self : Engine) -> FinalResult raise MendError {
+fn Engine::finish_engine(self : Engine) -> FinalResult raise InterJSONError {
   self.finishing = true
   match self.phase {
     PFinished | PFailed =>

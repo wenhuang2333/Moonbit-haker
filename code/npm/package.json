@@ -1,7 +1,7 @@
 {
-  "name": "jsonmend-moonbit",
-  "version": "1.3.0",
-  "description": "Streaming JSON repair and an execution gate for LLM tool calls, powered by the MoonBit engine.",
+  "name": "interjson-moonbit",
+  "version": "1.4.0",
+  "description": "The local execution gate for LLM output, as a Model Context Protocol server and a library, powered by the MoonBit engine.",
   "license": "Apache-2.0",
   "type": "commonjs",
   "main": "./index.cjs",
@@ -18,7 +18,8 @@
     "index.cjs",
     "index.mjs",
     "index.d.ts",
-    "vendor/jsonmend.js",
+    "mcp.cjs",
+    "vendor/interjson.js",
     "README.md"
   ],
   "scripts": {
@@ -34,6 +35,11 @@
     "streaming",
     "llm",
     "tool-call",
+    "mcp",
+    "execution-gate",
     "moonbit"
-  ]
+  ],
+  "bin": {
+    "interjson-mcp": "./mcp.cjs"
+  }
 }

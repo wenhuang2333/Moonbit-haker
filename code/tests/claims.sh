@@ -113,11 +113,11 @@ for t in wasm wasm-gc js native; do
 done
 
 # --- CLI assertions ----------------------------------------------------------
-if [ -x "$CODE/_build/native/release/build/cmd/jsonmend/jsonmend.exe" ]; then
-  BIN="$CODE/_build/native/release/build/cmd/jsonmend/jsonmend.exe"
+if [ -x "$CODE/_build/native/release/build/cmd/interjson/interjson.exe" ]; then
+  BIN="$CODE/_build/native/release/build/cmd/interjson/interjson.exe"
 else
-  moon build cmd/jsonmend --target native --release >/dev/null 2>&1
-  BIN="$CODE/_build/native/release/build/cmd/jsonmend/jsonmend.exe"
+  moon build cmd/interjson --target native --release >/dev/null 2>&1
+  BIN="$CODE/_build/native/release/build/cmd/interjson/interjson.exe"
 fi
 cli_out="$(bash tests/cli_smoke.sh 2>&1 | tail -3)"
 # `skipped` counts the doc-version checks whose document is deliberately not
@@ -198,10 +198,10 @@ if [ -n "$WASM_B" ]; then
   require_in "$WASM_KIB KiB" "$ROOT/README.md" "$CODE/docs/ONEPAGE.md" "$CODE/docs/PITCH.md"
 fi
 
-BUNDLE="$ROOT/static/demo/jsonmend.js"
+BUNDLE="$ROOT/static/demo/interjson.js"
 if [ -f "$BUNDLE" ]; then
   BUNDLE_KIB="$(size_kib "$(wc -c <"$BUNDLE" | tr -d ' ')")"
-  derive "bundle_kib" "$BUNDLE_KIB" "wc -c < static/demo/jsonmend.js"
+  derive "bundle_kib" "$BUNDLE_KIB" "wc -c < static/demo/interjson.js"
   require_in "$BUNDLE_KIB KiB" "$CODE/docs/ONEPAGE.md"
 fi
 

@@ -1,18 +1,21 @@
-# jsonmend-moonbit (npm)
+# interjson-moonbit (npm)
 
-The MoonBit JSON engine, packaged for Node and the browser: streaming repair,
-partial parsing, and the **execution gate** for LLM tool calls.
+InterJSON is the **execution gate for LLM output**: it decides whether a model's
+JSON may be executed, and when it may not, returns the sentence to send back to
+the model. This package is the MoonBit engine compiled to JavaScript — streaming
+repair, partial parsing, and the gate for in-process callers — plus a launcher
+that starts the local MCP server from the native binary.
 
 ```bash
-npm install ./code/npm   # from the repository root
+npm install ./code/npm      # from the repository root
 ```
 
-> The npm name `jsonmend` is already taken by an unrelated package. This
-> package is `jsonmend-moonbit`; it is installed from the repository until a
-> registry publication under that name.
+> The package is distributed as `interjson-moonbit` (the suffix identifies the
+> MoonBit engine); the import name is `interjson`. Install from the repository
+> until the registry publication.
 
 ```js
-import { analyze, repair } from "jsonmend-moonbit";
+import { analyze, repair } from "interjson-moonbit";
 
 // The gate: decide before executing tool arguments.
 const plan = analyze(modelOutput, {
@@ -20,19 +23,64 @@ const plan = analyze(modelOutput, {
   schemaJson: tool.inputSchema, // the declaration you already have
 });
 if (!plan.executable) {
-  throw new Error(plan.retry); // or re-emit `plan.retry` to the model
+  throw new Error(plan.retry.prompt); // or re-emit `plan.retry.prompt` to the model
 }
 
 // The convenience: repair and return text.
 const text = repair(modelOutput, { profile: "execution" });
 ```
 
+## MCP server
+
+The package declares a bin named **`interjson-mcp`**, which runs `mcp.cjs`. It
+resolves the native engine and then spawns `<binary> mcp` with inherited stdio,
+so the JSON-RPC channel stays clean (no Node process in the middle, nothing on
+stdout but protocol messages). Resolution order:
+
+1. `INTERJSON_BIN` — an absolute path to the binary;
+2. `interjson` on `PATH`;
+3. the development build inside this repository.
+
+```bash
+npm install -g ./code/npm
+interjson --version              # interjson 1.4.0: the native engine must resolve first
+interjson-mcp --version          # passed through to `<binary> mcp --version`
+interjson-mcp --print-config=claude
+```
+
+`npm install` installs the JS engine and the launcher, not the native binary.
+If the binary is missing, `interjson-mcp` exits `127` with the install options
+on stderr — the first command above must succeed before the others can.
+
+**The npm package is the JS engine, not the MCP server.** The server itself is
+the native binary; the launcher only finds it and hands it this process's
+stdin/stdout. MCP therefore requires the native engine: build it with
+`moon build cmd/interjson --target native --release`, or point `INTERJSON_BIN`
+at a binary. With no binary the launcher exits `127` and prints those options
+on stderr rather than starting a half-working server.
+
+Configuration for Claude Code, Cursor, Cline, Windsurf, VS Code, Codex CLI and
+Zed, with the privacy model and troubleshooting, is in
+[`docs/MCP.md`](../docs/MCP.md). The shortest form, with the binary on `PATH`:
+
+```json
+{
+  "mcpServers": {
+    "interjson": { "command": "interjson-mcp" }
+  }
+}
+```
+
+The server exposes four read-only tools: `interjson_gate` (the gate; `executable`,
+`decision`, `exactness`, `value`, `retry.prompt`), `interjson_repair`,
+`interjson_validate`, and `interjson_readiness`.
+
 ## Exports
 
 | Export | Returns | Use |
 | --- | --- | --- |
 | `repair(input, options?)` | repaired text | a document you will parse yourself |
-| `repairResult(input, options?)` | `{text, exactness, ambiguous, repairs, decision, executable}` | text plus the decision |
+| `repairResult(input, options?)` | `{text, exactness, ambiguous, repairs, decision, executable, error, retry}` | text plus the decision |
 | `analyze(input, options?)` | the full `RepairPlan` | **the gate**; never throws on malformed JSON |
 | `report(input)` | `R005 3:14 message` lines, or `-` | diagnostics |
 | `snapshot(input, upto)` | `value \| state \| path` | partial parse of a prefix |
@@ -57,14 +105,14 @@ dropped.
 draws: `consumed`, `total`, `completeness`, `snapshot`, `open_path`, `members`,
 and (with a schema) `syntax_ready`, `schema_ready`, `settled_ready`,
 `execution_ready`. It is stateless, so a caller can re-render on every frame;
-for a token-by-token feed use the CLI protocol (`jsonmend serve`) or
+for a token-by-token feed use the CLI protocol (`interjson serve`) or
 the MoonBit `PartialParser`.
 
 ## Scope
 
-This package wraps the same bundle as `static/demo/jsonmend.js`; it does not
-reimplement the engine. The version is the engine version (`1.3.0`). The
-MoonBit package on mooncakes is `0.8.0` because the registry currently accepts
+This package wraps the same bundle as `static/demo/interjson.js`; it does not
+reimplement the engine. The version is the engine version (`1.4.0`). The
+MoonBit package on mooncakes is `0.11.0` because the registry currently accepts
 only `0.x.y`; the bytes are the same.
 
 License: Apache-2.0.

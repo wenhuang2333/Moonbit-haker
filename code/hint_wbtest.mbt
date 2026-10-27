@@ -93,8 +93,8 @@ test "the hint window is bounded and independent of the input length" {
 }
 
 ///|
-test "MendError::retry_hint is the same hint" {
-  let e : MendError = AmbiguousRepair(
+test "InterJSONError::retry_hint is the same hint" {
+  let e : InterJSONError = AmbiguousRepair(
     InsertComma,
     { offset: 6, line: 1, column: 7, },
     AdjacentStrings,
@@ -112,7 +112,7 @@ test "MendError::retry_hint is the same hint" {
 
 ///|
 /// `retry_hint` without an input, as a string.
-fn hint_line(e : MendError) -> String {
+fn hint_line(e : InterJSONError) -> String {
   match e.retry_hint() {
     Some(x) => x.to_string()
     None => ""

@@ -1,7 +1,7 @@
 // The self-healing loop: a model emits tool arguments, the gate refuses, the
 // refusal is handed back as a prompt, and the loop tries again.
 //
-//   LLM ─▶ JSONMend ─▶ Reject ─▶ Hint ─▶ LLM ─▶ JSONMend ─▶ Execute
+//   LLM ─▶ InterJSON ─▶ Reject ─▶ Hint ─▶ LLM ─▶ InterJSON ─▶ Execute
 //
 // The loop is the product: `analyze` never raises, so the same call site
 // decides whether to execute or to retry, and the retry text comes from the
@@ -17,7 +17,7 @@
 /// is closed (FR-34).
 struct Tool {
   name : String
-  schema : @mend.Schema
+  schema : @interjson.Schema
 }
 
 ///|
@@ -49,9 +49,9 @@ fn heal(tool : Tool, script : Script, max_attempts : Int32) -> Outcome {
     println("attempt : #" + (i + 1).to_string())
     println("model   : " + answer)
     // The one call an integration makes. No `try`: a refusal is a plan.
-    let plan = @mend.analyze(
+    let plan = @interjson.analyze(
       answer,
-      options=@mend.Options::for_agent(),
+      options=@interjson.Options::for_agent(),
       schema=tool.schema,
     )
     println("gate    : " + plan.summary())
@@ -100,9 +100,9 @@ fn episode(
 
 ///|
 fn main {
-  let schema_of = fn(text : String) -> @mend.Schema {
-    @mend.Schema::parse(text) catch {
-      _ => @mend.Schema::Any
+  let schema_of = fn(text : String) -> @interjson.Schema {
+    @interjson.Schema::parse(text) catch {
+      _ => @interjson.Schema::Any
     }
   }
   let search : Tool = {

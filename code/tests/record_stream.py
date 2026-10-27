@@ -165,7 +165,7 @@ def record_anthropic(url: str, api_key: str, text: bool, auth_header: str,
                      scene: str = "tool_call", model: str = "") -> str:
     spec = LIVE_SCENES.get(scene, LIVE_SCENES["tool_call"])
     body = {
-        "model": model or os.environ.get("JSONMEND_ANTHROPIC_MODEL",
+        "model": model or os.environ.get("INTERJSON_ANTHROPIC_MODEL",
                                          "claude-sonnet-4-5"),
         "max_tokens": spec["max_tokens"],
         "stream": True,
@@ -270,7 +270,7 @@ def message_delta(reason: str) -> dict:
 def provenance_event(scenario: str, stamp: bool) -> dict:
     """The first event of the loopback stream: what produced these bytes."""
     line = {
-        "type": "jsonmend.provenance",
+        "type": "interjson.provenance",
         "transport": "loopback-sse",
         "scenario": scenario,
         "wire": "anthropic/v1/messages",
@@ -424,7 +424,7 @@ def _assemble(name: str, events: list, stamp: bool) -> str:
         ": provenance transport=loopback-sse scenario=%s wire=anthropic/v1/messages"
         " generator=code/tests/record_stream.py --loopback\n\n"
         % name,
-        sse("jsonmend.provenance", provenance_event(name, stamp)),
+        sse("interjson.provenance", provenance_event(name, stamp)),
     ]
     for event_name, payload in events:
         parts.append(sse(event_name, payload))
@@ -435,7 +435,7 @@ class _LoopbackHandler(http.server.BaseHTTPRequestHandler):
     """Serves one pre-built SSE body, written in fragments over a real socket."""
 
     protocol_version = "HTTP/1.0"
-    server_version = "jsonmend-loopback/1.0"
+    server_version = "interjson-loopback/1.0"
 
     def log_message(self, *args) -> None:  # keep the transcript quiet
         pass
@@ -756,7 +756,7 @@ def main() -> int:
                     help="put a timestamp in the provenance line (breaks "
                          "byte-for-byte regeneration)")
     ap.add_argument("--cli", default="",
-                    help="also run this jsonmend binary over the recorded bytes "
+                    help="also run this interjson binary over the recorded bytes "
                          "and save `<out>.adapter.jsonl`")
     ap.add_argument("--base-url", default="",
                     help="override the endpoint (Anthropic-compatible)")

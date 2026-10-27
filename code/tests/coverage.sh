@@ -86,12 +86,12 @@ if ! command -v moon >/dev/null 2>&1; then
   exit 2
 fi
 
-SUMMARY_FILE="$(mktemp "${TMPDIR:-/tmp}/jsonmend_coverage.XXXXXX")"
-ROWS_FILE="$(mktemp "${TMPDIR:-/tmp}/jsonmend_rows.XXXXXX")"
-LOG_FILE="$(mktemp "${TMPDIR:-/tmp}/jsonmend_test_log.XXXXXX")"
-CUR_FILE="$(mktemp "${TMPDIR:-/tmp}/jsonmend_uncovered.XXXXXX")"
-NEW_FILE="$(mktemp "${TMPDIR:-/tmp}/jsonmend_exc_new.XXXXXX")"
-OLD_FILE="$(mktemp "${TMPDIR:-/tmp}/jsonmend_exc_old.XXXXXX")"
+SUMMARY_FILE="$(mktemp "${TMPDIR:-/tmp}/interjson_coverage.XXXXXX")"
+ROWS_FILE="$(mktemp "${TMPDIR:-/tmp}/interjson_rows.XXXXXX")"
+LOG_FILE="$(mktemp "${TMPDIR:-/tmp}/interjson_test_log.XXXXXX")"
+CUR_FILE="$(mktemp "${TMPDIR:-/tmp}/interjson_uncovered.XXXXXX")"
+NEW_FILE="$(mktemp "${TMPDIR:-/tmp}/interjson_exc_new.XXXXXX")"
+OLD_FILE="$(mktemp "${TMPDIR:-/tmp}/interjson_exc_old.XXXXXX")"
 trap 'rm -f "$SUMMARY_FILE" "$ROWS_FILE" "$LOG_FILE" "$CUR_FILE" "$NEW_FILE" "$OLD_FILE"' EXIT
 
 echo "coverage.sh: moon coverage clean"

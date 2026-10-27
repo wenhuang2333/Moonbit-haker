@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Ground-truth evaluation harness for JSONMend (I-4).
+"""Ground-truth evaluation harness for InterJSON (I-4).
 
 Runs the pre-registered corpus (`corpus.py`, registration in
-`code/docs/EVAL_REGISTRATION.md`) through `jsonmend --batch` and writes
+`code/docs/EVAL_REGISTRATION.md`) through `interjson --batch` and writes
 `code/docs/EVAL.md`.
 
-    python3 code/tests/eval/run_eval.py --cli <path to jsonmend>
+    python3 code/tests/eval/run_eval.py --cli <path to interjson>
 
 Exit status is 0 when every pre-registered acceptance criterion holds.
 """
@@ -268,7 +268,7 @@ def main() -> int:
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     lines = []
     w = lines.append
-    w("# JSONMend 真值评测报告（I-4）")
+    w("# InterJSON 真值评测报告（I-4）")
     w("")
     w("本文件由 `code/tests/eval/run_eval.py` 生成，请勿手工编辑。")
     w("")
@@ -376,7 +376,7 @@ def main() -> int:
     w("")
     w("见 [EVAL_REGISTRATION.md](EVAL_REGISTRATION.md) §9：本轮只覆盖合成语料的")
     w("单点变异，不覆盖真实模型分布、多处变异组合与 >1 MiB 文档；性能与内存见")
-    w("[BENCHMARK.md](BENCHMARK.md)。")
+    w("`docs/BENCHMARK.md`。")
     w("")
 
     with open(args.out, "w", encoding="utf-8") as fh:

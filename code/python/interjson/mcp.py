@@ -1,10 +1,10 @@
-"""Console entry point for an MCP client: `jsonmend-mcp`.
+"""Console entry point for an MCP client: `interjson-mcp`.
 
-The MCP server itself is implemented in the MoonBit binary (`jsonmend mcp`);
+The MCP server itself is implemented in the MoonBit binary (`interjson mcp`);
 this module only resolves the binary and replaces the process with it, so
 stdin/stdout remain a clean JSON-RPC channel with no Python in the middle.
 
-    {"mcpServers": {"jsonmend": {"command": "jsonmend-mcp"}}}
+    {"mcpServers": {"interjson": {"command": "interjson-mcp"}}}
 """
 
 from __future__ import annotations

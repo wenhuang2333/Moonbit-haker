@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "zhanshishan/jsonmend"
+package "zhanshishan/interjson"
 
 // Values
 pub fn advice_for(PlanOp) -> String
@@ -14,13 +14,13 @@ pub fn decide(Int32, Exactness, Bool) -> ExecutionDecision
 
 pub fn decide_error(String) -> ExecutionDecision
 
-pub fn decided_at_permille(String, Schema, chunk? : Int32, options? : Options) -> Int32 raise MendError
+pub fn decided_at_permille(String, Schema, chunk? : Int32, options? : Options) -> Int32 raise InterJSONError
 
-pub fn early_stop_saving(Array[String], step? : Int32) -> Int32 raise MendError
+pub fn early_stop_saving(Array[String], step? : Int32) -> Int32 raise InterJSONError
 
 pub fn exactness_of(Array[Repair]) -> Exactness
 
-pub fn field_readiness(String, step? : Int32, options? : Options) -> Array[FieldReady] raise MendError
+pub fn field_readiness(String, step? : Int32, options? : Options) -> Array[FieldReady] raise InterJSONError
 
 pub fn has_ambiguity(Array[Repair]) -> Bool
 
@@ -32,26 +32,26 @@ pub fn kind_of(Json) -> String
 
 pub fn lookup_path(Json, String) -> Json?
 
-pub fn parse(String, options? : Options) -> ParseResult raise MendError
+pub fn parse(String, options? : Options) -> ParseResult raise InterJSONError
 
 pub fn plan_action(RepairCode) -> PlanAction
 
-pub fn readiness_deciles(Array[String], step? : Int32) -> Array[Int32] raise MendError
+pub fn readiness_deciles(Array[String], step? : Int32) -> Array[Int32] raise InterJSONError
 
 pub fn readiness_events_json(Array[ReadinessEvent]) -> String
 
-pub fn readiness_median(Array[String], step? : Int32) -> Int32 raise MendError
+pub fn readiness_median(Array[String], step? : Int32) -> Int32 raise InterJSONError
 
-pub fn repair(String, options? : Options) -> RepairResult raise MendError
+pub fn repair(String, options? : Options) -> RepairResult raise InterJSONError
 
-pub fn semantic_readiness(String, Schema, step? : Int32, options? : Options) -> SemanticReadiness raise MendError
+pub fn semantic_readiness(String, Schema, step? : Int32, options? : Options) -> SemanticReadiness raise InterJSONError
 
 pub fn syntax_readiness_permille(String, step? : Int32) -> Int32
 
-pub fn watch_readiness(String, Schema, chunk? : Int32, options? : Options) -> Array[ReadinessEventAt] raise MendError
+pub fn watch_readiness(String, Schema, chunk? : Int32, options? : Options) -> Array[ReadinessEventAt] raise InterJSONError
 
 // Errors
-pub(all) suberror MendError {
+pub(all) suberror InterJSONError {
   EmptyInput
   NoJsonFound(Int32)
   StrictViolation(RepairCode, Position, String)
@@ -65,9 +65,9 @@ pub(all) suberror MendError {
   InvalidEvent(String)
   SchemaError(String)
 }
-pub fn MendError::code(Self) -> String
-pub fn MendError::retry_hint(Self, input? : String, radius? : Int32) -> RetryHint?
-pub fn MendError::to_string(Self) -> String
+pub fn InterJSONError::code(Self) -> String
+pub fn InterJSONError::retry_hint(Self, input? : String, radius? : Int32) -> RetryHint?
+pub fn InterJSONError::to_string(Self) -> String
 
 // Types and methods
 pub(all) enum Ambiguity {
@@ -261,7 +261,7 @@ pub fn Options::for_llm() -> Self
 pub fn Options::for_text() -> Self
 pub fn Options::lenient() -> Self
 pub fn Options::strict() -> Self
-pub fn Options::validate(Self) -> Unit raise MendError
+pub fn Options::validate(Self) -> Unit raise InterJSONError
 pub fn Options::with_policy(Self, SafetyPolicy) -> Self
 
 pub(all) struct ParseResult {
@@ -279,15 +279,15 @@ pub struct PartialParser {
 pub fn PartialParser::analyze(Self, input? : String, schema? : Schema) -> RepairPlan
 pub fn PartialParser::delta_path(Self, DeltaView) -> Array[PathSegment]
 pub fn PartialParser::delta_pointer(Self, DeltaView) -> String
-pub fn PartialParser::drain_deltas(Self) -> Array[Delta] raise MendError
-pub fn PartialParser::drain_views(Self) -> Array[DeltaView] raise MendError
-pub fn PartialParser::feed(Self, String) -> Unit raise MendError
-pub fn PartialParser::feed_bytes(Self, Bytes) -> Unit raise MendError
-pub fn PartialParser::feed_bytes_with(Self, Bytes, (Delta) -> Unit) -> Unit raise MendError
-pub fn PartialParser::feed_with(Self, String, (Delta) -> Unit) -> Unit raise MendError
-pub fn PartialParser::finish(Self) -> FinalResult raise MendError
-pub fn PartialParser::for_each_delta(Self, (DeltaView) -> Unit) -> Unit raise MendError
-pub fn PartialParser::new(options? : Options) -> Self raise MendError
+pub fn PartialParser::drain_deltas(Self) -> Array[Delta] raise InterJSONError
+pub fn PartialParser::drain_views(Self) -> Array[DeltaView] raise InterJSONError
+pub fn PartialParser::feed(Self, String) -> Unit raise InterJSONError
+pub fn PartialParser::feed_bytes(Self, Bytes) -> Unit raise InterJSONError
+pub fn PartialParser::feed_bytes_with(Self, Bytes, (Delta) -> Unit) -> Unit raise InterJSONError
+pub fn PartialParser::feed_with(Self, String, (Delta) -> Unit) -> Unit raise InterJSONError
+pub fn PartialParser::finish(Self) -> FinalResult raise InterJSONError
+pub fn PartialParser::for_each_delta(Self, (DeltaView) -> Unit) -> Unit raise InterJSONError
+pub fn PartialParser::new(options? : Options) -> Self raise InterJSONError
 pub fn PartialParser::prose_overflow(Self) -> Bool
 pub fn PartialParser::snapshot(Self) -> Snapshot
 pub fn PartialParser::snapshot_copy(Self) -> Snapshot
@@ -455,7 +455,7 @@ pub(all) struct RetryHint {
 }
 pub fn RetryHint::equal(Self, Self) -> Bool
 pub fn RetryHint::not_equal(Self, Self) -> Bool
-pub fn RetryHint::of_error(MendError, input? : String, radius? : Int32) -> Self?
+pub fn RetryHint::of_error(InterJSONError, input? : String, radius? : Int32) -> Self?
 pub fn RetryHint::to_prompt(Self) -> String
 pub fn RetryHint::to_string(Self) -> String
 pub impl Eq for RetryHint
@@ -509,9 +509,9 @@ pub fn Schema::expectation(Self) -> String
 pub fn Schema::field(Self, String) -> SchemaMember?
 pub fn Schema::member_keys(Self) -> Array[String]
 pub fn Schema::name(Self) -> String
-pub fn Schema::of_json_schema(Json) -> Self raise MendError
-pub fn Schema::parse(String) -> Self raise MendError
-pub fn Schema::parse_json_schema(String) -> Self raise MendError
+pub fn Schema::of_json_schema(Json) -> Self raise InterJSONError
+pub fn Schema::parse(String) -> Self raise InterJSONError
+pub fn Schema::parse_json_schema(String) -> Self raise InterJSONError
 pub fn Schema::required_paths(Self) -> Array[String]
 pub fn Schema::stringify(Self) -> String
 
@@ -567,9 +567,9 @@ pub fn SemanticWatcher::concluded(Self) -> Bool
 pub fn SemanticWatcher::conflict(Self) -> Bool
 pub fn SemanticWatcher::drain_events(Self) -> Array[ReadinessEvent]
 pub fn SemanticWatcher::drain_events_at(Self) -> Array[(ReadinessEvent, Int32)]
-pub fn SemanticWatcher::feed(Self, String) -> Unit raise MendError
-pub fn SemanticWatcher::finish(Self) -> FinalResult raise MendError
-pub fn SemanticWatcher::new(Schema, options? : Options) -> Self raise MendError
+pub fn SemanticWatcher::feed(Self, String) -> Unit raise InterJSONError
+pub fn SemanticWatcher::finish(Self) -> FinalResult raise InterJSONError
+pub fn SemanticWatcher::new(Schema, options? : Options) -> Self raise InterJSONError
 pub fn SemanticWatcher::ready_count(Self) -> Int32
 pub fn SemanticWatcher::settled_at(Self) -> Int32
 pub fn SemanticWatcher::syntax_at(Self) -> Int32

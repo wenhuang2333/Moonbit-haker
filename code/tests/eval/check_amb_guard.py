@@ -13,7 +13,7 @@ fail, the comparison is vacuous (for example, because the rows are empty or the
 expectation is not read) and the guard fails too. Exit status 0 only when both
 hold.
 
-    python3 code/tests/eval/check_amb_guard.py [--cli <path to jsonmend>]
+    python3 code/tests/eval/check_amb_guard.py [--cli <path to interjson>]
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ sys.path.insert(0, HERE)
 import run_ambiguity as ra  # noqa: E402
 
 DEFAULT_CLI = os.path.join(
-    ROOT, "_build", "native", "release", "build", "cmd", "jsonmend", "jsonmend.exe"
+    ROOT, "_build", "native", "release", "build", "cmd", "interjson", "interjson.exe"
 )
 
 
@@ -39,8 +39,8 @@ def main() -> int:
     ap.add_argument("--cli", default=DEFAULT_CLI)
     args = ap.parse_args()
 
-    default_rows = ra.run_jsonmend(args.cli, ra.CASES)
-    gate_rows = ra.run_jsonmend(args.cli, ra.CASES, extra=["--for-execution"])
+    default_rows = ra.run_interjson(args.cli, ra.CASES)
+    gate_rows = ra.run_interjson(args.cli, ra.CASES, extra=["--for-execution"])
 
     real, _ = ra.compare(ra.CASES, default_rows, gate_rows)
     print("registered expectations: %d failure(s)" % len(real))

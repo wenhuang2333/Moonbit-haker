@@ -54,47 +54,47 @@ jobs:
       - name: LLM loopback transport recording and replay (must exit 0)
         working-directory: code
         run: |
-          moon build cmd/jsonmend --target native --release
+          moon build cmd/interjson --target native --release
           python3 tests/run_llm_loopback.py \
-            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+            --cli ./_build/native/release/build/cmd/interjson/interjson.exe
 
       - name: Command line smoke test
         working-directory: code
         run: |
-          moon build cmd/jsonmend --target native --release
+          moon build cmd/interjson --target native --release
           bash tests/cli_smoke.sh
 
       - name: Protocol and MCP conformance
         working-directory: code
         run: |
           python3 tests/conformance/run_conformance.py \
-            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+            --cli ./_build/native/release/build/cmd/interjson/interjson.exe
 
       - name: Python client and HTTP facade tests
         working-directory: code/python
         env:
-          JSONMEND_BIN: ${{ github.workspace }}/code/_build/native/release/build/cmd/jsonmend/jsonmend.exe
+          INTERJSON_BIN: ${{ github.workspace }}/code/_build/native/release/build/cmd/interjson/interjson.exe
         run: python3 -m unittest discover -s tests
 
       - name: Ground truth evaluation (must exit 0)
         working-directory: code
         run: |
           python3 tests/eval/run_eval.py \
-            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+            --cli ./_build/native/release/build/cmd/interjson/interjson.exe
 
       - name: Adversarial ambiguity suite and its guard (must exit 0)
         working-directory: code
         run: |
           python3 tests/eval/run_ambiguity.py \
-            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+            --cli ./_build/native/release/build/cmd/interjson/interjson.exe
           python3 tests/eval/check_amb_guard.py \
-            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+            --cli ./_build/native/release/build/cmd/interjson/interjson.exe
 
       - name: Chunked and adapter paths against the corpus (must exit 0)
         working-directory: code
         run: |
           python3 tests/eval/run_eval_paths.py \
-            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+            --cli ./_build/native/release/build/cmd/interjson/interjson.exe
 
       - uses: actions/upload-artifact@v4
         with:
@@ -113,7 +113,7 @@ jobs:
         working-directory: code
         run: |
           python3 tests/eval/run_readiness.py \
-            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe \
+            --cli ./_build/native/release/build/cmd/interjson/interjson.exe \
             --check
 
       - name: Library coverage (floors and the monotonic ratchet are enforced)
@@ -129,12 +129,12 @@ jobs:
       - name: Browser demo bundle is in sync
         run: |
           bash static/demo/build.sh
-          git diff --exit-code -- static/demo/jsonmend.js
+          git diff --exit-code -- static/demo/interjson.js
 
       - name: npm package bundle is in sync
         run: |
           bash code/npm/build.sh
-          git diff --exit-code -- code/npm/vendor/jsonmend.js
+          git diff --exit-code -- code/npm/vendor/interjson.js
 
       - name: npm package tests
         working-directory: code/npm
@@ -185,13 +185,13 @@ jobs:
       - name: Build the CLI
         working-directory: code
         shell: pwsh
-        run: moon build cmd/jsonmend --target native --release
+        run: moon build cmd/interjson --target native --release
 
       - name: CLI smoke
         working-directory: code
         shell: pwsh
         run: |
-          $J = ".\_build\native\release\build\cmd\jsonmend\jsonmend.exe"
+          $J = ".\_build\native\release\build\cmd\interjson\interjson.exe"
           '{"a":1,}' | & $J
           & $J --version
 
@@ -199,7 +199,7 @@ jobs:
         working-directory: code
         shell: pwsh
         run: |
-          python tests/conformance/run_conformance.py --cli .\_build\native\release\build\cmd\jsonmend\jsonmend.exe
+          python tests/conformance/run_conformance.py --cli .\_build\native\release\build\cmd\interjson\interjson.exe
 
   differential:
     name: Differential and benchmark
@@ -231,17 +231,17 @@ jobs:
       - name: Independent corpus (nst/JSONTestSuite, vendored)
         working-directory: code
         run: |
-          moon build cmd/jsonmend --target native --release
+          moon build cmd/interjson --target native --release
           python3 tests/eval/run_independent.py \
-            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe \
+            --cli ./_build/native/release/build/cmd/interjson/interjson.exe \
             --node-dir "$RUNNER_TEMP/node-oracle/node_modules"
 
       - name: Differential report (must exit 0)
         working-directory: code
         run: |
-          moon build cmd/jsonmend --target native --release
+          moon build cmd/interjson --target native --release
           python3 tests/diff/run_diff.py \
-            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe \
+            --cli ./_build/native/release/build/cmd/interjson/interjson.exe \
             --node-module-dir "$RUNNER_TEMP/node-oracle/node_modules" \
             --out "$RUNNER_TEMP/diff-report.md"
 

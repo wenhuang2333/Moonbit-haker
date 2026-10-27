@@ -3,7 +3,10 @@
 // suite, which mostly runs with default options.
 
 ///|
-fn opt_repair(input : String, opts : Options) -> RepairResult raise MendError {
+fn opt_repair(
+  input : String,
+  opts : Options,
+) -> RepairResult raise InterJSONError {
   repair(input, options=opts)
 }
 

@@ -9,13 +9,13 @@ control cases that do not.
 
 For each case the harness checks three things:
 
-  1. `jsonmend --batch` reports the ambiguity (or reports none, for a control);
-  2. `jsonmend --for-execution` refuses exactly the ambiguous cases (`E011`) and
+  1. `interjson --batch` reports the ambiguity (or reports none, for a control);
+  2. `interjson --for-execution` refuses exactly the ambiguous cases (`E011`) and
      the value-inventing ones (`E010`), and accepts the controls;
   3. the two reference libraries return a parseable value for the ambiguous
      cases anyway — with no channel to say that the reading was chosen.
 
-    python3 code/tests/eval/run_ambiguity.py --cli <path to jsonmend>
+    python3 code/tests/eval/run_ambiguity.py --cli <path to interjson>
 
 Exit status 0 when the pipeline agrees with the registered expectation.
 """
@@ -250,7 +250,7 @@ def fingerprint() -> str:
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
-def run_jsonmend(cli, cases, extra=()):
+def run_interjson(cli, cases, extra=()):
     payload = "".join(
         json.dumps({"id": c["id"], "input": c["input"]}, ensure_ascii=False) + "\n"
         for c in cases
@@ -275,7 +275,7 @@ def run_jsonmend(cli, cases, extra=()):
 def run_oracles(cli, cases, node_dir):
     """Ask the two reference libraries for their answer, if they are installed.
 
-    The comparison is against JSONMend's own verdicts; the reference columns are
+    The comparison is against InterJSON's own verdicts; the reference columns are
     informative. A missing `node_modules` or a missing `json_repair` must
     therefore degrade the report, not fail the suite — otherwise the suite could
     only be run on one machine, which would make it a worse piece of evidence.
@@ -379,8 +379,8 @@ def main() -> int:
     ap.add_argument("--out", default=OUT)
     args = ap.parse_args()
 
-    default_rows = run_jsonmend(args.cli, CASES)
-    gate_rows = run_jsonmend(args.cli, CASES, extra=["--for-execution"])
+    default_rows = run_interjson(args.cli, CASES)
+    gate_rows = run_interjson(args.cli, CASES, extra=["--for-execution"])
     jr, jp = run_oracles(args.cli, CASES, args.node_dir)
 
     failures, rows = compare(CASES, default_rows, gate_rows, jr, jp)
@@ -412,7 +412,7 @@ def main() -> int:
     lines.append("| --- | --- |")
     lines.append("| cases | %d (%d ambiguous, %d control) |" % (len(CASES), len(amb_cases), len(ctrl_cases)))
     lines.append("| frozen fingerprint | `%s` |" % fingerprint())
-    lines.append("| ambiguous cases flagged by JSONMend | %d / %d |" % (flagged, len(amb_cases)))
+    lines.append("| ambiguous cases flagged by InterJSON | %d / %d |" % (flagged, len(amb_cases)))
     lines.append("| ambiguous cases refused by `--for-execution` | %d / %d |" % (refused, len(amb_cases)))
     lines.append(
         "| ambiguous cases answered silently by `jsonrepair` | %s |"

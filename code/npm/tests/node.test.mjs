@@ -107,6 +107,32 @@ test("importing the package writes nothing to stdout", () => {
   assert.equal(r.stderr, "");
 });
 
+test("the MCP launcher exposes the local server without touching stdout", () => {
+  // The launcher is the npm install path for the MCP server. It must resolve a
+  // binary (the development build here), pass the arguments through, and keep
+  // the JSON-RPC channel clean. `--print-config` exits without reading stdin,
+  // which is exactly the case a wrapper that printed a banner would break.
+  const binary = resolve(
+    here,
+    "..",
+    "..",
+    "_build",
+    "native",
+    "release",
+    "build",
+    "cmd",
+    "interjson",
+    process.platform === "win32" ? "interjson.exe" : "interjson.exe",
+  );
+  const r = spawnSync(process.execPath, [resolve(here, "..", "mcp.cjs"), "--print-config=claude"], {
+    encoding: "utf8",
+    env: { ...process.env, INTERJSON_BIN: binary },
+  });
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout.trim(), "claude mcp add interjson -- interjson mcp");
+  assert.equal(r.stderr, "");
+});
+
 test("the package reports the engine version", () => {
   // Read from `code/moon.mod` rather than pinning a literal: the version is
   // hardcoded in the MoonBit sources, so a pinned literal goes red on every

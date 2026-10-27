@@ -2,7 +2,7 @@
 //
 // Two signal families are kept strictly apart (ADR-006):
 //   * repair records (R codes) are informational and travel with the result;
-//   * fatal errors (E codes) abort processing and are raised as `MendError`.
+//   * fatal errors (E codes) abort processing and are raised as `InterJSONError`.
 
 ///|
 /// Severity of a repair record.
@@ -407,7 +407,7 @@ pub fn has_ambiguity(repairs : Array[Repair]) -> Bool {
 ///|
 /// Fatal error. Every variant carries the data needed to diagnose the input
 /// without re-running the parser.
-pub(all) suberror MendError {
+pub(all) suberror InterJSONError {
   EmptyInput
   NoJsonFound(Int32)
   StrictViolation(RepairCode, Position, String)
@@ -422,7 +422,7 @@ pub(all) suberror MendError {
   InvalidUtf8(Int32)
   InvalidOption(String)
   /// A provider event payload could not be interpreted (E060). Raised by the
-  /// `jsonmend/llm` adapters; the payload is a fixed explanation.
+  /// `interjson/llm` adapters; the payload is a fixed explanation.
   InvalidEvent(String)
   /// A skeleton declaration could not be read, or a value does not satisfy it
   /// (E070, FR-34). The payload is a fixed explanation.
@@ -431,7 +431,7 @@ pub(all) suberror MendError {
 
 ///|
 /// Stable error code string, e.g. `E010`.
-pub fn MendError::code(self : MendError) -> String {
+pub fn InterJSONError::code(self : InterJSONError) -> String {
   match self {
     EmptyInput => "E001"
     NoJsonFound(_offset) => "E002"
@@ -450,7 +450,7 @@ pub fn MendError::code(self : MendError) -> String {
 
 ///|
 /// One-line diagnostic, e.g. `E020 DepthLimit: limit 3 exceeded at offset 3`.
-pub fn MendError::to_string(self : MendError) -> String {
+pub fn InterJSONError::to_string(self : InterJSONError) -> String {
   let sb = StringBuilder()
   match self {
     EmptyInput =>

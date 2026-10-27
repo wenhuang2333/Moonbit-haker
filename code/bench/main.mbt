@@ -166,7 +166,7 @@ fn make_long_string(target : Int32) -> String {
 ///|
 /// One-shot repair, errors swallowed.
 fn run_repair(input : String) -> Unit {
-  ignore(@mend.repair(input)) catch {
+  ignore(@interjson.repair(input)) catch {
     _ => ()
   }
 }
@@ -176,7 +176,7 @@ fn run_repair(input : String) -> Unit {
 /// snapshot after every chunk.
 fn run_stream(input : String, chunk : Int32, snap : Bool) -> Unit {
   try {
-    let parser = @mend.PartialParser::new()
+    let parser = @interjson.PartialParser::new()
     let n = input.length()
     let mut i = 0
     while i < n {
@@ -196,7 +196,7 @@ fn run_stream(input : String, chunk : Int32, snap : Bool) -> Unit {
 ///|
 /// One-shot `parse` (tree only, no text rendering).
 fn run_parse(input : String) -> Unit {
-  ignore(@mend.parse(input)) catch {
+  ignore(@interjson.parse(input)) catch {
     _ => ()
   }
 }
@@ -273,8 +273,8 @@ fn bench_streaming() -> Unit {
 fn run_deltas(input : String, chunk : Int32) -> Int32 {
   let n = input.length()
   try {
-    let parser = @mend.PartialParser::new(options={
-      ..@mend.Options::default(),
+    let parser = @interjson.PartialParser::new(options={
+      ..@interjson.Options::default(),
       collect_deltas: true,
     })
     let mut total = 0
@@ -299,8 +299,8 @@ fn run_deltas(input : String, chunk : Int32) -> Int32 {
 fn run_delta_views(input : String, chunk : Int32) -> Int32 {
   let n = input.length()
   try {
-    let parser = @mend.PartialParser::new(options={
-      ..@mend.Options::default(),
+    let parser = @interjson.PartialParser::new(options={
+      ..@interjson.Options::default(),
       collect_deltas: true,
     })
     let counter : Array[Int32] = [0]
@@ -371,7 +371,7 @@ fn bench_snap_repeat() -> Unit {
   let half = input.length() / 2
   let ms = median5(() => {
     try {
-      let parser = @mend.PartialParser::new()
+      let parser = @interjson.PartialParser::new()
       parser.feed(input[:half].to_owned())
       for _i = 0; _i < 1000; _i = _i + 1 {
         ignore(parser.snapshot())
@@ -414,9 +414,9 @@ fn make_call(target : Int32) -> String {
 /// everything, then repair" is 1.0.
 fn ttfv_one(input : String, chunk : Int32) -> (Double, Double, String) {
   let len = input.length()
-  let full = @mend.parse(input).value.stringify().length() catch { _ => 0 }
+  let full = @interjson.parse(input).value.stringify().length() catch { _ => 0 }
   let target = full * 95 / 100
-  let parser = @mend.PartialParser::new() catch {
+  let parser = @interjson.PartialParser::new() catch {
     _ => return (1.0, 1.0, "n/a")
   }
   let mut first = -1
@@ -522,7 +522,7 @@ fn bench_agent_scenario() -> Unit {
     let mut over_resolution = 0
     for _r = 0; _r < rounds; _r = _r + 1 {
       try {
-        let parser = @mend.PartialParser::new()
+        let parser = @interjson.PartialParser::new()
         let mut i = 0
         while i < len {
           let to = if i + chunk < len { i + chunk } else { len }
@@ -594,7 +594,11 @@ fn bench_readiness() -> Unit {
     docs.push(doc)
     bytes = bytes + doc.length()
   }
-  let ms = median5(() => ignore(@mend.readiness_median(docs)) catch { _ => () })
+  let ms = median5(() => {
+    ignore(@interjson.readiness_median(docs)) catch {
+      _ => ()
+    }
+  })
   println(
     "readiness\t" +
     docs.length().to_string() +
@@ -608,8 +612,8 @@ fn bench_readiness() -> Unit {
     round2(ms * 1000.0 * 1024.0 / bytes.to_double()) +
     " us/KiB",
   )
-  let deciles = @mend.readiness_deciles(docs) catch { _ => [] }
-  let saving = @mend.early_stop_saving(docs) catch { _ => 0 }
+  let deciles = @interjson.readiness_deciles(docs) catch { _ => [] }
+  let saving = @interjson.early_stop_saving(docs) catch { _ => 0 }
   println(
     "readiness\tdeciles " +
     deciles.map(fn(x) { x.to_string() }).join(" ") +
@@ -624,9 +628,9 @@ fn bench_readiness() -> Unit {
 /// the skeleton, fed in `chunk` code units with an event drain after every feed,
 /// then closed. The events are dropped on purpose: this measures the cost of
 /// *producing* readiness on the stream, not of noticing it.
-fn run_watcher(doc : String, schema : @mend.Schema, chunk : Int32) -> Unit {
+fn run_watcher(doc : String, schema : @interjson.Schema, chunk : Int32) -> Unit {
   try {
-    let watcher = @mend.SemanticWatcher::new(schema)
+    let watcher = @interjson.SemanticWatcher::new(schema)
     let n = doc.length()
     let mut i = 0
     while i < n {
@@ -673,14 +677,14 @@ fn bench_gate() -> Unit {
     docs.push(doc)
     bytes = bytes + doc.length()
   }
-  let schema = @mend.Schema::parse("{!name:string,!arguments:any}") catch {
+  let schema = @interjson.Schema::parse("{!name:string,!arguments:any}") catch {
     _ => return
   }
-  let agent = @mend.Options::for_agent()
+  let agent = @interjson.Options::for_agent()
   let plain = median5(() => {
     for doc in docs {
       try {
-        let _ = @mend.repair(doc)
+        let _ = @interjson.repair(doc)
       } catch {
         _ => ()
       }
@@ -688,23 +692,23 @@ fn bench_gate() -> Unit {
   })
   let plan = median5(() => {
     for doc in docs {
-      let _ = @mend.analyze(doc)
+      let _ = @interjson.analyze(doc)
     }
   })
   let gated = median5(() => {
     for doc in docs {
-      let _ = @mend.analyze(doc, options=agent)
+      let _ = @interjson.analyze(doc, options=agent)
     }
   })
   let checked = median5(() => {
     for doc in docs {
-      let _ = @mend.analyze(doc, options=agent, schema~)
+      let _ = @interjson.analyze(doc, options=agent, schema~)
     }
   })
   let ready = median5(() => {
     for doc in docs {
       try {
-        let _ = @mend.semantic_readiness(doc, schema)
+        let _ = @interjson.semantic_readiness(doc, schema)
       } catch {
         _ => ()
       }
@@ -712,7 +716,7 @@ fn bench_gate() -> Unit {
   })
   let curve = median5(() => {
     for doc in docs {
-      ignore(@mend.field_readiness(doc)) catch {
+      ignore(@interjson.field_readiness(doc)) catch {
         _ => ()
       }
     }
@@ -724,7 +728,7 @@ fn bench_gate() -> Unit {
   })
   let decided = median5(() => {
     for doc in docs {
-      ignore(@mend.decided_at_permille(doc, schema)) catch {
+      ignore(@interjson.decided_at_permille(doc, schema)) catch {
         _ => ()
       }
     }
@@ -781,8 +785,8 @@ fn ms_per_kib(ms : Double, bytes : Int32) -> Double {
 /// delta so the number can be compared with the 1 MB delta benchmark above.
 fn bench_delta_size() -> Unit {
   let input = make_call(4096)
-  let parser = @mend.PartialParser::new(options={
-    ..@mend.Options::default(),
+  let parser = @interjson.PartialParser::new(options={
+    ..@interjson.Options::default(),
     collect_deltas: true,
   }) catch {
     _ => return
@@ -853,7 +857,7 @@ fn make_escaped_str(lines : Int32) -> String {
 /// language wrapper use — with `chunk` bytes per call.
 fn run_stream_bytes(bs : Bytes, chunk : Int32) -> Unit {
   try {
-    let parser = @mend.PartialParser::new()
+    let parser = @interjson.PartialParser::new()
     let n = bs.length()
     let mut i = 0
     while i < n {

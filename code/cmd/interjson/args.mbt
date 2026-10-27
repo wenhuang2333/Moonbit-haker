@@ -20,7 +20,7 @@ struct CliOpts {
   mut check : Bool
   mut report : Bool
   mut indent : Int32
-  mut multi_root : @mend.MultiRoot
+  mut multi_root : @ij.MultiRoot
   mut skip_prose : Bool
   mut quote_lookahead : Bool
   mut max_repairs : Int32
@@ -29,7 +29,7 @@ struct CliOpts {
   mut max_depth : Int32
   mut max_token_len : Int32
   mut with_text : Bool
-  mut max_loss : @mend.Exactness
+  mut max_loss : @ij.Exactness
   mut reject_ambiguous : Bool
   mut retry_hint : Bool
   mut step : Int32
@@ -44,6 +44,8 @@ struct CliOpts {
   mut schema : String
   mut policy : String
   mut json_out : Bool
+  mut mcp_help : Bool
+  mut mcp_config : String
   mut action : CliAction
 }
 
@@ -51,7 +53,7 @@ struct CliOpts {
 /// Help text of the command.
 fn help_text() -> String {
   let lines : Array[String] = [
-    "jsonmend [选项] [文件]", "", "读取文件或标准输入，把修复后的 JSON 写到标准输出。",
+    "interjson [选项] [文件]", "", "读取文件或标准输入，把修复后的 JSON 写到标准输出。",
     "", "  --strict            严格模式：需要修复就报错（退出码 5）",
     "  --check             只检查，不输出；需要修复时退出码 1", "  --report            把修复记录写到标准错误",
     "  --indent N          输出缩进空格数，默认紧凑输出", "  --multi-root MODE   first、array 或 error，默认 first",
@@ -76,22 +78,24 @@ fn help_text() -> String {
     "  --json              与 explain 同用时打印机器可读的 JSON 计划，而不是文本块",
     "  --batch             逐行读取 {\"id\",\"input\"} JSON，逐行输出结果 JSON",
     "                      与 --chunk N 同用可把每条输入按 N 字节分块喂入",
-    "", "jsonmend explain [选项] [文件]", "  打印完整分析：修复了什么、为什么、风险多大、能不能执行；拒绝时给可直接回灌模型的提示。",
-    "  退出码与 jsonmend 相同（可执行 0，拒绝 5）。", "", "jsonmend repair [选项] [文件]",
+    "", "interjson explain [选项] [文件]", "  打印完整分析：修复了什么、为什么、风险多大、能不能执行；拒绝时给可直接回灌模型的提示。",
+    "  退出码与 interjson 相同（可执行 0，拒绝 5）。", "", "interjson repair [选项] [文件]",
     "  修复并输出：省略子命令时的默认动作。写出这个子命令名，只为让命令与文档一致。",
-    "", "jsonmend readiness [选项] [文件]", "  打印字段就绪曲线：每个顶级字段在输入消耗到多少时已定稿。",
+    "", "interjson readiness [选项] [文件]", "  打印字段就绪曲线：每个顶级字段在输入消耗到多少时已定稿。",
     "  --step N            每 N 个码元观察一次，默认按长度自适应",
-    "", "jsonmend llm [选项] [文件]", "  把模型的事件流喂给 provider 适配器，每个工具调用输出一行结果 JSON。",
+    "", "interjson llm [选项] [文件]", "  把模型的事件流喂给 provider 适配器，每个工具调用输出一行结果 JSON。",
     "  --provider NAME     anthropic（默认）或 openai", "  --sse               输入是 SSE 文本（默认按每行一个事件 JSON 读取）",
     "  --text              读取文本增量（delta.content / text_delta）而不是工具调用参数（配 --skip-prose 可跳过前言）",
     "  --follow            每次增量都输出一行，而不是只在结束时输出",
-    "", "jsonmend serve [选项]", "  长驻 stdio 协议（PROTOCOL.md）：每行一个请求 JSON，每行一个响应 JSON。",
+    "", "interjson serve [选项]", "  长驻 stdio 协议（PROTOCOL.md）：每行一个请求 JSON，每行一个响应 JSON。",
     "  方法：hello、repair、analyze、validate、readiness、watch.*、llm.*、shutdown。",
     "  进程级选项（--policy 等）作为默认值，请求里的 profile/schema 逐条覆盖。",
-    "", "jsonmend mcp [选项]", "  MCP stdio server（JSON-RPC 2.0）：jsonmend_repair、jsonmend_analyze、",
-    "  jsonmend_validate、jsonmend_readiness 四个工具，供 agent 直接调用。",
-    "  -h, --help          显示帮助", "  --version           显示版本", "",
-    "文件为 `-` 或缺省时读取标准输入。", "", "退出码：0 成功（可能有修复）；1 --check 发现需要修复；2 用法错误；",
+    "", "interjson mcp [选项]", "  MCP stdio server（JSON-RPC 2.0）：interjson_gate（执行门）、interjson_repair、",
+    "  interjson_validate、interjson_readiness 四个工具，供 agent 直接调用。",
+    "  --print-config[=CLIENT] 打印客户端配置后退出；CLIENT 为 claude、cursor、vscode、",
+    "                      codex、windsurf、zed 或 json（默认）", "  -h, --help          显示 mcp 帮助",
+    "  --version           显示版本", "", "文件为 `-` 或缺省时读取标准输入。",
+    "", "退出码：0 成功（可能有修复）；1 --check 发现需要修复；2 用法错误；",
     "        3 输入无效；4 资源限制；5 严格模式违规；70 内部错误。",
   ]
   let sb = StringBuilder()
@@ -149,35 +153,35 @@ fn parse_uint_up_to(s : String, limit : Int32) -> Int32? {
 
 ///|
 /// `--multi-root` payload.
-fn parse_multi_root(s : String) -> @mend.MultiRoot? {
+fn parse_multi_root(s : String) -> @ij.MultiRoot? {
   match s {
-    "first" => Some(@mend.KeepFirst)
-    "array" => Some(@mend.AsArray)
-    "error" => Some(@mend.AsError)
+    "first" => Some(@ij.KeepFirst)
+    "array" => Some(@ij.AsArray)
+    "error" => Some(@ij.AsError)
     _ => None
   }
 }
 
 ///|
 /// `--policy` payload (FR-30): the named safety profiles.
-fn parse_policy_name(s : String) -> @mend.SafetyPolicy? {
+fn parse_policy_name(s : String) -> @ij.SafetyPolicy? {
   match s {
-    "permissive" => Some(@mend.SafetyPolicy::permissive())
-    "interactive" => Some(@mend.SafetyPolicy::interactive())
-    "execution" => Some(@mend.SafetyPolicy::for_execution())
-    "agent" => Some(@mend.SafetyPolicy::for_agent())
-    "strict" => Some(@mend.SafetyPolicy::strict())
+    "permissive" => Some(@ij.SafetyPolicy::permissive())
+    "interactive" => Some(@ij.SafetyPolicy::interactive())
+    "execution" => Some(@ij.SafetyPolicy::for_execution())
+    "agent" => Some(@ij.SafetyPolicy::for_agent())
+    "strict" => Some(@ij.SafetyPolicy::strict())
     _ => None
   }
 }
 
 ///|
 /// `--max-loss` payload.
-fn parse_max_loss(s : String) -> @mend.Exactness? {
+fn parse_max_loss(s : String) -> @ij.Exactness? {
   match s {
-    "exact" => Some(@mend.Exact)
-    "cosmetic" => Some(@mend.Cosmetic)
-    "lossy" => Some(@mend.Lossy)
+    "exact" => Some(@ij.Exact)
+    "cosmetic" => Some(@ij.Cosmetic)
+    "lossy" => Some(@ij.Lossy)
     _ => None
   }
 }
@@ -215,13 +219,13 @@ fn limit_of(value : String, limit : Int32) -> Int32? {
 /// Parse `args` (including argv[0]). The second element is a usage error, or
 /// the empty string.
 fn parse_args(args : Array[String]) -> (CliOpts, String) {
-  let d = @mend.Options::default()
+  let d = @ij.Options::default()
   let o : CliOpts = {
     strict: false,
     check: false,
     report: false,
     indent: 0,
-    multi_root: @mend.KeepFirst,
+    multi_root: @ij.KeepFirst,
     skip_prose: false,
     quote_lookahead: false,
     max_repairs: 10000,
@@ -230,7 +234,7 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
     max_depth: d.max_depth,
     max_token_len: d.max_token_len,
     with_text: false,
-    max_loss: @mend.Lossy,
+    max_loss: @ij.Lossy,
     reject_ambiguous: false,
     retry_hint: false,
     step: 0,
@@ -245,6 +249,8 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
     schema: "",
     policy: "",
     json_out: false,
+    mcp_help: false,
+    mcp_config: "",
     action: Run,
   }
   let mut err = ""
@@ -260,7 +266,7 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
       o.action = Explain
     } else if i == 1 && a == "repair" {
       // `repair` is what the CLI does when no subcommand is given; naming it
-      // makes the command the documents already use (`jsonmend repair`) real
+      // makes the command the documents already use (`interjson repair`) real
       // instead of a filename lookup that fails with "cannot read repair".
       o.action = Run
     } else if i == 1 && a == "serve" {
@@ -274,10 +280,17 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
       // It is only meaningful together with `serve`.
       match o.action {
         Serve => ()
-        _ => err = "`--stdio` 只对 `jsonmend serve` 有意义"
+        _ => err = "`--stdio` 只对 `interjson serve` 有意义"
       }
+    } else if a == "--print-config" || a.has_prefix("--print-config=") {
+      let value = if a == "--print-config" { "json" } else { slice_tail(a, 15) }
+      o.mcp_config = if value == "" { "json" } else { value }
+      o.action = Mcp
     } else if a == "-h" || a == "--help" {
-      o.action = Help
+      match o.action {
+        Mcp => o.mcp_help = true
+        _ => o.action = Help
+      }
     } else if a == "--version" {
       o.action = Version
     } else if a == "--strict" {
@@ -291,7 +304,7 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
     } else if a == "--quote-lookahead" {
       o.quote_lookahead = true
     } else if a == "--for-execution" {
-      o.max_loss = @mend.Cosmetic
+      o.max_loss = @ij.Cosmetic
       o.reject_ambiguous = true
     } else if a == "--reject-ambiguous" {
       o.reject_ambiguous = true
@@ -379,11 +392,11 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
       } else {
         let mut ok = true
         ignore(
-          @mend.Schema::parse(value) catch {
+          @ij.Schema::parse(value) catch {
             e => {
               ok = false
               err = e.to_string()
-              @mend.Schema::Any
+              @ij.Schema::Any
             }
           },
         )

@@ -1,11 +1,11 @@
-// `jsonmend explain` — the whole analysis in one block (FR-32, FR-33).
+// `interjson explain` — the whole analysis in one block (FR-32, FR-33).
 //
 // The three pieces the library already had (repair records, exactness, retry
 // hints) were only useful to a caller who knew how to read all three at once.
 // `explain` prints them as one decision, which is also the shortest way to show
 // a reviewer what the gate actually does:
 //
-//   JSONMend Analysis
+//   InterJSON Analysis
 //   ────────────────────────────────
 //   Input:
 //     {"name":"Alice","age":18,}
@@ -30,7 +30,7 @@ fn read_stdin_or_file(path : String?) -> String {
       Some(p) => p
       None => "<stdin>"
     }
-    eprintln("jsonmend: 无法读取 " + name)
+    eprintln("interjson: 无法读取 " + name)
     quit(3)
     return ""
   }
@@ -45,11 +45,11 @@ fn read_stdin_or_file(path : String?) -> String {
 ///
 /// `parse_args` has already read the declaration once, so the fallback branch
 /// is unreachable; it exists because a `catch` arm must produce a value.
-fn schema_of(o : CliOpts) -> @mend.Schema? {
+fn schema_of(o : CliOpts) -> @ij.Schema? {
   if o.schema == "" {
     None
   } else {
-    Some(@mend.Schema::parse(o.schema) catch { _ => @mend.Schema::Any })
+    Some(@ij.Schema::parse(o.schema) catch { _ => @ij.Schema::Any })
   }
 }
 
@@ -58,9 +58,9 @@ fn schema_of(o : CliOpts) -> @mend.Schema? {
 /// fractions of the input, plus the members that never arrived.
 fn print_readiness_lines(
   text : String,
-  schema : @mend.Schema,
+  schema : @ij.Schema,
   step : Int32,
-  options : @mend.Options,
+  options : @ij.Options,
 ) -> Unit {
   let mut err = ""
   // The curve is a property of the input and the declaration, not of how strict
@@ -69,13 +69,13 @@ fn print_readiness_lines(
   // plan was built with (a prefixed sentence must not break the measurement)
   // and drops the gate's safety knobs, which would otherwise turn an unfinished
   // document into "no measurement at all".
-  let measure : @mend.Options = {
+  let measure : @ij.Options = {
     ..options,
-    mode: @mend.Lenient,
-    max_loss: @mend.Lossy,
+    mode: @ij.Lenient,
+    max_loss: @ij.Lossy,
     reject_ambiguous: false,
   }
-  let r = @mend.semantic_readiness(text, schema, step~, options=measure) catch {
+  let r = @ij.semantic_readiness(text, schema, step~, options=measure) catch {
     e => {
       err = e.to_string()
       {
@@ -94,11 +94,11 @@ fn print_readiness_lines(
     }
   }
   if err != "" {
-    eprintln("jsonmend: " + err)
+    eprintln("interjson: " + err)
     return
   }
   let sb = StringBuilder()
-  sb.write_string("jsonmend: syntax-ready ")
+  sb.write_string("interjson: syntax-ready ")
   sb.write_string(r.syntax_permille.to_string())
   sb.write_string("/1000 settled ")
   // `settled` is the runtime number: every declared member is final, whether or
@@ -129,7 +129,7 @@ fn print_readiness_lines(
 }
 
 ///|
-/// `jsonmend explain`: analyse the input and print the decision (FR-32).
+/// `interjson explain`: analyse the input and print the decision (FR-32).
 fn run_explain(o : CliOpts) -> Unit {
   let text = read_stdin_or_file(o.path)
   let schema = schema_of(o)
@@ -144,8 +144,8 @@ fn run_explain(o : CliOpts) -> Unit {
     opts
   }
   let plan = match schema {
-    Some(s) => @mend.analyze(text, options=plan_opts, schema=s)
-    None => @mend.analyze(text, options=plan_opts)
+    Some(s) => @ij.analyze(text, options=plan_opts, schema=s)
+    None => @ij.analyze(text, options=plan_opts)
   }
   if o.json_out {
     println(plan.to_json())

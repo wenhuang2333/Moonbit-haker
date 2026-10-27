@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from jsonmend import Client, JsonMendError, find_binary
+from interjson import Client, InterJSONError, find_binary
 from version import engine_version, registry_version
 
 
@@ -25,13 +25,13 @@ class ClientTests(unittest.TestCase):
         # The package declares its version; the declaration must be the engine
         # version. A literal here went stale once (1.1.0 while the package was
         # 1.1.1), so the check reads the declaration instead of pinning one.
-        import jsonmend
+        import interjson
 
-        self.assertEqual(jsonmend.__version__, engine_version())
+        self.assertEqual(interjson.__version__, engine_version())
 
     def test_hello_reports_both_version_channels(self) -> None:
         hello = self.client.hello()
-        self.assertEqual(hello["name"], "jsonmend")
+        self.assertEqual(hello["name"], "interjson")
         self.assertEqual(hello["engine"], engine_version())
         self.assertEqual(hello["registry"], registry_version())
         self.assertEqual(hello["protocol"], 1)
@@ -68,7 +68,7 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(plan["schema_satisfied"], 1)
 
     def test_unsupported_schema_keyword_is_an_error(self) -> None:
-        with self.assertRaises(JsonMendError) as caught:
+        with self.assertRaises(InterJSONError) as caught:
             self.client.analyze("{}", schema_json={"$ref": "#/x"})
         self.assertEqual(caught.exception.code, "E070")
         self.assertIn("$ref", caught.exception.message)
@@ -112,7 +112,7 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(closed["calls"][0]["end"], "complete")
 
     def test_unknown_profile_is_rejected(self) -> None:
-        with self.assertRaises(JsonMendError) as caught:
+        with self.assertRaises(InterJSONError) as caught:
             self.client.analyze("{}", profile="nope")
         self.assertEqual(caught.exception.code, "E050")
 

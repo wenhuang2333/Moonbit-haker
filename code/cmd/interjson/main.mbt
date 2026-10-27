@@ -1,4 +1,4 @@
-// jsonmend — repair and partial-parse JSON from the command line.
+// interjson — repair and partial-parse JSON from the command line.
 // Usage and exit codes: see D12 12.4 and D09 9.8.
 
 ///|
@@ -46,37 +46,37 @@ fn snippet(text : String, offset : Int32) -> String {
 
 ///|
 /// Offset a fatal error points at, when it has one.
-fn error_offset(e : @mend.MendError) -> Int32? {
+fn error_offset(e : @ij.InterJSONError) -> Int32? {
   match e {
-    @mend.NoJsonFound(o) => Some(o)
-    @mend.InvalidUtf8(o) => Some(o)
-    @mend.StrictViolation(_, p, _) => Some(p.offset)
-    @mend.AmbiguousRepair(_, p, _) => Some(p.offset)
+    @ij.NoJsonFound(o) => Some(o)
+    @ij.InvalidUtf8(o) => Some(o)
+    @ij.StrictViolation(_, p, _) => Some(p.offset)
+    @ij.AmbiguousRepair(_, p, _) => Some(p.offset)
     _ => None
   }
 }
 
 ///|
 /// Exit code of a fatal error (D09 9.8).
-fn error_exit_code(e : @mend.MendError) -> Int32 {
+fn error_exit_code(e : @ij.InterJSONError) -> Int32 {
   match e {
-    @mend.EmptyInput
-    | @mend.NoJsonFound(_)
-    | @mend.InvalidUtf8(_)
-    | @mend.InvalidEvent(_) => 3
-    @mend.DepthLimit(_, _) | @mend.SizeLimit(_, _) | @mend.TokenLimit(_, _) => 4
-    @mend.StrictViolation(_, _, _) | @mend.AmbiguousRepair(_, _, _) => 5
-    @mend.InvalidState(_) => 70
-    @mend.InvalidOption(_) => 2
+    @ij.EmptyInput
+    | @ij.NoJsonFound(_)
+    | @ij.InvalidUtf8(_)
+    | @ij.InvalidEvent(_) => 3
+    @ij.DepthLimit(_, _) | @ij.SizeLimit(_, _) | @ij.TokenLimit(_, _) => 4
+    @ij.StrictViolation(_, _, _) | @ij.AmbiguousRepair(_, _, _) => 5
+    @ij.InvalidState(_) => 70
+    @ij.InvalidOption(_) => 2
     // A skeleton that is not satisfied is a refusal of the execution channel,
     // so it shares exit code 5 with E010 and E011.
-    @mend.SchemaError(_) => 5
+    @ij.SchemaError(_) => 5
   }
 }
 
 ///|
 /// One `R005 3:14 trailing comma removed` line per record, on stderr.
-fn report(repairs : Array[@mend.Repair]) -> Unit {
+fn report(repairs : Array[@ij.Repair]) -> Unit {
   for r in repairs {
     eprintln(
       r.code.code() +
@@ -92,8 +92,8 @@ fn report(repairs : Array[@mend.Repair]) -> Unit {
 
 ///|
 /// Suffix `--explain` adds when a record admits a second reading (FR-27).
-fn ambiguity_note(a : @mend.Ambiguity) -> String {
-  if a is @mend.Unambiguous {
+fn ambiguity_note(a : @ij.Ambiguity) -> String {
+  if a is @ij.Unambiguous {
     ""
   } else {
     " [ambiguous: " + a.name() + "]"
@@ -103,14 +103,14 @@ fn ambiguity_note(a : @mend.Ambiguity) -> String {
 ///|
 /// `--explain`: one repair per block, with severity and a caret under the
 /// input position, then the exactness summary (FR-17, FR-20).
-fn explain(repairs : Array[@mend.Repair], text : String) -> Unit {
+fn explain(repairs : Array[@ij.Repair], text : String) -> Unit {
   for r in repairs {
     eprintln(
       r.code.code() +
       " " +
       (match r.severity {
-        @mend.Info => "info"
-        @mend.Warning => "warning"
+        @ij.Info => "info"
+        @ij.Warning => "warning"
       }) +
       " " +
       r.position.line.to_string() +
@@ -132,13 +132,13 @@ fn explain(repairs : Array[@mend.Repair], text : String) -> Unit {
 /// wrapped in a sentence and a code fence. Every other subcommand is a filter
 /// over bytes the caller already has, and a filter does not get to ignore the
 /// bytes in front of the value without being asked (`--skip-prose`).
-fn options_of(o : CliOpts, agent_protocol? : Bool) -> @mend.Options {
-  let base : @mend.Options = {
-    ..@mend.Options::default(),
+fn options_of(o : CliOpts, agent_protocol? : Bool) -> @ij.Options {
+  let base : @ij.Options = {
+    ..@ij.Options::default(),
     mode: if o.strict {
-      @mend.Strict
+      @ij.Strict
     } else {
-      @mend.Lenient
+      @ij.Lenient
     },
     indent: o.indent,
     multi_root: o.multi_root,
@@ -171,12 +171,12 @@ fn options_of(o : CliOpts, agent_protocol? : Bool) -> @mend.Options {
 /// The first is a documented boundary, the second is a tunable limit, and
 /// without this line the user cannot tell which one they hit.
 fn prose_overflow_hint(
-  parser : @mend.PartialParser,
-  options : @mend.Options,
+  parser : @ij.PartialParser,
+  options : @ij.Options,
 ) -> Unit {
   if options.skip_prose && parser.prose_overflow() {
     eprintln(
-      "jsonmend: hint: the skipped prelude exceeded max_prose_buffer (" +
+      "interjson: hint: the skipped prelude exceeded max_prose_buffer (" +
       options.max_prose_buffer.to_string() +
       "); raise --max-prose-buffer or drop --skip-prose",
     )
@@ -184,13 +184,44 @@ fn prose_overflow_hint(
 }
 
 ///|
+/// The executable name without its directory, for the `interjson-mcp` alias.
+/// A copy or symlink under that name starts the MCP server, which is how a
+/// package manager (or a Docker entrypoint) can expose the gate directly.
+fn program_name(argv : Array[String]) -> String {
+  let path = if argv.length() > 0 { argv[0] } else { "" }
+  let mut start = 0
+  for i = 0; i < path.length(); i = i + 1 {
+    let c = path.at(i).to_int()
+    if c == 0x2F || c == 0x5C {
+      start = i + 1
+    }
+  }
+  let name = slice(path, start, path.length())
+  if name.length() > 4 && name.has_suffix(".exe") {
+    slice(name, 0, name.length() - 4)
+  } else {
+    name
+  }
+}
+
+///|
 /// Run the command.
 fn run() -> Unit {
   let (o, usage_error) = parse_args(@env.args())
+  if program_name(@env.args()) == "interjson-mcp" {
+    match o.action {
+      Run => o.action = Mcp
+      Help => {
+        o.action = Mcp
+        o.mcp_help = true
+      }
+      _ => ()
+    }
+  }
   if usage_error != "" {
-    eprintln("jsonmend: " + usage_error)
+    eprintln("interjson: " + usage_error)
     eprintln(
-      "用法：jsonmend [选项] [文件]；用 `jsonmend --help` 查看帮助。",
+      "用法：interjson [选项] [文件]；用 `interjson --help` 查看帮助。",
     )
     quit(2)
   }
@@ -201,7 +232,7 @@ fn run() -> Unit {
     }
     Version => {
       // Keep in sync with `version` in moon.mod; cli_smoke.sh checks it.
-      println("jsonmend 1.3.0")
+      println("interjson 1.4.0")
       quit(0)
     }
     Llm => {
@@ -236,7 +267,7 @@ fn run() -> Unit {
       Some(p) => p
       None => "<stdin>"
     }
-    eprintln("jsonmend: 无法读取 " + name)
+    eprintln("interjson: 无法读取 " + name)
     return quit(3)
   }
   let options = options_of(o)
@@ -247,7 +278,7 @@ fn run() -> Unit {
   let prefix : Array[Byte] = []
   let chunk_cap = 65536
   try {
-    let parser = @mend.PartialParser::new(options~)
+    let parser = @ij.PartialParser::new(options~)
     let mut piece = read_chunk(stream, chunk_cap)
     while piece.length() > 0 {
       if prefix.length() < prefix_max {
@@ -272,12 +303,12 @@ fn run() -> Unit {
         // skipped when the prefix is incomplete, which is the only case where
         // the buffered text is not the whole document.
         match e {
-          @mend.NoJsonFound(_) =>
+          @ij.NoJsonFound(_) =>
             if options.skip_prose && prefix.length() < prefix_max {
               let text = @utf8.decode_lossy(Bytes::from_array(prefix[:])[:])
-              if @mend.is_valid_json(text) {
-                let again : @mend.Options = { ..options, skip_prose: false, }
-                let retry = @mend.PartialParser::new(options=again)
+              if @ij.is_valid_json(text) {
+                let again : @ij.Options = { ..options, skip_prose: false, }
+                let retry = @ij.PartialParser::new(options=again)
                 retry.feed(text)
                 retry.finish()
               } else {
@@ -300,7 +331,7 @@ fn run() -> Unit {
           let verdict = s.evaluate(fin.value)
           if !verdict.ok {
             eprintln(
-              "jsonmend: schema not satisfied (" +
+              "interjson: schema not satisfied (" +
               verdict.satisfied.to_string() +
               "/" +
               verdict.total.to_string() +
@@ -327,12 +358,12 @@ fn run() -> Unit {
     }
     if o.explain {
       explain(fin.repairs, @utf8.decode_lossy(Bytes::from_array(prefix[:])[:]))
-      eprintln("jsonmend: exactness " + fin.exactness.name())
+      eprintln("interjson: exactness " + fin.exactness.name())
     } else if o.report {
       report(fin.repairs)
       if fin.repairs_truncated {
         eprintln(
-          "jsonmend: repair records truncated at " +
+          "interjson: repair records truncated at " +
           fin.repairs.length().to_string() +
           " (raise max_repairs to record more)",
         )
@@ -348,7 +379,7 @@ fn run() -> Unit {
     quit(0)
   } catch {
     e => {
-      eprintln("jsonmend: " + e.to_string())
+      eprintln("interjson: " + e.to_string())
       if o.retry_hint {
         let text = @utf8.decode_lossy(Bytes::from_array(prefix[:])[:])
         match e.retry_hint(input=text) {
@@ -374,7 +405,7 @@ fn run() -> Unit {
 
 ///|
 /// Order two readiness points by position, then by name.
-fn cmp_ready(a : @mend.FieldReady, b : @mend.FieldReady) -> Int32 {
+fn cmp_ready(a : @ij.FieldReady, b : @ij.FieldReady) -> Int32 {
   if a.permille < b.permille {
     -1
   } else if a.permille > b.permille {
@@ -385,7 +416,7 @@ fn cmp_ready(a : @mend.FieldReady, b : @mend.FieldReady) -> Int32 {
 }
 
 ///|
-/// `jsonmend readiness`: the field readiness curve of one document (FR-29).
+/// `interjson readiness`: the field readiness curve of one document (FR-29).
 fn run_readiness(o : CliOpts) -> Unit {
   let stream = open_input(o.path)
   if stream == 0L {
@@ -393,28 +424,28 @@ fn run_readiness(o : CliOpts) -> Unit {
       Some(p) => p
       None => "<stdin>"
     }
-    eprintln("jsonmend: 无法读取 " + name)
+    eprintln("interjson: 无法读取 " + name)
     return quit(3)
   }
   let text = read_all(stream)
   close_input(stream)
-  let fields = @mend.field_readiness(text, step=o.step) catch {
+  let fields = @ij.field_readiness(text, step=o.step) catch {
     e => {
-      eprintln("jsonmend: " + e.to_string())
+      eprintln("interjson: " + e.to_string())
       return quit(error_exit_code(e))
     }
   }
   if fields.length() == 0 {
-    println("jsonmend: readiness 0 fields (root is not an object)")
+    println("interjson: readiness 0 fields (root is not an object)")
     return quit(0)
   }
-  let curve = @mend.readiness_deciles([text], step=o.step) catch { _ => [] }
-  let saving = @mend.early_stop_saving([text], step=o.step) catch { _ => 0 }
-  let median = @mend.readiness_median([text], step=o.step) catch { _ => 0 }
+  let curve = @ij.readiness_deciles([text], step=o.step) catch { _ => [] }
+  let saving = @ij.early_stop_saving([text], step=o.step) catch { _ => 0 }
+  let median = @ij.readiness_median([text], step=o.step) catch { _ => 0 }
   let sorted = fields.copy()
   sorted.sort_by(cmp_ready)
   let sb = StringBuilder()
-  sb.write_string("jsonmend: readiness median ")
+  sb.write_string("interjson: readiness median ")
   sb.write_string(median.to_string())
   sb.write_string("/1000 fields ")
   sb.write_string(fields.length().to_string())

@@ -1,22 +1,26 @@
-# jsonmend-moonbit (Python)
+# interjson-moonbit (Python)
 
-The MoonBit JSON engine for Python: streaming repair, partial parsing, and the
-**execution gate** for LLM tool calls. No third-party dependencies; the engine
-is the same native binary the CLI uses, reached over a versioned stdio
-protocol.
+InterJSON is the **execution gate for LLM output**: it decides whether a model's
+JSON may be executed, and when it may not, returns the sentence to send back to
+the model. This distribution is the Python client for the MoonBit engine —
+streaming repair, partial parsing, and the gate — plus two console scripts, one
+of which starts the local MCP server.
+
+No third-party dependencies. The engine is the same native binary the CLI uses,
+reached over a versioned stdio protocol.
 
 ```bash
 pip install ./code/python          # from the repository root
-export JSONMEND_BIN=/path/to/jsonmend   # or put it on PATH
+export INTERJSON_BIN=/path/to/interjson   # or put it on PATH
 ```
 
-> The PyPI name `jsonmend` is already taken by an unrelated package. This
-> distribution is `jsonmend-moonbit`; the import name remains `jsonmend`.
-> It is installed from the repository until a registry publication.
+> The distribution is `interjson-moonbit` (the suffix identifies the MoonBit
+> engine); the import name is `interjson`. Install from the repository until
+> the registry publication.
 
 ```python
 import json
-from jsonmend import Client
+from interjson import Client
 
 with Client() as jm:
     plan = jm.analyze(
@@ -30,9 +34,55 @@ with Client() as jm:
         print(plan["retry"]["prompt"])    # feed this back to the model
 ```
 
-`Client` keeps one `jsonmend serve` process alive, so a loop pays the spawn
+`Client` keeps one `interjson serve` process alive, so a loop pays the spawn
 cost once. `repair`, `analyze` and `validate` are one-shot convenience
 functions that spawn a process per call.
+
+## Console scripts
+
+| Script | Use |
+| --- | --- |
+| `interjson-mcp` | Start the local MCP server (stdio, JSON-RPC 2.0) for Claude Code, Cursor, Cline, Windsurf, VS Code, Codex CLI or Zed |
+| `interjson-http` | Start the stateless HTTP facade (`--port 8080`) |
+
+`interjson-mcp` is a launcher, not a server: it resolves the engine and replaces
+itself with `<binary> mcp`, so stdin/stdout stay a clean JSON-RPC channel with no
+Python in the middle. Resolution order is `INTERJSON_BIN`, then `interjson` on
+`PATH`, then a binary bundled next to the package, then the development build in
+this repository. If none exists it raises `FileNotFoundError` naming the fixes.
+
+```bash
+interjson --version                  # interjson 1.4.0: the engine the launchers need
+interjson-mcp                        # MCP stdio server
+interjson-mcp --print-config=claude  # the client configuration snippet
+interjson-http --port 8080           # POST /repair /analyze /validate /readiness, GET /healthz
+```
+
+`pip install` installs this client and the two console scripts, not the engine:
+the launchers resolve `INTERJSON_BIN`, then `interjson` on `PATH`, then a
+bundled binary, then the development build, and fail with
+`FileNotFoundError` naming the fixes if none is found.
+
+With the engine resolvable, the client configuration is one line:
+
+```json
+{
+  "mcpServers": {
+    "interjson": { "command": "interjson-mcp" }
+  }
+}
+```
+
+The server exposes four read-only tools: `interjson_gate` (the gate:
+`executable`, `decision`, `exactness`, `value`, `retry.prompt`),
+`interjson_repair`, `interjson_validate`, and `interjson_readiness`.
+
+Deployment, per-client configuration, the privacy model and troubleshooting are
+in [`docs/MCP.md`](../docs/MCP.md); host-side recipes (LangChain, LlamaIndex,
+streaming) are in [`docs/INTEGRATIONS.md`](../docs/INTEGRATIONS.md).
+
+`interjson-http` is stateless: one engine process per request, closed after it.
+It is the path for n8n, Dify, Coze or a gateway; for throughput, use `Client`.
 
 ## Methods
 
@@ -47,7 +97,7 @@ functions that spawn a process per call.
 
 `profile` is one of `permissive`, `interactive`, `execution`, `agent`, `strict`.
 `execution` and `agent` refuse a lossy or ambiguous repair instead of
-inventing content; `JsonMendError` carries `code`, `message`, `exit_code`,
+inventing content; `InterJSONError` carries `code`, `message`, `exit_code`,
 `retry_hint` and `offset`.
 
 `schema` is the library's declaration language (`{!query:string,!limit:integer}`).
@@ -57,20 +107,10 @@ inventing content; `JsonMendError` carries `code`, `message`, `exit_code`,
 `inputSchema` can be passed directly. Unsupported keywords raise `E070` rather
 than being silently dropped.
 
-## MCP and HTTP
-
-```bash
-jsonmend-mcp                    # MCP stdio server, for Claude Code/Cursor/...
-jsonmend-http --port 8080       # POST /repair /analyze /validate /readiness
-```
-
-`jsonmend-http` is stateless: one engine process per request, closed after it.
-It is the path for n8n, Dify, Coze or a gateway; for throughput, use `Client`.
-
 ## Version
 
-The Python package is `1.1.0`, the engine version. The MoonBit package on
-mooncakes is `0.8.0` because the registry currently accepts only `0.x.y`; the
+The Python package is `1.4.0`, the engine version. The MoonBit package on
+mooncakes is `0.11.0` because the registry currently accepts only `0.x.y`; the
 bytes are the same. `Client.hello()` reports both.
 
 License: Apache-2.0.

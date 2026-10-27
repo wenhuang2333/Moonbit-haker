@@ -1,5 +1,5 @@
 # Nightly long run: the same property tests as CI, with the case count raised
-# from 400 to 1,000,000 by `JSONMEND_LONGRUN` (O-6), plus the differential
+# from 400 to 1,000,000 by `INTERJSON_LONGRUN` (O-6), plus the differential
 # harness. A failure here is reproducible locally with the same variable,
 # because every property uses a fixed seed.
 
@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      JSONMEND_LONGRUN: ${{ github.event.inputs.cases || '1000000' }}
+      INTERJSON_LONGRUN: ${{ github.event.inputs.cases || '1000000' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +41,7 @@ jobs:
       - name: Long run (native)
         working-directory: code
         run: |
-          echo "cases per property: $JSONMEND_LONGRUN"
+          echo "cases per property: $INTERJSON_LONGRUN"
           time moon test --target native
 
       - name: Long run (wasm-gc)
@@ -77,13 +77,13 @@ jobs:
 
       - name: Build the CLI
         working-directory: code
-        run: moon build cmd/jsonmend --target native --release
+        run: moon build cmd/interjson --target native --release
 
       - name: Differential report
         working-directory: code
         run: |
           python3 tests/diff/run_diff.py \
-            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe \
+            --cli ./_build/native/release/build/cmd/interjson/interjson.exe \
             --node-module-dir "$RUNNER_TEMP/node-oracle/node_modules" \
             --out "$RUNNER_TEMP/diff-report.md"
 
@@ -91,7 +91,7 @@ jobs:
         working-directory: code
         run: |
           python3 tests/eval/run_eval.py \
-            --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+            --cli ./_build/native/release/build/cmd/interjson/interjson.exe
 
       - uses: actions/upload-artifact@v4
         with:

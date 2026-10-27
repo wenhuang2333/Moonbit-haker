@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>JSONMend × MCP — 执行门接入</title>
+    <title>InterJSON × MCP — 执行门接入</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -116,11 +116,11 @@
   </head>
   <body>
     <main>
-      <h1>JSONMend × MCP — 执行门接入</h1>
+      <h1>InterJSON × MCP — 执行门接入</h1>
       <p class="lead">
         MCP 让 agent 发现工具；真正的价值是宿主在执行工具参数之前过闸。
-        `jsonmend_analyze` 返回 <code>executable</code>；为 false 时把
-        <code>retry.prompt</code> 原样回灌模型。
+        <code>interjson_gate</code> 返回 <code>executable</code>；为 false 时把
+        <code>retry.prompt</code> 原样回灌模型。服务本地运行、只读、无网络。
       </p>
       <p class="nav">
         <a href="./index.html">演示目录</a> ·
@@ -133,19 +133,28 @@
       <div class="grid">
         <div class="card">
           <h3>Claude Code</h3>
-          <pre id="cfg-claude">claude mcp add jsonmend -- jsonmend mcp</pre>
+          <pre id="cfg-claude">claude mcp add interjson -- interjson mcp</pre>
           <button data-copy="cfg-claude">复制</button>
         </div>
         <div class="card">
           <h3>mcp.json（Cursor / Cline / Windsurf 等）</h3>
-          <pre id="cfg-json">{"mcpServers":{"jsonmend":{"command":"jsonmend","args":["mcp"]}}}</pre>
+          <pre id="cfg-json">{"mcpServers":{"interjson":{"command":"interjson","args":["mcp"]}}}</pre>
           <button data-copy="cfg-json">复制</button>
         </div>
       </div>
       <p class="muted">
-        装 pip 包时命令是 <code>jsonmend-mcp</code>（它解析二进制并替换进程）。
-        四个工具：<code>jsonmend_analyze</code> / <code>repair</code> /
-        <code>validate</code> / <code>readiness</code>。
+        装 pip 包时命令是 <code>interjson-mcp</code>（它解析二进制并替换进程）；
+        npm 包 <code>interjson-moonbit</code> 的 bin 也是 <code>interjson-mcp</code>，
+        需要本机原生可执行文件。四个工具：<code>interjson_gate</code>（主入口，默认
+        <code>agent</code> 档） / <code>interjson_repair</code> /
+        <code>interjson_validate</code> / <code>interjson_readiness</code>，
+        每个都只读，并同时返回文本与 <code>structuredContent</code>。
+      </p>
+      <p class="muted">
+        不想记命令：<code>interjson mcp --print-config=claude</code> 直接打印上面那行，
+        <code>--print-config=json</code> 打印 <code>mcpServers</code> 片段；另外支持
+        <code>cursor</code> / <code>vscode</code> / <code>codex</code> /
+        <code>windsurf</code> / <code>zed</code>。
       </p>
 
       <h2>2. 模型给出坏参数，门怎么回答</h2>
@@ -154,15 +163,16 @@
           <h3>模型输出（被 max_tokens 截断）</h3>
           <textarea id="model-text">{"amount":100,"currency":"USD"</textarea>
           <div>
-            <button id="run-bad">运行 jsonmend_analyze</button>
+            <button id="run-bad">运行 interjson_gate</button>
             <button id="run-good">模型重发</button>
           </div>
           <p class="muted" id="tool-hint">
-            schema 就是工具已有的 <code>inputSchema</code>；这里用 JSON Schema 子集直接传给 analyze。
+            schema 就是工具已有的 <code>inputSchema</code>；这里用 JSON Schema 子集直接传给
+            <code>interjson_gate</code>，档位用默认的 <code>agent</code>。
           </p>
         </div>
         <div class="card">
-          <h3>jsonmend_analyze 的回答</h3>
+          <h3>interjson_gate 的回答</h3>
           <div class="kv">
             <span>decision</span><span id="decision" class="verdict">—</span>
             <span>executable</span><span id="executable" class="verdict">—</span>
@@ -177,38 +187,45 @@
 
       <h2>3. 这三个数就是全部故事</h2>
       <ol class="steps">
-        <li><b>截断 → E010。</b>补全会发明内容；执行档不允许，返回 <code>lossy_repair</code>，<code>executable: false</code>。</li>
+        <li><b>截断 → E010。</b>补全会发明内容；<code>agent</code> / execution 档不允许，返回 <code>lossy_repair</code>，<code>executable: false</code>。</li>
         <li><b>重试提示是 API 的一部分。</b><code>retry.prompt</code> 带位置、原因、片段，模型可以直接照着改。</li>
         <li><b>重发 → safe。</b>同一份声明、同一个调用；这次 <code>executable: true</code>，宿主才执行。</li>
       </ol>
 
       <h2>4. 会话实录</h2>
-      <pre>→ tools/call  jsonmend_analyze
+      <pre>→ tools/call  interjson_gate
 ← decision: lossy_repair      executable: false
   error: E010  CloseContainer at 1:31
-  retry: "JSONMend refused the arguments: E010 ..."
+  retry: "InterJSON refused the arguments: E010 ..."
 
-→ tools/call  jsonmend_analyze
+→ tools/call  interjson_gate
 ← decision: safe              executable: true
 OK  execute create_invoice({"amount":100,"currency":"USD"})</pre>
+      <p class="muted">
+        上面按当前工具名重写；那次真实会话的原始记录在
+        <a href="./mcp-claude/README.md">mcp-claude/</a> 与
+        <a href="./mcp-claude-session.txt">mcp-claude-session.txt</a>，
+        录制于更名之前、是不可改写的逐字节证据，因此保留旧服务名与旧工具名
+        （现在的 <code>interjson_gate</code> 当时叫 <code>*_analyze</code>）。
+      </p>
 
       <footer>
-        页面里的每一次 <code>analyze</code> 都由同一份 MoonBit 引擎编译成的
-        <code>jsonmend.js</code> 在浏览器里计算，不是预写的结果。
-        配置命令与协议见
+        页面里的每一次 gate 判定都由同一份 MoonBit 引擎编译成的
+        <code>interjson.js</code> 在浏览器里计算，不是预写的结果。
+        MCP 传输、四个工具与协议协商见
         <a href="https://github.com/wenhuang2333/Moonbit-haker/blob/main/code/README.zh.md">code/README.zh.md</a>。
       </footer>
     </main>
 
     <script>
-      globalThis.jsonmendRegister1 = function (name, fn) {
-        globalThis.jsonmend = globalThis.jsonmend || {};
-        globalThis.jsonmend[name] = fn;
+      globalThis.interjsonRegister1 = function (name, fn) {
+        globalThis.interjson = globalThis.interjson || {};
+        globalThis.interjson[name] = fn;
       };
-      globalThis.jsonmendRegister2 = globalThis.jsonmendRegister1;
-      globalThis.jsonmendRegister3 = globalThis.jsonmendRegister1;
+      globalThis.interjsonRegister2 = globalThis.interjsonRegister1;
+      globalThis.interjsonRegister3 = globalThis.interjsonRegister1;
     </script>
-    <script src="./jsonmend.js"></script>
+    <script src="./interjson.js"></script>
     <script>
       const $ = (id) => document.getElementById(id);
       const schema = JSON.stringify({
@@ -241,7 +258,7 @@ OK  execute create_invoice({"amount":100,"currency":"USD"})</pre>
       }
 
       function analyze(text) {
-        const raw = globalThis.jsonmend.analyze_json_schema(text, "agent", schema);
+        const raw = globalThis.interjson.analyze_json_schema(text, "agent", schema);
         const plan = JSON.parse(raw);
         if (plan.error && !plan.decision) {
           $("decision").textContent = "invalid schema";

@@ -1,4 +1,4 @@
-// `jsonmend --batch` — a machine readable driver for evaluation harnesses.
+// `interjson --batch` — a machine readable driver for evaluation harnesses.
 //
 // One JSON object per input line on standard input:
 //
@@ -32,10 +32,10 @@ fn read_all(stream : Int64) -> String {
 /// honoured literally, so a chunk may split a UTF-8 sequence or a surrogate
 /// pair; that is the point of the streaming check.
 fn feed_in_chunks(
-  p : @mend.PartialParser,
+  p : @ij.PartialParser,
   input : String,
   chunk : Int32,
-) -> Unit raise @mend.MendError {
+) -> Unit raise @ij.InterJSONError {
   let bs = @utf8.encode(input)
   let n = bs.length()
   if chunk <= 0 {
@@ -55,7 +55,7 @@ fn feed_in_chunks(
 fn batch_line(
   id : String,
   input : String,
-  opts : @mend.Options,
+  opts : @ij.Options,
   chunk : Int32,
 ) -> String {
   let sb = StringBuilder()
@@ -63,7 +63,7 @@ fn batch_line(
   sb.write_string(Json::string(id).stringify())
   sb.write_string(",\"rc\":")
   let rc = try {
-    let p = @mend.PartialParser::new(options=opts)
+    let p = @ij.PartialParser::new(options=opts)
     feed_in_chunks(p, input, chunk)
     let r = p.finish()
     sb.write_string("0,\"exactness\":")
@@ -99,10 +99,10 @@ fn batch_line(
 
 ///|
 /// Run the batch driver over standard input.
-fn run_batch(opts : @mend.Options, chunk : Int32) -> Unit {
+fn run_batch(opts : @ij.Options, chunk : Int32) -> Unit {
   let stream = open_input(None)
   if stream == 0L {
-    eprintln("jsonmend: 无法读取 <stdin>")
+    eprintln("interjson: 无法读取 <stdin>")
     return
   }
   let text = read_all(stream)

@@ -43,7 +43,7 @@ jobs:
       - name: Rebuild the demo bundle and verify it is in sync
         run: |
           bash static/demo/build.sh
-          git diff --exit-code -- static/demo/jsonmend.js
+          git diff --exit-code -- static/demo/interjson.js
 
       # Stage the two files in one directory so the artifact has a flat,
       # predictable layout: upload-artifact keeps paths relative to the least
@@ -52,7 +52,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/web-assets"
           cp code/_build/wasm-gc/release/build/bench/probe/probe.wasm "$RUNNER_TEMP/web-assets/probe.wasm"
-          cp static/demo/jsonmend.js "$RUNNER_TEMP/web-assets/jsonmend-demo.js"
+          cp static/demo/interjson.js "$RUNNER_TEMP/web-assets/interjson-demo.js"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -68,11 +68,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            asset: jsonmend-linux-x86_64
+            asset: interjson-linux-x86_64
           - os: macos-latest
-            asset: jsonmend-macos-arm64
+            asset: interjson-macos-arm64
           - os: windows-latest
-            asset: jsonmend-windows-x86_64.exe
+            asset: interjson-windows-x86_64.exe
     steps:
       - uses: actions/checkout@v4
 
@@ -93,33 +93,33 @@ jobs:
       - name: Build the CLI (Unix)
         if: runner.os != 'Windows'
         working-directory: code
-        run: moon build cmd/jsonmend --target native --release
+        run: moon build cmd/interjson --target native --release
 
       - name: Build the CLI (Windows)
         if: runner.os == 'Windows'
         working-directory: code
         shell: pwsh
-        run: moon build cmd/jsonmend --target native --release
+        run: moon build cmd/interjson --target native --release
 
       - name: Check the CLI runs (Unix)
         if: runner.os != 'Windows'
         working-directory: code
         run: |
-          printf '{"a":1,}' | ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
-          ./_build/native/release/build/cmd/jsonmend/jsonmend.exe --version
+          printf '{"a":1,}' | ./_build/native/release/build/cmd/interjson/interjson.exe
+          ./_build/native/release/build/cmd/interjson/interjson.exe --version
 
       - name: Check the CLI runs (Windows)
         if: runner.os == 'Windows'
         working-directory: code
         shell: pwsh
         run: |
-          '{"a":1,}' | & .\_build\native\release\build\cmd\jsonmend\jsonmend.exe
-          & .\_build\native\release\build\cmd\jsonmend\jsonmend.exe --version
-          '{"id":1,"method":"hello"}','{"id":2,"method":"shutdown"}' | & .\_build\native\release\build\cmd\jsonmend\jsonmend.exe serve
+          '{"a":1,}' | & .\_build\native\release\build\cmd\interjson\interjson.exe
+          & .\_build\native\release\build\cmd\interjson\interjson.exe --version
+          '{"id":1,"method":"hello"}','{"id":2,"method":"shutdown"}' | & .\_build\native\release\build\cmd\interjson\interjson.exe serve
 
       - name: Stage the CLI
         shell: bash
-        run: cp code/_build/native/release/build/cmd/jsonmend/jsonmend.exe "$RUNNER_TEMP/${{ matrix.asset }}"
+        run: cp code/_build/native/release/build/cmd/interjson/interjson.exe "$RUNNER_TEMP/${{ matrix.asset }}"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -142,13 +142,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp artifacts/jsonmend-linux-x86_64/jsonmend-linux-x86_64 dist/jsonmend-linux-x86_64
-          cp artifacts/jsonmend-macos-arm64/jsonmend-macos-arm64 dist/jsonmend-macos-arm64
-          cp artifacts/jsonmend-windows-x86_64.exe/jsonmend-windows-x86_64.exe dist/jsonmend-windows-x86_64.exe
-          cp artifacts/web-assets/probe.wasm dist/jsonmend-probe.wasm
-          cp artifacts/web-assets/jsonmend-demo.js dist/jsonmend-demo.js
-          chmod +x dist/jsonmend-linux-x86_64 dist/jsonmend-macos-arm64
-          (cd dist && sha256sum jsonmend-linux-x86_64 jsonmend-macos-arm64 jsonmend-windows-x86_64.exe jsonmend-probe.wasm jsonmend-demo.js > SHA256SUMS)
+          cp artifacts/interjson-linux-x86_64/interjson-linux-x86_64 dist/interjson-linux-x86_64
+          cp artifacts/interjson-macos-arm64/interjson-macos-arm64 dist/interjson-macos-arm64
+          cp artifacts/interjson-windows-x86_64.exe/interjson-windows-x86_64.exe dist/interjson-windows-x86_64.exe
+          cp artifacts/web-assets/probe.wasm dist/interjson-probe.wasm
+          cp artifacts/web-assets/interjson-demo.js dist/interjson-demo.js
+          chmod +x dist/interjson-linux-x86_64 dist/interjson-macos-arm64
+          (cd dist && sha256sum interjson-linux-x86_64 interjson-macos-arm64 interjson-windows-x86_64.exe interjson-probe.wasm interjson-demo.js > SHA256SUMS)
           cat dist/SHA256SUMS
 
       # The release body is the section of CHANGELOG.md for this tag, not the
@@ -181,7 +181,7 @@ jobs:
       - name: Check the release contents before publishing
         run: |
           set -euo pipefail
-          want="SHA256SUMS jsonmend-demo.js jsonmend-linux-x86_64 jsonmend-macos-arm64 jsonmend-probe.wasm jsonmend-windows-x86_64.exe"
+          want="SHA256SUMS interjson-demo.js interjson-linux-x86_64 interjson-macos-arm64 interjson-probe.wasm interjson-windows-x86_64.exe"
           actual="$(cd dist && ls -1 | sort | tr '\n' ' ' | sed 's/ $//')"
           sorted="$(printf '%s\n' $want | sort | tr '\n' ' ' | sed 's/ $//')"
           if [ "$actual" != "$sorted" ]; then
@@ -204,7 +204,7 @@ jobs:
           # already asserted what `dist/` holds, so the glob cannot pick up a
           # stray file.
           gh release create "$GITHUB_REF_NAME" \
-            --title "JSONMend $GITHUB_REF_NAME" \
+            --title "InterJSON $GITHUB_REF_NAME" \
             --notes-file "$RUNNER_TEMP/notes.md" \
             dist/*
 

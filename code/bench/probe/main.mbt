@@ -5,9 +5,9 @@
 /// engine reachable.
 fn main {
   try {
-    let r = @mend.repair("{'a':1,}")
+    let r = @interjson.repair("{'a':1,}")
     println(r.text)
-    let p = @mend.PartialParser::new()
+    let p = @interjson.PartialParser::new()
     p.feed("{\"b\":[1,2")
     println(p.snapshot().value.unwrap().stringify())
     let fin = Some(p.finish()) catch { _ => None }
@@ -15,7 +15,7 @@ fn main {
       Some(r) => println(r.text)
       None => println("error")
     }
-    println(@mend.is_valid_json("{}").to_string())
+    println(@interjson.is_valid_json("{}").to_string())
   } catch {
     _ => println("error")
   }

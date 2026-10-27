@@ -2,11 +2,11 @@
 # Runs the CLI over code/examples/cases/*.json and compares stdout with the
 # matching .expected file (D12 12.8 step 4).
 #
-#   bash code/tests/examples.sh [<jsonmend executable>]
+#   bash code/tests/examples.sh [<interjson executable>]
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="${1:-$ROOT/_build/native/release/build/cmd/jsonmend/jsonmend.exe}"
+BIN="${1:-$ROOT/_build/native/release/build/cmd/interjson/interjson.exe}"
 CASES="$ROOT/examples/cases"
 
 [ -x "$BIN" ] || { echo "error: $BIN not found (build it first)" >&2; exit 2; }

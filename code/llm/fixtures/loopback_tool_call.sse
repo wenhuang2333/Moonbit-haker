@@ -1,7 +1,7 @@
 : provenance transport=loopback-sse scenario=tool_call wire=anthropic/v1/messages generator=code/tests/record_stream.py --loopback
 
-event: jsonmend.provenance
-data: {"type":"jsonmend.provenance","transport":"loopback-sse","scenario":"tool_call","wire":"anthropic/v1/messages","generator":"code/tests/record_stream.py --loopback","vendor_capture":false}
+event: interjson.provenance
+data: {"type":"interjson.provenance","transport":"loopback-sse","scenario":"tool_call","wire":"anthropic/v1/messages","generator":"code/tests/record_stream.py --loopback","vendor_capture":false}
 
 event: message_start
 data: {"type":"message_start","message":{"id":"msg_loopback","type":"message","role":"assistant","model":"loopback-anthropic-compatible","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":64,"output_tokens":1}}}

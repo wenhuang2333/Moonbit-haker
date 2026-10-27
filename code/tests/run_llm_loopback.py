@@ -19,7 +19,7 @@ This script is the replay half of that chain. For every fixture it:
      the same calls as the golden `.expect.json`.
 
     python3 code/tests/run_llm_loopback.py
-    python3 code/tests/run_llm_loopback.py --cli <path to jsonmend> --no-regenerate
+    python3 code/tests/run_llm_loopback.py --cli <path to interjson> --no-regenerate
 
 Exit status 0 only when every scenario matches.
 """
@@ -37,14 +37,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 FIXTURES = os.path.join(ROOT, "llm", "fixtures")
 DEFAULT_CLI = os.path.join(
-    ROOT, "_build", "native", "release", "build", "cmd", "jsonmend",
-    "jsonmend.exe",
+    ROOT, "_build", "native", "release", "build", "cmd", "interjson",
+    "interjson.exe",
 )
 
 # The scenarios the loopback recorder must produce.
 SCENARIOS = ["tool_call", "escape_split", "truncated", "parallel"]
 
-# The fields `jsonmend llm` prints for one call, and the ones an expectation
+# The fields `interjson llm` prints for one call, and the ones an expectation
 # file pins down.
 CALL_FIELDS = ["index", "id", "name", "done", "exactness", "end",
                "stop_reason", "value"]
@@ -101,7 +101,7 @@ def check_provenance(name: str, sse_text: str, jsonl_text: str) -> None:
     if "transport=loopback-sse" not in sse_text:
         raise Failure("%s: the .sse has no loopback provenance comment" % name)
     first = json.loads(jsonl_text.splitlines()[0])
-    if first.get("type") != "jsonmend.provenance":
+    if first.get("type") != "interjson.provenance":
         raise Failure("%s: the first .jsonl line is not the provenance event"
                       % name)
     if first.get("transport") != "loopback-sse":
@@ -215,8 +215,8 @@ def main() -> int:
     args = ap.parse_args()
 
     if not os.path.exists(args.cli):
-        print("jsonmend binary not found at %s; build it with "
-              "`moon build cmd/jsonmend --target native --release`" % args.cli,
+        print("interjson binary not found at %s; build it with "
+              "`moon build cmd/interjson --target native --release`" % args.cli,
               file=sys.stderr)
         return 2
 

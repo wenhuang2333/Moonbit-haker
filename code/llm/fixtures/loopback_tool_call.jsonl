@@ -1,4 +1,4 @@
-{"type":"jsonmend.provenance","transport":"loopback-sse","scenario":"tool_call","wire":"anthropic/v1/messages","generator":"code/tests/record_stream.py --loopback","vendor_capture":false}
+{"type":"interjson.provenance","transport":"loopback-sse","scenario":"tool_call","wire":"anthropic/v1/messages","generator":"code/tests/record_stream.py --loopback","vendor_capture":false}
 {"type":"message_start","message":{"id":"msg_loopback","type":"message","role":"assistant","model":"loopback-anthropic-compatible","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":64,"output_tokens":1}}}
 {"type":"ping"}
 {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_loopback_01","name":"get_weather","input":{}}}

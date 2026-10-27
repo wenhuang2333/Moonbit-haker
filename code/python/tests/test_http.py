@@ -8,7 +8,7 @@ import unittest
 import urllib.error
 import urllib.request
 
-from jsonmend.http import create_server
+from interjson.http import create_server
 from version import engine_version, registry_version
 
 

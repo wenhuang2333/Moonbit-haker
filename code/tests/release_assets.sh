@@ -3,9 +3,10 @@
 # Verify that a published GitHub release carries exactly the files its
 # SHA256SUMS lists.
 #
-# The failure this exists for: v1.1.0 published a SHA256SUMS that names
-# `jsonmend-windows-x86_64.exe`, but the release attached only five files and
-# the Windows binary was not one of them. A checksum file that names a file
+# The failure this exists for: v1.1.0 published a SHA256SUMS that names the
+# Windows CLI (`jsonmend-windows-x86_64.exe`; the project was formerly
+# JSONMend, so assets from that era keep the old prefix), but the release
+# attached only five files and the Windows binary was not one of them. A checksum file that names a file
 # the reader cannot download is worse than no checksum file at all: it sends a
 # verifier to check something that does not exist, and it makes a broken
 # release look signed.
@@ -20,7 +21,7 @@
 #   bash code/tests/release_assets.sh <tag> [options]
 #
 #   --repo OWNER/NAME    repository to check
-#                        (default: $JSONMEND_REPO, else
+#                        (default: $INTERJSON_REPO, else
 #                        wenhuang2333/Moonbit-haker)
 #   --api URL            GitHub API base URL (default: $GH_API, else
 #                        https://api.github.com)
@@ -44,7 +45,7 @@
 #
 set -uo pipefail
 
-REPO="${JSONMEND_REPO:-wenhuang2333/Moonbit-haker}"
+REPO="${INTERJSON_REPO:-wenhuang2333/Moonbit-haker}"
 API="${GH_API:-https://api.github.com}"
 SUMS_FILE=""
 VERIFY_HASHES=0

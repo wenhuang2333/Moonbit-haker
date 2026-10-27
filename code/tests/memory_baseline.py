@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Peak memory per mode, and the same parse in JSONMend, Node and Python (NFR-PERF-04).
+"""Peak memory per mode, and the same parse in InterJSON, Node and Python (NFR-PERF-04).
 
 0.6.0 asks a narrower question than 0.3.0 did. The old report answered "is the
-4x input budget reasonable" by comparing one JSONMend arm with Node and Python.
+4x input budget reasonable" by comparing one InterJSON arm with Node and Python.
 The frozen memory policy for this release names **modes**, because the modes
 allocate differently:
 
@@ -34,7 +34,7 @@ output as well:
 
 The MoonBit *core* `@json.parse` is not measured separately: core has no file
 reading entry point and this library deliberately does not expose one, so the
-closest reachable arm is a JSONMend CLI arm. The difference is stated in the
+closest reachable arm is a InterJSON CLI arm. The difference is stated in the
 output rather than hidden.
 """
 
@@ -119,7 +119,7 @@ def make_long_text(target_bytes: int) -> str:
 def make_events(doc: str, path: str) -> int:
     """Write the document as an Anthropic `text_delta` stream; return its size.
 
-    This is the input `jsonmend llm --text` is designed for: the model streams
+    This is the input `interjson llm --text` is designed for: the model streams
     the document one delta at a time and the adapter feeds `TextStream`, which
     feeds a `PartialParser`. The file is larger than the document because every
     delta carries JSON envelope, which the note in the output accounts for.
@@ -182,7 +182,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--size-mb", type=float, default=12.95)
     ap.add_argument("--cli", default=os.path.join(
-        ROOT, "_build", "native", "release", "build", "cmd", "jsonmend", "jsonmend.exe"
+        ROOT, "_build", "native", "release", "build", "cmd", "interjson", "interjson.exe"
     ))
     ap.add_argument("--out", default=DEFAULT_OUT)
     args = ap.parse_args()
@@ -292,7 +292,7 @@ def main() -> int:
         peak, out, rc, _ = peak_rss(["node", "-e", NODE_SCRIPT, path])
         cross.append({"name": "node JSON.parse + JSON.stringify", "peak": peak, "note": ""})
         cross.append({
-            "name": "jsonmend repair（本表第一行）",
+            "name": "interjson repair（本表第一行）",
             "peak": modes[0]["peak"],
             "note": "同一份文档，同一次运行",
         })
@@ -342,7 +342,7 @@ def main() -> int:
         lines.append("| --- | --- |")
         lines.append("| 输入 | 同一份对象数组文档，%d B（%.2f MB） |" % (actual, mb))
         lines.append("| 计时工具 | `/usr/bin/time %s`（峰值 RSS） |" % ("-l" if sys.platform == "darwin" else "-v"))
-        lines.append("| JSONMend | `%s` |" % os.path.relpath(args.cli, ROOT))
+        lines.append("| InterJSON | `%s` |" % os.path.relpath(args.cli, ROOT))
         lines.append("| Node | %s |" % node_version)
         lines.append("| Python | %s |" % sys.version.split()[0])
         lines.append("")
@@ -434,7 +434,7 @@ def main() -> int:
         lines.append("")
         lines.append(
             "能回答：**同一份文档、同一个「读入 + 建树 + 保留」工作负载**下，各模式的峰值差多少，"
-            "以及 JSONMend 与调用方本来就会用的两个运行时相比是高还是低。"
+            "以及 InterJSON 与调用方本来就会用的两个运行时相比是高还是低。"
         )
         lines.append("")
         if check_peak is not None:

@@ -17,6 +17,11 @@ moon.lock
 #   README.md / **/README.md / **/README.zh.md
 #                                 仓库首页；各子包 README 被 mooncakes、npm、
 #                                 PyPI 的包页直接读取，删了包页就空了
+#   code/docs/MCP.md             本地 MCP 部署指南；README 直接链接它，
+#                                 属于产品接入文档而不是设计文档
+#   code/docs/INTEGRATIONS.md    MCP 之外的宿主侧接入配方，MCP.md 与 README 链接它
+#   code/docs/PROTOCOL.md        `serve` 的线格式契约，接入方需要它
+#   code/docs/CONFORMANCE.md     协议与 MCP 一致性套件的规范，测试与接入方需要它
 #   code/CHANGELOG.md             release.yml 从它抽取每个版本的 Release 正文；
 #                                 属于发布元数据，不是说明文档
 #   code/docs/EVAL*.md            CI 跑出来的测量报告，由 run_eval.py、
@@ -34,6 +39,10 @@ moon.lock
 !**/README.md
 !**/README.zh.md
 !code/CHANGELOG.md
+!code/docs/MCP.md
+!code/docs/INTEGRATIONS.md
+!code/docs/PROTOCOL.md
+!code/docs/CONFORMANCE.md
 !code/docs/EVAL.md
 !code/docs/EVAL_AMBIGUITY.md
 !code/docs/EVAL_INDEPENDENT.md

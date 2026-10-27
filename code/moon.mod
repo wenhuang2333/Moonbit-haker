@@ -1,8 +1,8 @@
-// JSONMend — streaming JSON repair and partial parsing library.
+// InterJSON — the execution gate for LLM output, as a local MCP server and a library.
 // Module manifest for the MoonBit toolchain.
-name = "zhanshishan/jsonmend"
+name = "zhanshishan/interjson"
 
-version = "1.3.0"
+version = "1.4.0"
 
 readme = "README.md"
 
@@ -10,8 +10,16 @@ repository = "https://github.com/wenhuang2333/Moonbit-haker"
 
 license = "Apache-2.0"
 
-keywords = [ "json", "repair", "streaming", "llm", "parser" ]
+keywords = [
+  "json",
+  "repair",
+  "streaming",
+  "llm",
+  "mcp",
+  "execution-gate",
+  "parser",
+]
 
-description = "Streaming JSON repair and partial parsing in pure MoonBit"
+description = "The execution gate for LLM output: local MCP server, streaming JSON repair and partial parsing in pure MoonBit"
 
 preferred_target = "wasm"

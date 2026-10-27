@@ -18,7 +18,7 @@
 fn ToolStream::push_openai(
   self : ToolStream,
   v : Json,
-) -> Array[ToolCall] raise @mend.MendError {
+) -> Array[ToolCall] raise @interjson.InterJSONError {
   let out : Array[ToolCall] = []
   // An error frame is `{"error": {"message", "type", "param", "code"}}`; the
   // official clients raise on it and stop reading, which is what happens here.

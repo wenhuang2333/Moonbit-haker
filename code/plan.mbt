@@ -13,10 +13,10 @@
 // plan (decision `Invalid`/`LossyRepair`/`Ambiguous` plus `retry_hint`), so the
 // loop is:
 //
-//   let plan = @mend.analyze(arguments, options=@mend.Options::for_agent())
+//   let plan = @interjson.analyze(arguments, options=@interjson.Options::for_agent())
 //   if plan.is_executable() { execute(plan.value) } else { send(plan.prompt()) }
 //
-// Confidence is deliberately a class, not a probability: JSONMend has no
+// Confidence is deliberately a class, not a probability: InterJSON has no
 // calibration data, and a number that looks like a probability but is not one
 // is worse than a label. `certain` means the value is provably unchanged;
 // `probable` means the repair is the only one the rules allow but it did
@@ -165,7 +165,7 @@ pub(all) struct RepairPlan {
   /// Whether the repair log was cut short by `max_repairs`.
   repairs_truncated : Bool
   exactness : Exactness
-  /// Whether the input was already well-formed JSON and the only thing JSONMend
+  /// Whether the input was already well-formed JSON and the only thing InterJSON
   /// had to decide was what its repeated member names mean (Q-26).
   valid_json : Bool
   /// Whether any repair admitted a second reading (FR-27).
@@ -311,7 +311,7 @@ pub fn RepairPlan::prompt(self : RepairPlan) -> String {
         "The output was accepted; no retry is needed."
       } else {
         let sb = StringBuilder()
-        sb.write_string("JSONMend refused the output (")
+        sb.write_string("InterJSON refused the output (")
         sb.write_string(self.decision.name())
         if self.error_message != "" {
           sb.write_string(": ")
@@ -401,7 +401,7 @@ fn plan_of_final(
 
 ///|
 /// Whether the input was already well-formed JSON, so that the only thing
-/// JSONMend had to decide was what a repeated member name means (Q-26).
+/// InterJSON had to decide was what a repeated member name means (Q-26).
 ///
 /// `R018` is the rule that fires on text a strict JSON reader accepts: RFC 8259
 /// permits a repeated name and leaves "which one wins" to the consumer. Every
@@ -420,7 +420,7 @@ fn input_was_valid_json(ops : Array[PlanOp]) -> Bool {
 }
 
 ///|
-/// Whether the value JSONMend hands over was produced by rewriting the input:
+/// Whether the value InterJSON hands over was produced by rewriting the input:
 /// `true` as soon as any repair was recorded, including the ones that only
 /// normalise notation.
 pub fn RepairPlan::normalized(self : RepairPlan) -> Bool {
@@ -553,7 +553,7 @@ fn check_schema(schema : Schema?, value : Json) -> SchemaCheck {
 /// The plan for a refused input (FR-33). `E010` and `E011` carry the repair that
 /// was refused, so the plan keeps it as an operation: the caller can show the
 /// same "why" for a refusal as for an accepted repair.
-fn plan_of_error(e : MendError, input : String) -> RepairPlan {
+fn plan_of_error(e : InterJSONError, input : String) -> RepairPlan {
   let code = e.code()
   let refused = match e {
     StrictViolation(c, p, m) => Some((c, p, m, Unambiguous))
@@ -661,7 +661,7 @@ pub fn analyze(
 ///|
 /// Whether the refusal is "there is no JSON here", the only one that says
 /// anything about `skip_prose`.
-fn refused_no_json(e : MendError) -> Bool {
+fn refused_no_json(e : InterJSONError) -> Bool {
   match e {
     NoJsonFound(_) => true
     _ => false
@@ -675,7 +675,7 @@ fn analyze_once(
   opts : Options,
   step : Int32,
   schema : Schema?,
-) -> RepairPlan raise MendError {
+) -> RepairPlan raise InterJSONError {
   let engine = Engine::make(opts)
   engine.feed_str(input)
   plan_of_final(engine.finish_engine(), input, step, schema)
@@ -701,13 +701,13 @@ pub fn PartialParser::analyze(
 }
 
 ///|
-/// Render `self` as the `jsonmend explain` block (FR-33).
+/// Render `self` as the `interjson explain` block (FR-33).
 ///
 /// `input` is optional; when it is passed it is echoed under `Input:` truncated
 /// to one line, so the block is self-contained in a log.
 pub fn RepairPlan::explain_text(self : RepairPlan, input? : String) -> String {
   let sb = StringBuilder()
-  sb.write_string("JSONMend Analysis\n")
+  sb.write_string("InterJSON Analysis\n")
   sb.write_string(
     "────────────────────────────────\n",
   )
@@ -855,7 +855,7 @@ fn kv(key : String, value : String) -> String {
 }
 
 ///|
-/// Machine readable form of the plan, for `jsonmend explain --json` and for the
+/// Machine readable form of the plan, for `interjson explain --json` and for the
 /// browser demo. Field names are part of the contract.
 pub fn RepairPlan::to_json(self : RepairPlan) -> String {
   let sb = StringBuilder()

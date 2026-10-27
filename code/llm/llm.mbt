@@ -1,5 +1,5 @@
-// jsonmend/llm — adapt the tool-call fragment streams of large language model
-// providers into `jsonmend` partial parses (FR-23).
+// interjson/llm — adapt the tool-call fragment streams of large language model
+// providers into `interjson` partial parses (FR-23).
 //
 // The package is pure: it never opens a socket and never owns an HTTP client.
 // Its input is the text of one already-extracted event payload; how that text
@@ -89,9 +89,9 @@ pub(all) struct ToolCallView {
   /// Function name, when the provider sent one.
   name : String
   /// Partial parse of the arguments received so far.
-  snapshot : @mend.Snapshot
+  snapshot : @interjson.Snapshot
   /// Exactness of `snapshot`.
-  exactness : @mend.Exactness
+  exactness : @interjson.Exactness
   /// Whether the provider signalled the end of this call's arguments.
   done : Bool
   /// How the call ended (FR-30).
@@ -107,7 +107,7 @@ struct ToolCall {
   index : Int32
   mut id : String
   mut name : String
-  mut parser : @mend.PartialParser?
+  mut parser : @interjson.PartialParser?
   mut done : Bool
   mut end : CallEnd
   mut stop_reason : String
@@ -120,7 +120,7 @@ struct ToolCall {
 /// Accumulates the tool calls of one model response.
 pub struct ToolStream {
   provider : Provider
-  options : @mend.Options
+  options : @interjson.Options
   calls : Array[ToolCall]
   /// Explanation of the last `error` event, "" when none arrived.
   mut error_message : String
@@ -135,11 +135,11 @@ pub struct ToolStream {
 /// that enables delta tracking and leaves the exactness gate open.
 pub fn ToolStream::new(
   provider : Provider,
-  options? : @mend.Options,
-) -> ToolStream raise @mend.MendError {
+  options? : @interjson.Options,
+) -> ToolStream raise @interjson.InterJSONError {
   let opts = match options {
     Some(o) => o
-    None => @mend.Options::for_llm()
+    None => @interjson.Options::for_llm()
   }
   opts.validate()
   { provider, options: opts, calls: [], error_message: "", ignored: 0, }
@@ -172,11 +172,11 @@ fn ToolStream::call_at(self : ToolStream, index : Int32) -> ToolCall {
 fn ToolStream::parser_of(
   self : ToolStream,
   c : ToolCall,
-) -> @mend.PartialParser raise @mend.MendError {
+) -> @interjson.PartialParser raise @interjson.InterJSONError {
   match c.parser {
     Some(p) => p
     None => {
-      let p = @mend.PartialParser::new(options=self.options)
+      let p = @interjson.PartialParser::new(options=self.options)
       c.parser = Some(p)
       p
     }
@@ -192,9 +192,9 @@ fn ToolStream::view(self : ToolStream, c : ToolCall) -> ToolCallView {
     None =>
       {
         value: None,
-        completeness: @mend.Empty,
+        completeness: @interjson.Empty,
         open_path: [],
-        exactness: @mend.Exact,
+        exactness: @interjson.Exact,
         ambiguous: false,
       }
   }
@@ -216,7 +216,7 @@ fn ToolStream::push_arguments(
   self : ToolStream,
   c : ToolCall,
   fragment : String,
-) -> Unit raise @mend.MendError {
+) -> Unit raise @interjson.InterJSONError {
   c.text.write_string(fragment)
   let p = self.parser_of(c)
   p.feed(fragment)
@@ -228,7 +228,7 @@ fn ToolStream::close_call(
   _self : ToolStream,
   c : ToolCall,
   end : CallEnd,
-) -> Unit raise @mend.MendError {
+) -> Unit raise @interjson.InterJSONError {
   match c.parser {
     Some(p) => if !c.done { ignore(p.finish()) }
     // A call whose name arrived but whose arguments never did has no parser:
@@ -287,9 +287,9 @@ fn ToolStream::note_error(self : ToolStream, message : String) -> Unit {
 pub fn ToolStream::push_event(
   self : ToolStream,
   event_json : String,
-) -> Array[ToolCallView] raise @mend.MendError {
+) -> Array[ToolCallView] raise @interjson.InterJSONError {
   let v = @json.parse(event_json) catch {
-    _ => raise @mend.InvalidEvent("event payload is not valid JSON")
+    _ => raise @interjson.InvalidEvent("event payload is not valid JSON")
   }
   let touched = match self.provider {
     Anthropic => self.push_anthropic(v)
@@ -321,11 +321,11 @@ pub fn ToolStream::ignored_events(self : ToolStream) -> Int32 {
 /// Finish every call that the provider never closed, and return all views.
 ///
 /// This is the case of a response cut short by `max_tokens`: the arguments are
-/// truncated, so `jsonmend` closes the open containers and the view's
+/// truncated, so `interjson` closes the open containers and the view's
 /// exactness is `Lossy`.
 pub fn ToolStream::finish(
   self : ToolStream,
-) -> Array[ToolCallView] raise @mend.MendError {
+) -> Array[ToolCallView] raise @interjson.InterJSONError {
   let out : Array[ToolCallView] = []
   for c in self.calls {
     // A call the provider never closed was cut off: the stream stopped without

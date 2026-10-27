@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>JSONMend 控制台 — 流式 JSON 修复与执行门</title>
+    <title>InterJSON 控制台 — 流式 JSON 修复与执行门</title>
     <meta
       name="description"
-      content="JSONMend 交互控制台：22 条修复规则、五种安全档位、执行门判定、流式部分解析、字段就绪曲线与 CLI。页面里每一次修复都由 MoonBit 编译出的 jsonmend.js 现场完成。"
+      content="InterJSON 交互控制台：22 条修复规则、五种安全档位、执行门判定、流式部分解析、字段就绪曲线与 CLI。页面里每一次修复都由 MoonBit 编译出的 interjson.js 现场完成。"
     />
     <style>
       :root {
@@ -310,7 +310,7 @@
       <div class="top-inner">
         <a class="brand" href="#top">
           <span class="mark" aria-hidden="true">{}</span>
-          <span>JSONMend <small>v1.3.0</small></span>
+          <span>InterJSON <small>v1.4.0</small></span>
         </a>
         <nav class="links" aria-label="页面章节">
           <a href="#workbench" data-nav="workbench">工作台</a>
@@ -331,7 +331,7 @@
     <main id="top">
       <div class="wrap">
         <div id="no-engine-banner" class="banner" hidden>
-          <b>jsonmend.js 没有加载</b>：页面里的每一次修复、判定与就绪测量都需要它。请用
+          <b>interjson.js 没有加载</b>：页面里的每一次修复、判定与就绪测量都需要它。请用
           <code>python3 -m http.server 8000 -d static/demo</code> 打开，或先跑
           <code>bash static/demo/build.sh</code> 重新生成 bundle。下面的规则表、CLI 与接入面仍然可读。
         </div>
@@ -342,10 +342,10 @@
           <span class="kicker">LLM JSON 的执行门 · 纯 MoonBit</span>
           <h1 id="hero-title">不要等合法 JSON，<br />先问<em>我已经知道了什么</em>。</h1>
           <p class="lead">
-            JSONMend 修复正在生成中的坏 JSON：能修就修、修不了就补全，并在一次调用里回答
+            InterJSON 修复正在生成中的坏 JSON：能修就修、修不了就补全，并在一次调用里回答
             「这份结果能不能直接执行、为什么不能、怎么让模型改」。这一页的每一次修复、每一帧快照、
             每一个判定，都由 <code>code/examples/web/main.mbt</code> 编译出的
-            <code>jsonmend.js</code> 在浏览器里现场完成，页面里没有第二份实现。
+            <code>interjson.js</code> 在浏览器里现场完成，页面里没有第二份实现。
           </p>
           <div class="hero-actions">
             <a class="pill info" href="#workbench">从工作台开始 ↓</a>
@@ -694,7 +694,7 @@
         <div class="band-head">
           <span class="band-num">06</span>
           <h2 class="band-title" id="cli-title">命令行</h2>
-          <span class="band-tag">jsonmend · 退出码 0/1/2/3/4/5/70</span>
+          <span class="band-tag">interjson · 退出码 0/1/2/3/4/5/70</span>
         </div>
         <p class="band-sub">
           同一个引擎的原生 CLI。勾选参数、选择子命令，右边就是可以直接粘贴的一行。
@@ -712,7 +712,7 @@
               <input id="cli-file" type="text" value="broken.json" style="max-width: 12rem" aria-label="输入文件路径" />
             </div>
             <div class="chips" id="cli-flags" style="margin-top: 10px"></div>
-            <pre id="cli-out" class="short" style="margin-top: 10px">jsonmend broken.json</pre>
+            <pre id="cli-out" class="short" style="margin-top: 10px">interjson broken.json</pre>
             <div class="row" style="margin-top: 8px">
               <button id="cli-copy" type="button" data-copy="cli-out">复制命令</button>
               <span class="hint" style="margin: 0">文件为 <code>-</code> 或缺省时读取标准输入。</span>
@@ -726,7 +726,7 @@
                 <tbody id="cli-exit-body"></tbody>
               </table>
             </div>
-            <h3 style="margin-top: 14px">致命错误（MendError，12 个变体）</h3>
+            <h3 style="margin-top: 14px">致命错误（InterJSONError，12 个变体）</h3>
             <div class="table-wrap" style="max-height: 16rem">
               <table>
                 <thead><tr><th>码</th><th>变体</th><th>退出码</th><th>触发</th></tr></thead>
@@ -756,7 +756,7 @@
             <b>这一页为什么可信</b>
             <ul>
               <li>输出必合法 JSON · 修复幂等 · 任意分块与一次性结果一致 · 快照是稳定前缀 · 任何字节序列不 panic。</li>
-              <li>页面里的每个数字都来自 <code>static/demo/jsonmend.js</code>（<code>code/examples/web/main.mbt</code> 的 MoonBit → JS 产物），没有为演示写的特例，也没有第二份解析器。</li>
+              <li>页面里的每个数字都来自 <code>static/demo/interjson.js</code>（<code>code/examples/web/main.mbt</code> 的 MoonBit → JS 产物），没有为演示写的特例，也没有第二份解析器。</li>
               <li>规则、错误码与退出码取自 <code>code/docs/RULES.md</code>、<code>code/docs/ERRORS.md</code>；质量数字取自 README 的证据表。</li>
             </ul>
           </div>
@@ -764,11 +764,11 @@
             <b>继续看</b>
             <ul>
               <li><a href="./live.html">live.html</a> — 四条真实场景逐帧重放</li>
-              <li><a href="./mcp.html">mcp.html</a> — 真实 Claude Code 会话的 E010 → 重试 → 放行</li>
+              <li><a href="./mcp.html">mcp.html</a> — 本地 MCP 执行门：真实 Claude Code 会话（录制于更名前，页面按新工具名重写）的 E010 → 重试 → 放行</li>
               <li><a href="./README.md">static/demo/README.md</a> — 本地打开方式</li>
               <li><a href="https://github.com/wenhuang2333/Moonbit-haker">GitHub 仓库</a> · <code>cd code &amp;&amp; moon test</code></li>
             </ul>
-            <p class="meta">JSONMend v1.3.0 · mooncakes <code>zhanshishan/jsonmend@0.10.0</code> · 页面无外部依赖，可离线打开。</p>
+            <p class="meta">InterJSON v1.4.0 · mooncakes <code>0.11.0</code> 已发布（2026-10-27）· 页面无外部依赖，可离线打开。</p>
           </div>
         </div>
       </footer>
@@ -776,7 +776,7 @@
 
     <script id="jm-fixtures" type="application/json">
       {
-        "version": "1.3.0",
+        "version": "1.4.0",
         "evidence": [
           { "n": "210", "label": "条白盒测试" },
           { "n": "4", "label": "个后端各 210/210" },
@@ -907,6 +907,7 @@
             { "flag": "--chunk", "arg": "64", "cmds": ["repair"], "desc": "仅与 --batch 同用：把每条输入按 N 个码元分块喂入" },
             { "flag": "--batch", "cmds": ["repair"], "desc": "逐行读 {id,input} JSON，逐行输出结果" },
             { "flag": "--step", "arg": "8", "cmds": ["readiness"], "desc": "每 N 个码元观察一次" },
+            { "flag": "--print-config", "cmds": ["mcp"], "desc": "打印客户端配置后退出；客户端用等号指定：--print-config=claude、cursor、vscode、codex、windsurf、zed、json（默认 json）" },
             { "flag": "--provider", "arg": "anthropic", "cmds": ["llm"], "desc": "anthropic（默认）或 openai" },
             { "flag": "--sse", "cmds": ["llm"], "desc": "输入是 SSE 文本" },
             { "flag": "--follow", "cmds": ["llm"], "desc": "每次增量都输出一行" }
@@ -915,39 +916,39 @@
         "surfaces": [
           {
             "title": "MCP · 模型主动调用",
-            "tag": "jsonmend mcp",
-            "cmd": "claude mcp add jsonmend -- jsonmend mcp",
-            "note": "四个工具：jsonmend_repair / jsonmend_analyze / jsonmend_validate / jsonmend_readiness。Claude Code、Cursor、Codex CLI、Gemini CLI、Cline、Windsurf 都能发现。"
+            "tag": "interjson mcp",
+            "cmd": "claude mcp add interjson -- interjson mcp",
+            "note": "四个只读工具：interjson_gate（主入口，默认 agent 档） / interjson_repair / interjson_validate / interjson_readiness；结果同时带文本与 structuredContent。Claude Code、Cursor、Codex CLI、Gemini CLI、Cline、Windsurf 都能发现。命令也可由 interjson mcp --print-config 生成。"
           },
           {
             "title": "stdio 协议 · 宿主应用",
-            "tag": "jsonmend serve",
-            "cmd": "jsonmend serve",
+            "tag": "interjson serve",
+            "cmd": "interjson serve",
             "note": "每行一个请求 JSON、每行一个响应 JSON 的长驻协议 v1；高频调用与流式场景的首选。方法：hello、repair、analyze、validate、readiness、watch.*、llm.*、shutdown。"
           },
           {
             "title": "npm · Node / TypeScript",
-            "tag": "jsonmend-moonbit",
+            "tag": "interjson-moonbit",
             "cmd": "npm install ./code/npm",
-            "note": "装完 import { analyze, repair } from \"jsonmend-moonbit\"，在执行工具参数前过闸。包名尚未发布到 npm 仓库，按仓库路径安装。"
+            "note": "装完 import { analyze, repair } from \"interjson-moonbit\"，在执行工具参数前过闸。包名尚未发布到 npm 仓库，按仓库路径安装。"
           },
           {
             "title": "pip · Python",
-            "tag": "jsonmend-moonbit",
+            "tag": "interjson-moonbit",
             "cmd": "pip install ./code/python",
-            "note": "from jsonmend import Client：复用同一个 jsonmend serve 进程，executable 为 false 时把 retry.prompt 原样回灌模型。"
+            "note": "from interjson import Client：复用同一个 interjson serve 进程，executable 为 false 时把 retry.prompt 原样回灌模型。"
           },
           {
             "title": "HTTP · n8n / Dify / Coze",
-            "tag": "jsonmend-http",
-            "cmd": "jsonmend-http --port 8080",
+            "tag": "interjson-http",
+            "cmd": "interjson-http --port 8080",
             "note": "随 Python 包一起安装的 HTTP facade，给不会起子进程的工作流引擎用。"
           },
           {
             "title": "MoonBit 库 · 进程内",
-            "tag": "moon add zhanshishan/jsonmend",
-            "cmd": "let p = @jsonmend.PartialParser::new()",
-            "note": "不想起子进程时直接用库：PartialParser 逐个码元喂，analyze 给出同一份执行门判断。mooncakes 对应 0.10.0（尚未上传），与 1.3.0 除版本字符串外逐字节相同。"
+            "tag": "moon add zhanshishan/interjson",
+            "cmd": "let p = @interjson.PartialParser::new()",
+            "note": "不想起子进程时直接用库：PartialParser 逐个码元喂，analyze 给出同一份执行门判断。mooncakes 0.11.0 已发布（2026-10-27），与 1.4.0 除版本字符串外逐字节相同。"
           }
         ]
       }
@@ -955,21 +956,21 @@
 
     <script>
       // Host hooks: the MoonBit bundle calls these from its main function.
-      globalThis.jsonmendRegister1 = function (name, fn) {
-        globalThis.jsonmend = globalThis.jsonmend || {};
-        globalThis.jsonmend[name] = fn;
+      globalThis.interjsonRegister1 = function (name, fn) {
+        globalThis.interjson = globalThis.interjson || {};
+        globalThis.interjson[name] = fn;
       };
-      globalThis.jsonmendRegister2 = globalThis.jsonmendRegister1;
-      globalThis.jsonmendRegister3 = globalThis.jsonmendRegister1;
+      globalThis.interjsonRegister2 = globalThis.interjsonRegister1;
+      globalThis.interjsonRegister3 = globalThis.interjsonRegister1;
     </script>
-    <script src="./jsonmend.js" onerror="window.__jmBundleFailed = true"></script>
+    <script src="./interjson.js" onerror="window.__jmBundleFailed = true"></script>
     <script>
       (() => {
         "use strict";
 
         const $ = (id) => document.getElementById(id);
         const F = JSON.parse($("jm-fixtures").textContent);
-        const engine = globalThis.jsonmend || null;
+        const engine = globalThis.interjson || null;
         const api = (name) =>
           engine && typeof engine[name] === "function" ? engine[name] : null;
         const hasEngine = Boolean(api("analyze") && api("live"));
@@ -1050,7 +1051,7 @@
         const themeButton = $("theme-toggle");
         const storedTheme = (() => {
           try {
-            return localStorage.getItem("jsonmend-theme");
+            return localStorage.getItem("interjson-theme");
           } catch {
             return null;
           }
@@ -1069,7 +1070,7 @@
             document.documentElement.dataset.theme === "dark" ? "light" : "dark";
           applyTheme(next);
           try {
-            localStorage.setItem("jsonmend-theme", next);
+            localStorage.setItem("interjson-theme", next);
           } catch {
             /* private mode: the page still works */
           }
@@ -1248,7 +1249,7 @@
           const analyze = api($("wb-skip-prose").checked ? "analyze_prose" : "analyze");
           if (!analyze) {
             workbenchFailure(
-              "jsonmend.js 没有加载。请通过 HTTP 打开本页，或先运行 bash static/demo/build.sh。",
+              "interjson.js 没有加载。请通过 HTTP 打开本页，或先运行 bash static/demo/build.sh。",
             );
             return;
           }
@@ -1447,7 +1448,7 @@
               : api("analyze");
           if (!fn) {
             $("gate-verdict").className = "verdict bad";
-            $("gate-verdict").textContent = "jsonmend.js 没有加载";
+            $("gate-verdict").textContent = "interjson.js 没有加载";
             $("gate-plan").textContent = "需要先加载引擎 bundle。";
             return;
           }
@@ -1571,7 +1572,7 @@
           stState.upto = upto;
           const live = api("live");
           if (!live) {
-            $("st-text").textContent = "jsonmend.js 没有加载";
+            $("st-text").textContent = "interjson.js 没有加载";
             $("st-meta").textContent = "需要引擎 bundle 才能逐帧重放。";
             return;
           }
@@ -1912,7 +1913,7 @@
           const fn = api("readiness");
           if (!fn) {
             $("rd-verdict").className = "verdict bad";
-            $("rd-verdict").textContent = "jsonmend.js 没有加载";
+            $("rd-verdict").textContent = "interjson.js 没有加载";
             return;
           }
           const parsed = parseJson(fn(rdState.scenario.text, $("rd-schema").value));
@@ -2054,7 +2055,7 @@
           return /[^\w@%+=:,./-]/.test(value) ? "'" + value.replace(/'/g, "'\\''") + "'" : value;
         }
         function cliBuild() {
-          const parts = ["jsonmend"];
+          const parts = ["interjson"];
           if (cliState.cmd !== "repair") parts.push(cliState.cmd);
           for (const flag of F.cli.flags) {
             if (!cliState.flags.has(flag.flag)) continue;

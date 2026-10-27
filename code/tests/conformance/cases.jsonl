@@ -1,4 +1,4 @@
-{"name":"hello","steps":[{"request":{"id":1,"method":"hello"},"expect":{"ok":true,"result":{"name":"jsonmend","engine":"$engine","registry":"$registry","protocol":1,"streams":1}}}]}
+{"name":"hello","steps":[{"request":{"id":1,"method":"hello"},"expect":{"ok":true,"result":{"name":"interjson","engine":"$engine","registry":"$registry","protocol":1,"streams":1}}}]}
 {"name":"repair-simple","steps":[{"request":{"id":2,"method":"repair","params":{"text":"{a:1,}"}},"expect":{"ok":true,"result":{"text":"{\"a\":1}","exactness":"cosmetic","ambiguous":false,"completeness":"complete","repairs_truncated":false}}}]}
 {"name":"repair-truncated","steps":[{"request":{"id":3,"method":"repair","params":{"text":"{\"a\":{\"b\":[1,2"}},"expect":{"ok":true,"result":{"text":"{\"a\":{\"b\":[1,2]}}","completeness":"complete"}}}]}
 {"name":"analyze-safe","steps":[{"request":{"id":4,"method":"analyze","params":{"text":"{\"a\":1}","profile":"execution"}},"expect":{"ok":true,"result":{"decision":"safe","executable":true,"valid_json":true,"normalized":false,"execution":"allowed"}}}]}

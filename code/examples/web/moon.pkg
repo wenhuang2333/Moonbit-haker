@@ -1,5 +1,5 @@
 import {
-  "zhanshishan/jsonmend" @mend,
+  "zhanshishan/interjson",
 }
 
 pkgtype(kind: "executable")

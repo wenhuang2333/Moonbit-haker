@@ -1,8 +1,8 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "zhanshishan/jsonmend/llm"
+package "zhanshishan/interjson/llm"
 
 import {
-  "zhanshishan/jsonmend",
+  "zhanshishan/interjson",
 }
 
 // Values
@@ -59,7 +59,7 @@ pub fn SseBuffer::push(Self, String) -> Array[String]
 
 pub struct TextStream {
   provider : Provider
-  parser : @jsonmend.PartialParser
+  parser : @interjson.PartialParser
   buf : StringBuilder
   mut end : CallEnd
   mut stop_reason : String
@@ -69,10 +69,10 @@ pub struct TextStream {
 }
 pub fn TextStream::end(Self) -> CallEnd
 pub fn TextStream::error(Self) -> String
-pub fn TextStream::finish(Self) -> @jsonmend.FinalResult?
+pub fn TextStream::finish(Self) -> @interjson.FinalResult?
 pub fn TextStream::ignored_events(Self) -> Int32
-pub fn TextStream::new(Provider, options? : @jsonmend.Options) -> Self raise @jsonmend.MendError
-pub fn TextStream::push_event(Self, String) -> @jsonmend.Snapshot? raise @jsonmend.MendError
+pub fn TextStream::new(Provider, options? : @interjson.Options) -> Self raise @interjson.InterJSONError
+pub fn TextStream::push_event(Self, String) -> @interjson.Snapshot? raise @interjson.InterJSONError
 pub fn TextStream::stop_reason(Self) -> String
 pub fn TextStream::text(Self) -> String
 
@@ -82,8 +82,8 @@ pub(all) struct ToolCallView {
   index : Int32
   id : String
   name : String
-  snapshot : @jsonmend.Snapshot
-  exactness : @jsonmend.Exactness
+  snapshot : @interjson.Snapshot
+  exactness : @interjson.Exactness
   done : Bool
   end : CallEnd
   stop_reason : String
@@ -91,17 +91,17 @@ pub(all) struct ToolCallView {
 
 pub struct ToolStream {
   provider : Provider
-  options : @jsonmend.Options
+  options : @interjson.Options
   calls : Array[ToolCall]
   mut error_message : String
   mut ignored : Int32
 }
 pub fn ToolStream::arguments(Self, Int32) -> String
 pub fn ToolStream::error(Self) -> String
-pub fn ToolStream::finish(Self) -> Array[ToolCallView] raise @jsonmend.MendError
+pub fn ToolStream::finish(Self) -> Array[ToolCallView] raise @interjson.InterJSONError
 pub fn ToolStream::ignored_events(Self) -> Int32
-pub fn ToolStream::new(Provider, options? : @jsonmend.Options) -> Self raise @jsonmend.MendError
-pub fn ToolStream::push_event(Self, String) -> Array[ToolCallView] raise @jsonmend.MendError
+pub fn ToolStream::new(Provider, options? : @interjson.Options) -> Self raise @interjson.InterJSONError
+pub fn ToolStream::push_event(Self, String) -> Array[ToolCallView] raise @interjson.InterJSONError
 pub fn ToolStream::views(Self) -> Array[ToolCallView]
 
 // Type aliases

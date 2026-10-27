@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Ground-truth corpus for the JSONMend evaluation (I-4).
+"""Ground-truth corpus for the InterJSON evaluation (I-4).
 
 Every case is produced together with the correct answer, computed from the value
-tree *before* the mutation. Neither JSONMend nor any oracle is consulted, so
+tree *before* the mutation. Neither InterJSON nor any oracle is consulted, so
 "the result differs from the truth" is a fact rather than an opinion.
 
 The protocol is pre-registered in `code/docs/EVAL_REGISTRATION.md`; this file is

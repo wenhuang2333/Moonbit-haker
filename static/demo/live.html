@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>JSONMend Live — Don't wait for valid JSON</title>
+    <title>InterJSON Live — Don't wait for valid JSON</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -168,14 +168,14 @@
   </head>
   <body>
     <main>
-      <h1>JSONMend Live <small>Don't wait for valid JSON.</small></h1>
+      <h1>InterJSON Live <small>Don't wait for valid JSON.</small></h1>
       <p class="lead">
-        模型是一个码元一个码元写 JSON 的。左边是它已经写出来的内容，右边是 JSONMend
+        模型是一个码元一个码元写 JSON 的。左边是它已经写出来的内容，右边是 InterJSON
         现在就已经知道的结构 —— 以及现在能不能安全执行。
       </p>
       <p class="label">
         还有接入演示 · <a href="./mcp.html">mcp.html</a> —— 一行 MCP 配置与真实的
-        <code>jsonmend_analyze</code> 拒绝 → 重试。返回 <a href="./index.html">演示目录</a>。
+        <code>interjson_gate</code> 拒绝 → 重试。返回 <a href="./index.html">演示目录</a>。
       </p>
 
       <div class="tabs" id="tabs"></div>
@@ -210,21 +210,23 @@
       <section id="surfaces" hidden>
         <h2 class="paneltitle">接入面 · 五种接入方式，同一个引擎</h2>
         <p class="panelnote">
-          每一条都从仓库检出直接跑：<code>claude mcp add</code> 一行、<code>jsonmend serve</code>
+          每一条都从仓库检出直接跑：<code>claude mcp add</code> 一行、<code>interjson serve</code>
           一个长驻进程、两个语言包按仓库路径安装。npm 与 PyPI 上的
-          <code>jsonmend</code> 名字已被无关项目占用，本仓库的包名是
-          <code>jsonmend-moonbit</code>，<b>尚未发布到任何注册表</b>，所以下面写的是仓库路径。
+          <code>interjson</code> 名字已被无关项目占用，本仓库的包名是
+          <code>interjson-moonbit</code>，<b>尚未发布到任何注册表</b>，所以下面写的是仓库路径。
         </p>
         <div class="surfaces" id="surface-list"></div>
         <p class="meta">
-          安全默认：库默认 <code>permissive</code>（显示通道该尽量修）；任何<b>执行</b>路径必须显式传
-          <code>profile="agent"</code> 或 <code>"execution"</code>，否则这道门只是建议。
+          安全默认：库默认 <code>permissive</code>（显示通道该尽量修）；MCP 的
+          <code>interjson_gate</code> 默认 <code>agent</code>（不给 profile 也不会替模型猜）；
+          库与 <code>serve</code> 的执行路径必须显式传 <code>profile="agent"</code> 或
+          <code>"execution"</code>，否则这道门只是建议。
         </p>
 
         <h2 class="paneltitle">粘一个工具的 inputSchema，当场看这道门怎么判</h2>
         <p class="panelnote">
           左边就是工具声明里已有的 <code>inputSchema</code>，右边是模型这次写出来的参数；
-          两个值直接喂给页面里这份 <code>jsonmend.js</code>，不是预写的结果。
+          两个值直接喂给页面里这份 <code>interjson.js</code>，不是预写的结果。
         </p>
         <div class="grid">
           <section class="card">
@@ -266,9 +268,9 @@
       </section>
 
       <footer>
-        页面里的每一帧都来自同一个 <code>@mend.PartialParser</code> 与
-        <code>@mend.analyze</code>，用 MoonBit 编译成的
-        <code>jsonmend.js</code> 在浏览器里直接跑；没有第二个解析器，也没有为演示写的特例。
+        页面里的每一帧都来自同一个 <code>@interjson.PartialParser</code> 与
+        <code>@interjson.analyze</code>，用 MoonBit 编译成的
+        <code>interjson.js</code> 在浏览器里直接跑；没有第二个解析器，也没有为演示写的特例。
         “schema ready”是声明过的必填参数全部定稿时消耗的输入比例，“execution ready”
         是在此基础上确认当前前缀没有第二种读法。语法本身要到流的末尾才闭合 ——
         这正是本项目想说的事：<b>不要等合法 JSON，要问我已经知道了什么。</b>
@@ -277,21 +279,21 @@
 
     <script>
       // Host hooks: the MoonBit bundle calls these from its main function.
-      globalThis.jsonmendRegister1 = function (name, fn) {
-        globalThis.jsonmend = globalThis.jsonmend || {};
-        globalThis.jsonmend[name] = fn;
+      globalThis.interjsonRegister1 = function (name, fn) {
+        globalThis.interjson = globalThis.interjson || {};
+        globalThis.interjson[name] = fn;
       };
-      globalThis.jsonmendRegister2 = globalThis.jsonmendRegister1;
-      globalThis.jsonmendRegister3 = globalThis.jsonmendRegister1;
+      globalThis.interjsonRegister2 = globalThis.interjsonRegister1;
+      globalThis.interjsonRegister3 = globalThis.interjsonRegister1;
     </script>
-    <script src="./jsonmend.js"></script>
+    <script src="./interjson.js"></script>
     <script>
       const $ = (id) => document.getElementById(id);
       // The bundle is optional. The page is a static file: it is opened from
-      // file:// as well as over HTTP, and jsonmend.js may be missing or
+      // file:// as well as over HTTP, and interjson.js may be missing or
       // blocked. The static content — the four scenario tabs and the access
       // surfaces — must still render, so nothing here may throw.
-      const engine = globalThis.jsonmend || null;
+      const engine = globalThis.interjson || null;
       const live =
         engine && typeof engine.live === "function" ? engine.live : null;
 
@@ -339,16 +341,17 @@
         {
           id: "mcp",
           title: "MCP · 模型主动调用",
-          cmd: "claude mcp add jsonmend -- jsonmend mcp",
+          cmd: "claude mcp add interjson -- interjson mcp",
           note:
-            'Claude Code、Cursor、Codex CLI、Gemini CLI、Cline、Windsurf 都能发现：jsonmend_analyze / jsonmend_repair / jsonmend_validate / jsonmend_readiness 四个工具，由模型自己决定何时调用。',
+            'Claude Code、Cursor、Codex CLI、Gemini CLI、Cline、Windsurf 都能发现：interjson_gate（主入口，默认 agent 档） / interjson_repair / interjson_validate / interjson_readiness 四个只读工具，由模型自己决定何时调用。',
           label: "Cursor / Cline / Windsurf 的 mcp.json",
-          extra: '{"mcpServers":{"jsonmend":{"command":"jsonmend","args":["mcp"]}}}',
+          extra: '{"mcpServers":{"interjson":{"command":"interjson","args":["mcp"]}}}',
+          foot: "也能让 CLI 直接打印：interjson mcp --print-config=claude（或 cursor / vscode / codex / windsurf / zed / json）。",
         },
         {
           id: "stdio",
           title: "stdio 协议 · 宿主应用",
-          cmd: "jsonmend serve",
+          cmd: "interjson serve",
           note:
             "每行一个请求 JSON、每行一个响应 JSON 的长驻协议 v1：任何能起子进程的语言都能用，高频调用与流式场景的首选。",
           label: "一行请求",
@@ -359,30 +362,30 @@
           title: "npm · Node / TypeScript 宿主",
           cmd: "npm install ./code/npm",
           note:
-            '装完 import { analyze } from "jsonmend-moonbit"，在执行工具参数前过闸；与这个页面里跑的是同一份引擎。',
+            '装完 import { analyze } from "interjson-moonbit"，在执行工具参数前过闸；与这个页面里跑的是同一份引擎。',
           label: "用法",
-          extra: 'import { analyze, repair } from "jsonmend-moonbit";',
-          foot: "包名 jsonmend-moonbit，尚未发布到 npm 仓库，按仓库路径安装。",
+          extra: 'import { analyze, repair } from "interjson-moonbit";',
+          foot: "包名 interjson-moonbit，尚未发布到 npm 仓库，按仓库路径安装。",
         },
         {
           id: "pip",
           title: "pip · Python 宿主（+ HTTP）",
           cmd: "pip install ./code/python",
           note:
-            "from jsonmend import Client：Client 复用同一个 jsonmend serve 进程，executable 为 false 时把 retry.prompt 原样回灌模型；装完还带 jsonmend-mcp 与 jsonmend-http。",
+            "from interjson import Client：Client 复用同一个 interjson serve 进程，executable 为 false 时把 retry.prompt 原样回灌模型；装完还带 interjson-mcp 与 interjson-http。",
           label: "HTTP facade（n8n / Dify / Coze / 网关）",
-          extra: "jsonmend-http --port 8080",
-          foot: "包名 jsonmend-moonbit，尚未发布到 PyPI 仓库，按仓库路径安装。",
+          extra: "interjson-http --port 8080",
+          foot: "包名 interjson-moonbit，尚未发布到 PyPI 仓库，按仓库路径安装。",
         },
         {
           id: "moonbit",
           title: "MoonBit 库 · 进程内",
-          cmd: "moon add zhanshishan/jsonmend",
+          cmd: "moon add zhanshishan/interjson",
           note:
             "不想起子进程时直接用库：PartialParser 逐个码元喂，analyze 给出同一份执行门判断。",
           label: "用法",
-          extra: "let p = @jsonmend.PartialParser::new()",
-          foot: "mooncakes 对应 0.10.0（尚未上传，平台只接受 0.x.y），与 1.3.0 除版本字符串外逐字节相同。",
+          extra: "let p = @interjson.PartialParser::new()",
+          foot: "mooncakes 0.11.0 已发布（2026-10-27，平台只接受 0.x.y），与 1.4.0 除版本字符串外逐字节相同。",
           wide: true,
         },
       ];
@@ -616,7 +619,7 @@
           verdict.textContent = "引擎未加载";
           verdict.className = "verdict bad";
           retry.hidden = true;
-          planOut.textContent = "jsonmend.js 没有加载，这一栏需要它；上面的接入面照着抄即可。";
+          planOut.textContent = "interjson.js 没有加载，这一栏需要它；上面的接入面照着抄即可。";
           $("plan-meta").textContent = "—";
           return;
         }
@@ -714,7 +717,7 @@
       function tick() {
         if (!live) {
           $("meta").textContent =
-            "引擎 bundle（jsonmend.js）没有加载：流式场景不可用，「接入面」一栏仍然可以照着抄。";
+            "引擎 bundle（interjson.js）没有加载：流式场景不可用，「接入面」一栏仍然可以照着抄。";
           return;
         }
         const scenario = scenarios[state.index];

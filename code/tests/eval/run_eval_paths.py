@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Run the registered corpus through the streaming paths and the adapter path.
 
-The registered evaluation (`run_eval.py`) drives `jsonmend --batch`, which feeds
+The registered evaluation (`run_eval.py`) drives `interjson --batch`, which feeds
 each document in one piece. That leaves two claim gaps:
 
   * the *streaming* path is never exercised, although it is the path a model
     drives;
-  * the `jsonmend/llm` adapters are only checked against synthetic fixtures.
+  * the `interjson/llm` adapters are only checked against synthetic fixtures.
 
 This harness closes both, against the same frozen corpus and the same truth:
 
@@ -14,10 +14,10 @@ This harness closes both, against the same frozen corpus and the same truth:
      so chunk boundaries fall inside tokens, escapes, surrogate pairs and
      multi-byte UTF-8 sequences;
   2. the adapter path: the same fragments are wrapped in Anthropic and
-     OpenAI-compatible tool-call events and read back with `jsonmend llm
+     OpenAI-compatible tool-call events and read back with `interjson llm
      --batch`.
 
-    python3 code/tests/eval/run_eval_paths.py --cli <path to jsonmend>
+    python3 code/tests/eval/run_eval_paths.py --cli <path to interjson>
 
 Exit status 0 when every path recovers the same value as the registered
 one-shot path.

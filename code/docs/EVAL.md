@@ -1,16 +1,16 @@
-# JSONMend 真值评测报告（I-4）
+# InterJSON 真值评测报告（I-4）
 
 本文件由 `code/tests/eval/run_eval.py` 生成，请勿手工编辑。
 
 | 项 | 值 |
 |----|----|
-| 登记 | [EVAL_REGISTRATION.md](EVAL_REGISTRATION.md) sha256 `17948c1bd936fde2` |
+| 登记 | [EVAL_REGISTRATION.md](EVAL_REGISTRATION.md) sha256 `6d98ec51c95f0475` |
 | 生成器 | `code/tests/eval/corpus.py` eval-2，种子 20261015 |
 | 语料 | `code/tests/eval/corpus.jsonl`，1200 条，sha256 `c528375a0d996a78` |
 | 生成跳过 | 1203 次尝试因算子不适用而丢弃（登记 §5） |
-| 被测二进制 | `/Users/zhanshishan/Desktop/Moonbit 黑客松/code/_build/native/release/build/cmd/jsonmend/jsonmend.exe`（sha256:e605ce8ffbe7d5c7, 750096 bytes） |
+| 被测二进制 | `./_build/native/release/build/cmd/interjson/interjson.exe`（sha256:4d9e23a05ce40f86, 753088 bytes） |
 | 工具链 | `moon 0.1.20261016 (1af328f 2026-10-16)` |
-| 运行时刻 | 2026-10-26T15:15:25Z |
+| 运行时刻 | 2026-10-27T09:23:37Z |
 | 退出码 | 0（0 = 全部验收判据通过） |
 
 ## 1. 总体
@@ -75,7 +75,7 @@
 | 版本 | 时间 | 语料 sha256 | N | 恢复率 | 差异 | 漏标 | 关键修订 |
 |------|------|-------------|----|--------|------|------|----------|
 | `eval-1` | 2026-10-15 | `5a435447f28eee72` | 1200 | 91.58% | 101 | 16 | — |
-| `eval-2` | 2026-10-26 | `c528375a0d996a78` | 1200 | 100.00% | 0 | 0 | 语料：撇号歧义、裸 token 合并、标量根 prose、截断的祖先语义；实现：R015/R017/R021 降为 Info、新增 R022、R018 判等（[EVAL_REGISTRATION.md](EVAL_REGISTRATION.md) §10） |
+| `eval-2` | 2026-10-27 | `c528375a0d996a78` | 1200 | 100.00% | 0 | 0 | 语料：撇号歧义、裸 token 合并、标量根 prose、截断的祖先语义；实现：R015/R017/R021 降为 Info、新增 R022、R018 判等（[EVAL_REGISTRATION.md](EVAL_REGISTRATION.md) §10） |
 
 `eval-1` 的 16 条漏标与 84 条语料缺陷的完整归因见
 [EVAL_REGISTRATION.md](EVAL_REGISTRATION.md) §10。
@@ -84,5 +84,5 @@
 
 见 [EVAL_REGISTRATION.md](EVAL_REGISTRATION.md) §9：本轮只覆盖合成语料的
 单点变异，不覆盖真实模型分布、多处变异组合与 >1 MiB 文档；性能与内存见
-[BENCHMARK.md](BENCHMARK.md)。
+`docs/BENCHMARK.md`。
 

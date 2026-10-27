@@ -1,4 +1,4 @@
-"""A thin, dependency-free client for the `jsonmend serve` protocol.
+"""A thin, dependency-free client for the `interjson serve` protocol.
 
 The server is a child process speaking one JSON object per line on stdin and
 stdout. A reader thread turns stdout into a queue so a request can time out
@@ -16,12 +16,12 @@ import threading
 from pathlib import Path
 from typing import Any, Iterable
 
-__all__ = ["Client", "JsonMendError", "find_binary", "repair", "analyze", "validate"]
+__all__ = ["Client", "InterJSONError", "find_binary", "repair", "analyze", "validate"]
 
 _EOF = object()
 
 
-class JsonMendError(RuntimeError):
+class InterJSONError(RuntimeError):
     """A structured refusal from the engine (`E010`, `E011`, `E070`, ...)."""
 
     def __init__(self, error: dict[str, Any]) -> None:
@@ -44,22 +44,22 @@ class JsonMendError(RuntimeError):
 def find_binary() -> str:
     """Locate the engine.
 
-    Order: `JSONMEND_BIN`, `PATH`, a binary bundled next to this package, then
+    Order: `INTERJSON_BIN`, `PATH`, a binary bundled next to this package, then
     the development build inside this repository.
     """
 
-    env = os.environ.get("JSONMEND_BIN")
+    env = os.environ.get("INTERJSON_BIN")
     if env:
         return env
-    found = shutil.which("jsonmend")
+    found = shutil.which("interjson")
     if found:
         return found
     here = Path(__file__).resolve().parent
-    for name in ("jsonmend", "jsonmend.exe"):
+    for name in ("interjson", "interjson.exe"):
         candidate = here / "bin" / name
         if candidate.is_file():
             return str(candidate)
-    # Development checkout: code/python/jsonmend/client.py -> code/
+    # Development checkout: code/python/interjson/client.py -> code/
     code_dir = here.parents[1]
     for target in ("native",):
         candidate = (
@@ -69,19 +69,19 @@ def find_binary() -> str:
             / "release"
             / "build"
             / "cmd"
-            / "jsonmend"
-            / "jsonmend.exe"
+            / "interjson"
+            / "interjson.exe"
         )
         if candidate.is_file():
             return str(candidate)
     raise FileNotFoundError(
-        "the jsonmend engine was not found; set JSONMEND_BIN, put `jsonmend` on "
-        "PATH, or build it with `moon build cmd/jsonmend --target native --release`"
+        "the interjson engine was not found; set INTERJSON_BIN, put `interjson` on "
+        "PATH, or build it with `moon build cmd/interjson --target native --release`"
     )
 
 
 class Client:
-    """A long-lived `jsonmend serve` process.
+    """A long-lived `interjson serve` process.
 
     Use it as a context manager, or call `close()`. One client is not shared
     between threads; a lock serialises requests so a caller that does share one
@@ -139,11 +139,11 @@ class Client:
                 del self._stderr_lines[:50]
 
     def request(self, method: str, **params: Any) -> Any:
-        """Send one request and return its `result`, or raise `JsonMendError`."""
+        """Send one request and return its `result`, or raise `InterJSONError`."""
         with self._lock:
             if self.proc.poll() is not None:
                 raise RuntimeError(
-                    f"jsonmend exited with {self.proc.returncode}; "
+                    f"interjson exited with {self.proc.returncode}; "
                     f"stderr: {' | '.join(self._stderr_lines[-3:])}"
                 )
             self._next_id += 1
@@ -157,20 +157,20 @@ class Client:
             try:
                 response = self._responses.get(timeout=self.timeout)
             except queue.Empty as exc:
-                raise TimeoutError(f"jsonmend did not answer `{method}` in {self.timeout}s") from exc
+                raise TimeoutError(f"interjson did not answer `{method}` in {self.timeout}s") from exc
             if response is _EOF:
                 raise RuntimeError(
-                    f"jsonmend closed the stream; stderr: {' | '.join(self._stderr_lines[-3:])}"
+                    f"interjson closed the stream; stderr: {' | '.join(self._stderr_lines[-3:])}"
                 )
             if response.get("id") != request_id:
                 # The protocol answers in order; a mismatch means the stream is
                 # out of sync, which is worth reporting rather than guessing.
                 raise RuntimeError(
-                    f"jsonmend answered id {response.get('id')} for request {request_id}"
+                    f"interjson answered id {response.get('id')} for request {request_id}"
                 )
             if response.get("ok"):
                 return response["result"]
-            raise JsonMendError(response.get("error") or {})
+            raise InterJSONError(response.get("error") or {})
 
     # -- methods ----------------------------------------------------------
 

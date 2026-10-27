@@ -4,11 +4,11 @@
 // script that registers its entry points through three host hooks. This module
 // installs the hooks, loads the script once, and exports the captured
 // functions. The global namespace is restored afterwards, so importing
-// `jsonmend` does not leave `jsonmendRegister*` or a `jsonmend` object behind.
+// `interjson` does not leave `interjsonRegister*` or a `interjson` object behind.
 
 const path = require("node:path");
 
-const HOOKS = ["jsonmendRegister1", "jsonmendRegister2", "jsonmendRegister3"];
+const HOOKS = ["interjsonRegister1", "interjsonRegister2", "interjsonRegister3"];
 
 function loadEngine() {
   const registered = Object.create(null);
@@ -20,7 +20,7 @@ function loadEngine() {
     };
   }
   try {
-    require(path.join(__dirname, "vendor", "jsonmend.js"));
+    require(path.join(__dirname, "vendor", "interjson.js"));
   } finally {
     for (const hook of HOOKS) {
       if (previous[hook] === undefined) {
@@ -37,14 +37,14 @@ const engine = loadEngine();
 
 function requireString(name, value) {
   if (typeof value !== "string") {
-    throw new TypeError(`jsonmend.${name}: input must be a string`);
+    throw new TypeError(`interjson.${name}: input must be a string`);
   }
 }
 
 function profileOf(options) {
   const profile = options && options.profile ? String(options.profile) : "";
   if (profile && !["permissive", "interactive", "execution", "agent", "strict"].includes(profile)) {
-    throw new TypeError(`jsonmend: unknown profile "${profile}"`);
+    throw new TypeError(`interjson: unknown profile "${profile}"`);
   }
   return profile;
 }
@@ -88,7 +88,7 @@ function analyze(input, options = {}) {
     plan = JSON.parse(engine.analyze(input, profile, options.schema || ""));
   }
   if (plan.decision === undefined) {
-    throw new Error(plan.error || "jsonmend.analyze: could not build a plan");
+    throw new Error(plan.error || "interjson.analyze: could not build a plan");
   }
   return plan;
 }

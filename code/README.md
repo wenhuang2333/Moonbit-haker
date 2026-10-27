@@ -1,19 +1,99 @@
-# JSONMend
+# InterJSON
 
-Streaming JSON repair and partial parsing in pure MoonBit.
+**The execution gate for LLM output — a local MCP server, one native binary.**
+
+InterJSON answers the only question between a model's tool call and the code
+that would run it: *may I execute this?* `interjson mcp` serves that decision
+over stdio as a Model Context Protocol server — no socket, no network, no API
+key, no model output leaving the machine. The engine underneath is pure MoonBit
+with wasm-gc, native, JS and wasm backends, and the same engine answers the same
+question for host-side callers (`serve`, npm, pip, HTTP).
 
 | | |
 | --- | --- |
-| Module | `zhanshishan/jsonmend` |
-| Version | 1.3.0 |
+| Module | `zhanshishan/interjson` |
+| Version | 1.4.0 |
 | License | Apache-2.0 |
-| Preferred target | `wasm` (also builds for `native` and `js`) |
-| Prebuilt binaries | [Release `v1.3.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.3.0) — Linux, macOS arm64 and Windows CLIs, wasm probe, browser bundle, `SHA256SUMS` |
-| Registry | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
+| MCP server | `interjson mcp`, also `interjson-mcp`; JSON-RPC 2.0 over stdio, protocol `2025-06-18` (`2024-11-05` accepted) |
+| Backends | wasm-gc, native, JS, wasm — one test suite, all four |
+| Prebuilt binaries | [Release `v1.4.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.4.0) — Linux, macOS arm64 and Windows `interjson` CLIs, wasm probe, browser bundle, `SHA256SUMS`. Older releases were published under the former name and keep the old asset prefix |
+| Registry | [`mooncakes.io zhanshishan/interjson`](https://mooncakes.io/docs/zhanshishan/interjson) — 0.11.0 (the 1.4.0 correspondence) is published; older releases are under the former name `zhanshishan/jsonmend` |
+| Deployment guide | [`docs/MCP.md`](docs/MCP.md) for the MCP server; [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) for host-side recipes |
+
+## The gate
+
+`interjson mcp` exposes four read-only tools. A client — Claude Code, Cursor,
+Cline, Windsurf, VS Code, Codex CLI, Zed, or anything that speaks MCP — starts
+the server locally and can then ask:
+
+| Tool | What it answers |
+| --- | --- |
+| `interjson_gate` | **may I execute this?** `decision`, `executable`, `exactness`, ambiguity, schema satisfaction, `value`, and `retry.prompt` when refused |
+| `interjson_repair` | what is the repaired document, and what changed? |
+| `interjson_validate` | is this legal JSON, and does it satisfy the declaration? |
+| `interjson_readiness` | at which input fraction is each declared field final? |
+
+`interjson_gate` defaults to the `agent` profile when the caller omits one:
+a lossy or ambiguous repair is refused instead of guessed, and the refusal
+carries a prompt that can be sent straight back to the model. Every tool is
+annotated read-only, idempotent, non-destructive and closed-world; the server
+never executes the JSON it inspects.
+
+### 60-second setup
+
+Install the binary — `moon build cmd/interjson --target native --release` gives
+you the `interjson` CLI; older release assets are the same engine
+under the old name — then:
+
+```sh
+claude mcp add interjson -- interjson mcp
+```
+
+For any other client, ask the binary for the snippet it needs:
+
+```sh
+interjson mcp --print-config=cursor    # mcpServers JSON (Cursor, Cline, Windsurf)
+interjson mcp --print-config=vscode    # servers JSON
+interjson mcp --print-config=codex     # TOML
+interjson mcp --print-config=zed       # context_servers JSON
+interjson mcp --print-config=claude    # Claude Code command
+```
+
+For example, Cursor/Cline/Windsurf read:
+
+```json
+{
+  "mcpServers": {
+    "interjson": { "command": "interjson", "args": ["mcp"] }
+  }
+}
+```
+
+### The loop
+
+```text
+model   : {"query":"weather in Par          <- truncated at max_tokens
+gate    : executable false, E010, retry.prompt
+model   : {"query":"weather in Paris","limit":3}
+gate    : executable true, decision safe, value
+execute : the value, not the string
+```
+
+The full session — a real truncated call, the returned prompt, the corrected
+call, per-client configuration, the security model and troubleshooting — is in
+[`docs/MCP.md`](docs/MCP.md). The deployment rule is one sentence: execute only
+when `executable` is true, otherwise send `retry.prompt` back and use the
+re-emitted arguments.
+
+The interactive demo is
+<https://wenhuang2333.github.io/Moonbit-haker/mcp.html>: a recorded Claude Code
+session where a truncated tool call is refused with `E010`, the model re-emits,
+and the second call passes the gate. The browser page replays the same four
+tools; the decision in it is the real engine's.
 
 ## Features
 
-### 0.5.0: "may I execute this" in one call
+### One call: "may I execute this"
 
 - **`SafetyPolicy`**: five named profiles — `permissive`, `interactive`, `execution`, `agent`,
   `strict` — over the safety-relevant `Options`. `Options::with_policy` replaces only the safety
@@ -22,9 +102,9 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 - **`analyze` returns the whole plan**:
 
   ```moonbit
-  let plan = @jsonmend.analyze(text,
-    options=@jsonmend.Options::for_agent(),
-    schema=@jsonmend.Schema::parse("{!query:string,!limit:integer}"))
+  let plan = @interjson.analyze(text,
+    options=@interjson.Options::for_agent(),
+    schema=@interjson.Schema::parse("{!query:string,!limit:integer}"))
   plan.decision          // Safe | CosmeticRepair | LossyRepair | Ambiguous | Invalid
   plan.is_executable()   // the only question a gate has to ask
   plan.repairs           // rule, action, position, confidence class, information loss
@@ -52,33 +132,53 @@ Streaming JSON repair and partial parsing in pure MoonBit.
 - **Repair records** for every change: stable code (`R001`…`R022`), position (UTF-16 offset plus 1-based line/column), severity, and a fixed English message.
 - **Exactness labels**: every result carries `Exact` / `Cosmetic` / `Lossy`, derived from the severities of the records. `Options::max_loss` turns the first repair that exceeds the budget into a fatal `E010`, so "repair, then execute the arguments" cannot happen silently.
 - **Ambiguity gate**: a repair that admits a second, equally self-consistent reading (`["a" "b"]`, `["a"+"b"]`, `[fast]`, `{"a":1} {"b":2}`) is recorded with an `Ambiguity` class and refused with `E011` under `Options::reject_ambiguous` / `Options::for_execution()`, before the exactness gate. 10/10 adversarial cases are flagged and refused, while both reference libraries answer all 10 with a silent value (`docs/EVAL_AMBIGUITY.md`).
-- **Reject as feedback**: `MendError::retry_hint` (and `--retry-hint`) turns a refusal into a prompt fragment — error code, repair code, position, the second reading, a bounded context window with a caret — that can be fed straight back to the model that produced the input.
+- **Reject as feedback**: `InterJSONError::retry_hint` (and `--retry-hint`) turns a refusal into a prompt fragment — error code, repair code, position, the second reading, a bounded context window with a caret — that can be fed straight back to the model that produced the input.
 - **Field readiness (FR-29)**: `field_readiness` reports, for every top-level member, the input fraction at which its value is already final, and `FieldTracker` does the same from the delta stream, so a caller can stop the generation as soon as the fields it needs are settled. The decile curve replaces the "95% coverage" figure that an object made structurally uninformative.
 - **Incremental deltas**: with `Options::collect_deltas`, `drain_deltas()` returns `Set` / `AppendText` / `Close` operations with RFC 6901 JSON Pointer paths, so a consumer can patch its own view instead of re-reading snapshots.
-- **LLM provider adapters** in the `jsonmend/llm` sub-package (*experimental*): Anthropic fine-grained tool streaming and OpenAI-compatible tool-call deltas, an SSE framer, and a text stream that reads the JSON out of `delta.text` / `delta.content`. The end of a call is reported as `Complete`, `MaxTokens`, `Interrupted` or `ProviderError` with the provider's own `stop_reason` verbatim; `ping` and unknown event types are counted and ignored. `jsonmend llm` on the command line.
+- **LLM provider adapters** in the `interjson/llm` sub-package (*experimental*): Anthropic fine-grained tool streaming and OpenAI-compatible tool-call deltas, an SSE framer, and a text stream that reads the JSON out of `delta.text` / `delta.content`. The end of a call is reported as `Complete`, `MaxTokens`, `Interrupted` or `ProviderError` with the provider's own `stop_reason` verbatim; `ping` and unknown event types are counted and ignored. `interjson llm` on the command line.
 - **Strict mode** (`Mode::Strict`) turns the first repair into a fatal `E010`, and per-rule switches disable individual rules the same way.
 - **Resource limits**: nesting depth, total input length, and single-token length (`E020`/`E021`/`E022`).
 - **Policies** for duplicate keys, non-finite numbers, multiple root values, Markdown fences, leading prose, ambiguous quotes, and output indentation.
-- **Multi-backend**: the library is pure MoonBit with no regex and no recursion; `bench` runs on `native` and `js`.
-- **CLI and browser demo**: `cmd/jsonmend` for the command line, `examples/web` for the browser.
+- **Multi-backend**: the library is pure MoonBit with no regex and no recursion; the same engine compiles to wasm-gc, native, JS and wasm, and `bench` runs on `native` and `js`.
+- **CLI and browser demo**: `cmd/interjson` for the command line, `examples/web` for the browser.
 
 ## Why you need it
 
-LLM applications stream JSON token by token, and the stream is routinely cut off mid-value, wrapped in a Markdown fence, written with single quotes, or padded with prose and comments. A strict parser rejects the whole payload, so the application shows nothing until the end — and sometimes never. JSONMend keeps the last confirmed prefix available after every chunk and repairs the flaws along the way, so a partial result is usable immediately and the final result is valid JSON. The same engine drives both the one-shot and the streaming paths, so they cannot drift apart.
+LLM applications stream JSON token by token, and the stream is routinely cut off mid-value, wrapped in a Markdown fence, written with single quotes, or padded with prose and comments. A strict parser rejects the whole payload, so the application shows nothing until the end — and sometimes never. InterJSON keeps the last confirmed prefix available after every chunk and repairs the flaws along the way, so a partial result is usable immediately and the final result is valid JSON. The same engine drives both the one-shot and the streaming paths, so they cannot drift apart.
+
+Repairing is necessary but not sufficient once the result is about to be executed. A repair can be cosmetic, can invent or drop a value, or can admit a second reading; a truncated `{"query":"weather in Par` becomes a string the model never finished. InterJSON labels every repair Exact / Cosmetic / Lossy, detects ambiguity, checks the declared schema, and refuses with `E010` / `E011` instead of guessing. The refusal is a ready-to-send prompt. That is the gate, and it is the same decision whether it arrives through MCP, `serve`, npm, pip or the CLI.
 
 ## Install
+
+### The MCP server
+
+Build the binary (older release assets predate the InterJSON name; the
+engine is the same):
+
+```sh
+cd code
+moon build cmd/interjson --target native --release
+./_build/native/release/build/cmd/interjson/interjson.exe mcp --print-config=claude
+```
+
+Nothing else is required: the server is a single native binary and needs no
+runtime, no API key and no network. Install paths for pip (`interjson-mcp`),
+npm (`interjson-mcp`, which still needs the native binary) and per-client
+configuration are in [`docs/MCP.md`](docs/MCP.md).
+
+### The MoonBit library
 
 Add the dependency with the MoonBit toolchain:
 
 ```sh
-moon add zhanshishan/jsonmend
+moon add zhanshishan/interjson
 ```
 
 Then import the package in your `moon.pkg` with the alias used throughout this document:
 
 ```
 import {
-  "zhanshishan/jsonmend" @jsonmend,
+  "zhanshishan/interjson" @interjson,
 }
 ```
 
@@ -86,28 +186,31 @@ import {
 
 ## Integration surfaces
 
-The library is the engine; four delivery surfaces wrap it without changing the semantics:
+The library is the engine; the delivery surfaces wrap it without changing the semantics:
 
 | Surface | Use |
 | --- | --- |
-| `moon add zhanshishan/jsonmend` | MoonBit projects (this package) |
-| `jsonmend serve` | any language; versioned JSONL (`docs/PROTOCOL.md`) |
-| `jsonmend mcp` | Claude Code, Cursor, Codex CLI, Gemini CLI, Cline, Windsurf: four tools |
-| `npm install ./code/npm` / `pip install ./code/python` | Node and Python hosts |
-| `jsonmend-http` (Python package) | n8n, Dify, Coze, gateways |
+| `moon add zhanshishan/interjson` | MoonBit projects (this package) |
+| `interjson mcp` (alias `interjson-mcp`) | Claude Code, Cursor, Cline, Windsurf, VS Code, Codex CLI, Zed: four read-only tools over stdio |
+| `interjson serve` | any language; versioned JSONL host-side protocol (`docs/PROTOCOL.md`) |
+| `npm install ./code/npm` | Node and browser hosts (`interjson-moonbit`; its `interjson-mcp` bin starts the server) |
+| `pip install ./code/python` | Python hosts (`interjson-moonbit`; console scripts `interjson-mcp` and `interjson-http`) |
+| `interjson-http` (Python package) | n8n, Dify, Coze, gateways |
 
 The execution gate is the same call everywhere: `analyze(text, profile="agent",
 schema_json=tool.inputSchema)` returns `executable`; when it is false,
-`retry.prompt` is the text to send back to the model. Recipes for each surface
-are in `docs/INTEGRATIONS.md`.
+`retry.prompt` is the text to send back to the model. Over MCP the tool is
+`interjson_gate` and the profile defaults to `agent`. Deployment is in
+[`docs/MCP.md`](docs/MCP.md); host-side recipes for each surface are in
+[`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
 
 ## Quick start
 
-`repair` raises `MendError`, so wrap the calls in `try`/`catch` (the three statements below are the whole example):
+`repair` raises `InterJSONError`, so wrap the calls in `try`/`catch` (the three statements below are the whole example):
 
 ```moonbit
 try {
-  let result = @jsonmend.repair("{'a': 1,}")   // RepairResult
+  let result = @interjson.repair("{'a': 1,}")   // RepairResult
   println(result.text)                         // {"a":1}
   println(result.repairs.length())             // number of repair records
 } catch {
@@ -115,7 +218,7 @@ try {
 }
 ```
 
-Use `@jsonmend.parse` instead when you want the `Json` tree rather than the text; it returns the same `repairs` and `completeness` alongside a `value`. `repair` returns a `RepairResult` with the fields `text`, `repairs`, and `completeness`.
+Use `@interjson.parse` instead when you want the `Json` tree rather than the text; it returns the same `repairs` and `completeness` alongside a `value`. `repair` returns a `RepairResult` with the fields `text`, `repairs`, and `completeness`.
 
 ## Streaming example
 
@@ -123,18 +226,18 @@ Use `@jsonmend.parse` instead when you want the `Json` tree rather than the text
 
 ```moonbit
 try {
-  let p = @jsonmend.PartialParser::new()
+  let p = @interjson.PartialParser::new()
   p.feed("{\"name\":\"Mo")
   let s1 = p.snapshot()
   match s1.value {
     Some(v) => println(v.stringify())          // {"name":"Mo"}
     None => println("<none>")
   }
-  println(s1.completeness is @jsonmend.Partial) // true
+  println(s1.completeness is @interjson.Partial) // true
   p.feed("n\"}")
   let done = p.finish()
   println(done.text)                            // {"name":"Mon"}
-  println(done.completeness is @jsonmend.Complete) // true
+  println(done.completeness is @interjson.Complete) // true
 } catch {
   e => println(e.to_string())
 }
@@ -144,10 +247,10 @@ try {
 
 ```moonbit
 try {
-  let p = @jsonmend.PartialParser::new(options={
-    ..@jsonmend.Options::default(),
-    incomplete_number: @jsonmend.TrimToValid,
-    pending_key: @jsonmend.NullKey,
+  let p = @interjson.PartialParser::new(options={
+    ..@interjson.Options::default(),
+    incomplete_number: @interjson.TrimToValid,
+    pending_key: @interjson.NullKey,
   })
   p.feed_bytes(b"[1, 1.")
   let s = p.snapshot()
@@ -173,7 +276,7 @@ model   : {"city":["Paris" "London"]}
 gate    : E011 adjacent_strings - the gate cannot pick a reading
 refused : the gate refused to pick a reading
 prompt  :
-  JSONMend refused the arguments: E011 R006 InsertComma at line 1 column 18 (offset 17).
+  InterJSON refused the arguments: E011 R006 InsertComma at line 1 column 18 (offset 17).
   Reason: two adjacent strings may be two elements or one concatenated string
   Ambiguity: adjacent_strings
   Re-emit the arguments as valid JSON with exactly one reading.
@@ -192,7 +295,7 @@ is opt-in.
 
 ## Options
 
-Every field of `Options`. `@jsonmend.Options::default()` is the documented default set.
+Every field of `Options`. `@interjson.Options::default()` is the documented default set.
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -250,7 +353,7 @@ Every change is one record whose code is stable. The full dictionary, with examp
 
 ## Repair records and error codes
 
-Two signal families are kept apart: repair records are informational and travel with the result; fatal errors abort processing and are raised as `MendError`.
+Two signal families are kept apart: repair records are informational and travel with the result; fatal errors abort processing and are raised as `InterJSONError`.
 
 A `Repair` carries `code : RepairCode`, `position : Position`, `severity : Severity`, and `message : String`. `repair`, `parse`, and `finish` also return `repairs_truncated : Bool`, which is `true` when the record array hit `max_repairs`. `Position.offset` counts UTF-16 code units from 0, while `line` and `column` are 1-based. `Severity::Info` means the value is unchanged and only the notation was normalized; `Severity::Warning` means content may have been invented, dropped, or altered. Messages are fixed templates and never embed user input.
 
@@ -265,9 +368,9 @@ A `Repair` carries `code : RepairCode`, `position : Position`, `severity : Sever
 | `E030` | `InvalidState` | `feed` after `finish`, or `finish` called twice or after a fatal error. |
 | `E040` | `InvalidUtf8` | Invalid or truncated UTF-8 in `feed_bytes` (payload is the byte offset). |
 | `E050` | `InvalidOption` | An option value is out of range, or a combination is invalid (`collect_deltas` with `KeepFirst`/`TrimToValid`). |
-| `E060` | `InvalidEvent` | `jsonmend/llm` received an event payload it cannot interpret. |
+| `E060` | `InvalidEvent` | `interjson/llm` received an event payload it cannot interpret. |
 
-`RepairCode::code`, `MendError::code`, and `MendError::to_string` produce the stable strings (`R005`, `E020`, and a one-line diagnostic respectively). The full reference is in `docs/ERRORS.md`.
+`RepairCode::code`, `InterJSONError::code`, and `InterJSONError::to_string` produce the stable strings (`R005`, `E020`, and a one-line diagnostic respectively). The full reference is in `docs/ERRORS.md`.
 
 ## Snapshot semantics
 
@@ -289,52 +392,23 @@ A snapshot differs from the final result by design: the preview omits what is no
 Build and run the CLI:
 
 ```sh
-moon build cmd/jsonmend --target native --release
-echo "{'a': 1,}" | ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+moon build cmd/interjson --target native --release
+echo "{'a': 1,}" | ./_build/native/release/build/cmd/interjson/interjson.exe
 ```
 
-The help text of `cmd/jsonmend/args.mbt::help_text()` is quoted verbatim (it is in Chinese):
+The CLI has six subcommands; the default action, with no subcommand, is
+`repair`. `interjson --help` prints the full help, which is in Chinese; the
+table below is the English reference.
 
-```text
-jsonmend [选项] [文件]
-
-读取文件或标准输入，把修复后的 JSON 写到标准输出。
-
-  --strict            严格模式：需要修复就报错（退出码 5）
-  --check             只检查，不输出；需要修复时退出码 1
-  --report            把修复记录写到标准错误
-  --indent N          输出缩进空格数，默认紧凑输出
-  --multi-root MODE   first、array 或 error，默认 first
-  --skip-prose        跳过 JSON 之前的说明文字
-  --quote-lookahead   启用引号歧义前瞻
-  --max-repairs N     最多记录多少条修复记录，默认 10000
-  --max-loss LEVEL    精确度上限：exact、cosmetic 或 lossy，默认 lossy
-  --for-execution     执行档：等价于 --max-loss cosmetic --reject-ambiguous
-  --reject-ambiguous  拒绝有第二种读法的修复，报 E011（退出码 5）
-  --retry-hint        拒绝时在标准错误上打印可直接回灌模型的提示
-  --chunk N           分块喂入：每次喂 N 个码元（≤1048576），用来验证流式路径（默认一次喂完）
-  --explain           在标准错误上逐条解释修复，并打印精确度小结
-  --batch             逐行读取 {"id","input"} JSON，逐行输出结果 JSON
-                      与 --chunk N 同用可把每条输入按 N 字节分块喂入
-
-jsonmend readiness [选项] [文件]
-  打印字段就绪曲线：每个顶级字段在输入消耗到多少时已定稿。
-  --step N            每 N 个码元观察一次，默认按长度自适应
-
-jsonmend llm [选项] [文件]
-  把模型的事件流喂给 provider 适配器，每个工具调用输出一行结果 JSON。
-  --provider NAME     anthropic（默认）或 openai
-  --sse               输入是 SSE 文本（默认按每行一个事件 JSON 读取）
-  --text              读取文本增量（delta.content / text_delta）而不是工具调用参数（配 --skip-prose 可跳过前言）
-  --follow            每次增量都输出一行，而不是只在结束时输出
-  -h, --help          显示帮助
-  --version           显示版本
-
-文件为 `-` 或缺省时读取标准输入。
-
-退出码：0 成功（可能有修复）；1 --check 发现需要修复；2 用法错误；
-        3 输入无效；4 资源限制；5 严格模式违规；70 内部错误。
-```
+| Command | Use |
+| --- | --- |
+| `interjson [file]` | Read a file or stdin, write the repaired JSON to stdout (the default action). |
+| `interjson repair [file]` | The default action, spelled out: the document and nothing else. |
+| `interjson explain [file]` | Full analysis: what was repaired, why, how risky, and whether it may execute; on a refusal, the retry hint. Exit code 0 when executable, 5 when refused. |
+| `interjson readiness [file]` | Field-readiness curve: when each top-level field becomes final. |
+| `interjson llm [file]` | Feed a provider event stream through the adapter; one result JSON per tool call. |
+| `interjson serve` | Long-lived stdio protocol (`docs/PROTOCOL.md`): one request JSON per line, one response JSON per line. |
+| `interjson mcp` | MCP stdio server (JSON-RPC 2.0) exposing `interjson_gate`, `interjson_repair`, `interjson_validate`, `interjson_readiness`; `--print-config[=CLIENT]` prints a client configuration and exits. |
 
 Flags and their meanings:
 
@@ -349,14 +423,25 @@ Flags and their meanings:
 | `--quote-lookahead` | Enable quote-ambiguity lookahead. |
 | `--max-repairs N` | Maximum number of repair records to keep (default 10000); a truncated run also prints a note to standard error. |
 | `--max-loss LEVEL` | Exactness ceiling: `exact`, `cosmetic`, or `lossy` (default). Exceeding it exits with code 5. |
+| `--for-execution` | Equivalent to `--max-loss cosmetic --reject-ambiguous`. |
+| `--reject-ambiguous` | Refuse a repair with a second reading (`E011`, exit code 5). |
+| `--retry-hint` | On a refusal, print the ready-to-feed-back prompt to standard error. |
 | `--explain` | Print every record with severity, position and a caret snippet, plus an exactness summary, to standard error. |
-| `--batch` | Read `{"id","input"}` objects line by line and write one result object per line. |
-| `llm` (subcommand) | Feed a provider event stream through the adapter: `jsonmend llm [--provider anthropic\|openai] [--sse] [--follow] [file]`. |
-| `-h`, `--help` | Show help. |
-| `--version` | Show the version (`jsonmend 1.0.0`). |
 | `--policy NAME` | Safety profile: `permissive`, `interactive`, `execution`, `agent` or `strict`. |
 | `--schema DECL` | Skeleton declaration such as `{!query:string,!limit:integer}`; with `explain` it also prints the syntax-ready and schema-ready fractions. |
 | `--json` | With `explain`: the machine-readable plan instead of the text block. |
+| `--with-text` | With `explain --json`: include the repaired text, which the plan otherwise omits. |
+| `--max-input-len N` | Maximum input length in UTF-16 code units (default 67108864; `E021`). |
+| `--max-depth N` | Maximum container nesting (default 512; `E020`). |
+| `--max-token-len N` | Maximum length of one token (default 16777216; `E022`). |
+| `--max-prose-buffer N` | With `--skip-prose`, how many code units of prelude may be buffered for the end replay (default 65536). |
+| `--chunk N` | Feed the input in N-code-unit chunks (≤1048576) to exercise the streaming path. |
+| `--batch` | Read `{"id","input"}` objects line by line and write one result object per line. |
+| `llm` (subcommand) | Feed a provider event stream through the adapter: `interjson llm [--provider anthropic\|openai] [--sse] [--follow] [file]`. |
+| `serve` (subcommand) | The versioned JSONL protocol; `--stdio` is accepted and selects nothing, because stdio is the only transport. |
+| `mcp` (subcommand) | The MCP server. `interjson mcp --help` documents it; `--print-config[=CLIENT]` prints a client configuration (`claude`, `cursor`, `vscode`, `codex`, `windsurf`, `zed`, `json`). |
+| `-h`, `--help` | Show help. |
+| `--version` | Show the version (`interjson 1.4.0`). |
 | file, or `-` | Read a file; `-` or an omitted argument reads standard input. |
 
 `--indent=N`, `--multi-root=MODE`, and `--max-repairs=N` are accepted as equivalent to the space-separated forms.
@@ -373,7 +458,7 @@ Exit codes:
 | `5` | Strict-mode violation (`E010`, including a `--max-loss` breach). |
 | `70` | Internal error (`E030`). |
 
-The browser demo lives in `examples/web`; the built page is `static/demo/index.html` and can be opened directly from disk. The package exports three plain `String`-in/`String`-out entry points — `repair_text`, `report_text`, and `snapshot_text` (value, completeness, and open path for a prefix) — and registers them on the host page through `globalThis.jsonmendRegister*`, so the page contains no second implementation. Rebuild the bundle with `bash static/demo/build.sh`; the steps and the headless check are in `docs/REPRODUCE.md`.
+The browser demo lives in `examples/web`; the built page is `static/demo/index.html` and can be opened directly from disk. The demo's MoonBit entry points are plain `String`-in/`String`-out functions (`repair_text`, `report_text`, `snapshot_text`, `analyze_text`, `readiness_text`, `deltas_text`, …) registered on the host page through `globalThis.interjsonRegister*`, so the page contains no second implementation. The same bundle backs `static/demo/interjson.js` and the npm package. Rebuild the bundle with `bash static/demo/build.sh`; the steps and the headless check are in `docs/REPRODUCE.md`.
 
 ## Testing
 
@@ -382,45 +467,47 @@ cd code
 moon test                      # default backend (wasm-gc)
 moon test --target native      # host backend
 moon test --target js          # JavaScript backend
-bash tests/cli_smoke.sh        # 62 command line assertions
+moon test --target wasm        # wasm backend
+bash tests/cli_smoke.sh        # 106 command line assertions, including the MCP checks
 bash tests/examples.sh         # example inputs vs code/examples/cases/*.expected
 node ../code/tests/demo_smoke.mjs   # the committed browser bundle still answers
-python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
-python3 tests/eval/run_eval.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
-python3 tests/eval/run_eval_paths.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
+python3 tests/eval/run_eval.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
+python3 tests/eval/run_eval_paths.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
 python3 tests/eval/check_amb_guard.py    # the adversarial suite's guard still fires
-python3 tests/eval/run_ambiguity.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
-python3 tests/eval/refcompare.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/eval/run_ambiguity.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
+python3 tests/eval/refcompare.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
 python3 tests/gen_llm_fixtures.py --check
-python3 tests/memory_baseline.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/memory_baseline.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
 python3 tests/eval/run_independent.py    # vendored nst/JSONTestSuite, independent of our own corpus
-python3 tests/eval/run_readiness.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe --check
+python3 tests/eval/run_readiness.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe --check
+python3 tests/conformance/run_conformance.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe   # 19 groups, including mcp
 moon run examples/agent_loop --target native --release
 ```
 
-| Suite | Size | Result (0.5.0) |
+| Suite | Size | Result (1.4.0) |
 | --- | --- | --- |
 | Golden cases (spec appendices A and B) | 126 | pass |
 | Documented streaming cases (S-001…S-021) + chunk invariance | 21 + invariance checks | pass |
-| Property and fuzz tests (TC-P-01…TC-P-06) | 8 groups × 400 cases (`JSONMEND_LONGRUN` raises it; nightly runs 1 000 000) | pass, no counterexample |
+| Property and fuzz tests (TC-P-01…TC-P-06) | 8 groups × 400 cases (`INTERJSON_LONGRUN` raises it; nightly runs 1 000 000) | pass, no counterexample |
 | Exactness labels | hand-written table + 240 property cases + the `max_loss` gate | pass |
 | Incremental deltas (replay == snapshot) | 400 generated + 400 mutated documents | pass |
 | LLM adapters (both providers, 9 generated fixtures + documented event shapes) | 30 tests | pass |
 | Adapter path against the ground-truth corpus | 1200 cases × (both providers × tool args and text) | **1200/1200 on all four** ([docs/EVAL_PATHS.md](docs/EVAL_PATHS.md)) |
 | Adversarial ambiguity suite `amb-1` | 24 handwritten cases, frozen fingerprint | 10/10 flagged and refused, 14/14 controls pass, 0 failures ([docs/EVAL_AMBIGUITY.md](docs/EVAL_AMBIGUITY.md)) |
-| Reference libraries on the same corpus | 1200 cases × (`jsonrepair` 3.15.0, `json_repair` 0.64.0) | JSONMend silent wrong values 0, `jsonrepair` 122, `json_repair` 189 ([docs/EVAL_REFERENCE.md](docs/EVAL_REFERENCE.md)) |
+| Reference libraries on the same corpus | 1200 cases × (`jsonrepair` 3.15.0, `json_repair` 0.64.0) | InterJSON silent wrong values 0, `jsonrepair` 122, `json_repair` 189 ([docs/EVAL_REFERENCE.md](docs/EVAL_REFERENCE.md)) |
 | Chunked paths against the ground-truth corpus | 1200 cases × chunk 1/3/7/random | 1200/1200 each, 0 regressions |
-| Safety profiles, repair plans, schemas (new in 0.5.0) | 34 tests (7 + 22 + 5) | pass |
+| Safety profiles, repair plans, schemas | 34 tests (7 + 22 + 5) | pass |
 | Independent third-party corpus (`nst/JSONTestSuite`) | 318 files (95 `y_` / 188 `n_` / 35 `i_`) | `y_` false repairs 2/95 (both duplicate keys), `n_` valid values 165/188 vs `json_repair` 166/188 and `jsonrepair` 144/188 ([docs/EVAL_INDEPENDENT.md](docs/EVAL_INDEPENDENT.md)) |
 | Schema readiness table | 10 scenarios | 6 with a gap (713‰–908‰), 4 where both fractions arrive at the end ([docs/READINESS.md](docs/READINESS.md)) |
 | Public surface (every `R` code and `E` code) | 22 + 12 codes checked field by field | pass |
 | Ground-truth evaluation (protocol frozen first) | 1200 cases (19 mutation families + 1 control × 60) | recovery **100.00%**, 0 mislabelled, 4/4 pre-registered criteria PASS |
-| Command line smoke (exit codes 0/1/2/3/4/5/70) | 62 assertions, 14 of them `explain` | pass |
+| Command line smoke (exit codes 0/1/2/3/4/5/70) | 106 assertions, including the `explain` surface and the MCP config/initialize checks | pass |
 | Differential corpus against `jsonrepair` / `json-repair` | 402 cases | 202 divergences, all documented, 0 unexplained |
 | Line coverage of the library | 3748/3983 lines (root), 337/391 (`llm`) | 94.1% / 86.2% (`moon coverage` cannot instrument the `cmd` package, which calls `quit()`; within the root package the weakest file is `llm/text.mbt` at 72.5% across the library and `hint.mbt` at 90.7% inside the root package) |
 
-Cross-backend results are identical: 129 tests pass on wasm-gc, native and
-JavaScript. `.github/workflows/ci.yml` runs the same commands on every push, so
+Cross-backend results are identical: 217/217 tests pass on each of wasm-gc,
+native, JS and wasm (868 runs). `.github/workflows/ci.yml` runs the same commands on every push, so
 the numbers above are re-derived rather than trusted. Reproduction steps,
 thresholds and the known shortfalls are in
 `docs/REPRODUCE.md` and `docs/TRACEABILITY.md`.
@@ -431,16 +518,16 @@ The evaluation protocol and its revision history are in
 
 ## Differences from jsonrepair
 
-JSONMend is not a port of `jsonrepair` and does not aim for byte-identical output. Several differences are deliberate, documented policy choices: trailing content after the root value keeps the first value by default instead of merging it, Markdown fences are stripped by default, duplicate keys keep the last value, unfinished numbers are dropped from snapshots, and strict mode plus per-rule switches have no direct equivalent. The 0.3.0 changes did not move the report by a single byte: exactness labels and rule renumbering do not change any value. A differential harness runs `jsonrepair` (TypeScript/Node) and `json-repair` (Python) over a corpus of hand-written and mutated inputs, compares parsed values, and classifies every divergence. In the committed 0.3.0 report, all 202 divergences had a documented cause and none was unexplained. The method, the classification, and the reference-library versions are in [docs/DIVERGENCES.md](docs/DIVERGENCES.md); rule-to-requirement mapping is in `docs/TRACEABILITY.md`.
+InterJSON is not a port of `jsonrepair` and does not aim for byte-identical output. Several differences are deliberate, documented policy choices: trailing content after the root value keeps the first value by default instead of merging it, Markdown fences are stripped by default, duplicate keys keep the last value, unfinished numbers are dropped from snapshots, and strict mode plus per-rule switches have no direct equivalent. The 0.3.0 changes did not move the report by a single byte: exactness labels and rule renumbering do not change any value. A differential harness runs `jsonrepair` (TypeScript/Node) and `json-repair` (Python) over a corpus of hand-written and mutated inputs, compares parsed values, and classifies every divergence. In the committed 0.3.0 report, all 202 divergences had a documented cause and none was unexplained. The method, the classification, and the reference-library versions are in [docs/DIVERGENCES.md](docs/DIVERGENCES.md); rule-to-requirement mapping is in `docs/TRACEABILITY.md`.
 
 ## Performance
 
 ![Field readiness curve](../static/readiness-curve.svg)
 
 The figure is produced by `code/tests/readiness_figure.py` from the real output of
-`jsonmend readiness`: the left panel is a tool-call document (`name` 188,
-`arguments` 858, `id` 981, median 858/1000) and the right panel is the decile
-curve of a flat 200-member record (`0 10 21 30 41 51 61 71 80 90 100`). The
+`interjson readiness`: the left panel is a tool-call document (`name` 198,
+`arguments` 858, `id` 990, median 858/1000) and the right panel is the decile
+curve of a flat 200-member record (`0 10 21 31 41 51 61 71 80 90 100`). The
 dashed line is the ideal baseline — a field final when its own share of the input
 has been read. This replaces the previous "95% coverage" figure, which an object
 made structurally uninformative (it sat at 95.3% regardless of quality). The
@@ -475,7 +562,7 @@ points). They exist because the byte entry point used to batch only ASCII: every
 non-ASCII byte fell through to `push_char`, which allocated one `String` per
 character. That cost 5.4 × (native) / 7.1 × (JS) per code unit and grew with the
 text, while the parsed result was already correct — no functional test could see
-it. 1.3.0 batches complete multi-byte UTF-8 sequences in the same run batching the
+it. Since 1.3.0 the engine batches complete multi-byte UTF-8 sequences in the same run batching the
 ASCII path uses, so a CJK long string now costs the same per *byte* as ASCII
 (662 MB/s vs 599 MB/s; 209.7-220.8 Mu/s vs 38.5-39.6 before). The 25.17 MB single-CJK-string
 file measures 0.04 s and 53.7 MB peak RSS with `--check` (2.2 × input, down from
@@ -499,9 +586,9 @@ separately from the process. The full method, tables and decision records are in
 - **A truncated literal prefix is completed regardless of the following character.** For example, a bare `tru` followed by an unexpected character is completed to `true` and the unexpected character is handled separately.
 - **`incomplete_number` and `pending_key` only affect snapshots.** They do not change `finish`: the final result trims the number (`R011`) and fills a dangling key with `null` (`R008`) under their own rules.
 - **Lone surrogates differ by backend.** On the wasm backend, `\uD800`-style lone surrogates survive in the output; on the other backends the `InvalidUtf8` (`E040`) path substitutes U+FFFD.
-- **The `jsonmend/llm` and delta sub-packages are experimental.** Their APIs may change in a minor release; the core `repair` / `parse` / `PartialParser` surface is the stable one.
-- **The CLI is native-only.** `cmd/jsonmend/moon.pkg` declares `supported_targets = "native"`.
-- **Recovery guarantees are heuristic, not a conformance claim.** JSONMend is not a JSON standard, and it does not guarantee a particular interpretation for every malformed input; the differential report is the evidence for the behaviour it does document.
+- **The `interjson/llm` and delta sub-packages are experimental.** Their APIs may change in a minor release; the core `repair` / `parse` / `PartialParser` surface is the stable one.
+- **The CLI is native-only.** `cmd/interjson/moon.pkg` declares `supported_targets = "native"`.
+- **Recovery guarantees are heuristic, not a conformance claim.** InterJSON is not a JSON standard, and it does not guarantee a particular interpretation for every malformed input; the differential report is the evidence for the behaviour it does document.
 - **`Json` numbers follow the core representation.** Very large integers may lose precision in the tree, although the repaired text keeps the number's original digits.
 - **`quote_lookahead` is off by default.** When enabled, a sequence of strings that is missing commas is biased toward being read as string content.
 - **Repair records are capped by `max_repairs` (default 10000).** Further repairs are applied but not recorded, and the result sets `repairs_truncated`; the CLI prints a note to standard error.
@@ -516,7 +603,7 @@ separately from the process. The full method, tables and decision records are in
 
 ## Roadmap
 
-- ~~Publish on mooncakes.io~~: `zhanshishan/jsonmend` 0.3.0 … **0.7.0** are published. `1.0.0` cannot be published because mooncakes currently only accepts `0.x.y`; `0.8.0` is the registry version of `1.1.0`; the two are byte-identical except for the version string. The integration surfaces (`serve`, `mcp`, npm, pip) shipped in `1.1.0` / `0.8.0`.
+- ~~Publish on mooncakes.io~~: the published history (0.3.0 … **0.8.1**) is under the former package name `zhanshishan/jsonmend`; the renamed `zhanshishan/interjson` starts at **0.11.0** (the registry counterpart of 1.4.0), published on 2026-10-27. `1.x` cannot be published because mooncakes currently only accepts `0.x.y`; patch and minor digits follow the release order (`1.1.x` ↔ `0.8.x`, `1.2.x` ↔ `0.9.x`, `1.3.x` ↔ `0.10.x`, `1.4.x` ↔ `0.11.x`). The bytes are identical except for the version string and the registry package name.
 - ~~A browser tab that plays a model stream~~: `static/demo/live.html`, also published at <https://wenhuang2333.github.io/Moonbit-haker/live.html>.
 - ~~Readiness for the members the caller actually needs~~: `Schema` + `semantic_readiness`.
 - ~~Constraints in the declaration~~: `minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern` (a character-class subset, not a regex) landed in 0.7.0.
@@ -539,7 +626,7 @@ separately from the process. The full method, tables and decision records are in
 
 ## License and acknowledgements
 
-JSONMend is released under the Apache License 2.0 (`license = "Apache-2.0"` in `code/moon.mod`). A `LICENSE`/`NOTICE` pair is part of the release checklist.
+InterJSON is released under the Apache License 2.0 (`license = "Apache-2.0"` in `code/moon.mod`). A `LICENSE`/`NOTICE` pair is part of the release checklist.
 
 - [jsonrepair](https://github.com/josdejong/jsonrepair) (TypeScript) and [json-repair](https://github.com/mangiucugna/json_repair) (Python) are used as behavioural oracles in the differential report. They are used only for comparison; no code from either project is vendored.
 - The MoonBit core library (`moonbitlang/core/json`, `moonbitlang/core/string`) provides the `Json` type and string handling.

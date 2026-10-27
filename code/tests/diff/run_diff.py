@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Differential harness for JSONMend (TC-D).
+"""Differential harness for InterJSON (TC-D).
 
-Runs the JSONMend CLI and one or both reference implementations
+Runs the InterJSON CLI and one or both reference implementations
 (`json-repair` for Python, `jsonrepair` for Node) over a corpus of hand
 written cases plus automatically mutated ones, compares the *parsed JSON
 values* (never the text), classifies every divergence and writes a report.
 
 Usage:
-    python3 code/tests/diff/run_diff.py --cli <path to jsonmend> [--limit N]
+    python3 code/tests/diff/run_diff.py --cli <path to interjson> [--limit N]
 
 Exit status is 0 when the in-scope semantic equivalence rate is at least
 90%, 1 otherwise.
@@ -172,7 +172,7 @@ def mutations():
 # ---------------------------------------------------------------- oracles ---
 
 
-def run_jsonmend(cli, text):
+def run_interjson(cli, text):
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
         fh.write(text)
         path = fh.name
@@ -307,7 +307,7 @@ def binary_stamp(path):
 # ------------------------------------------------------------ classifying ---
 
 
-# Why a divergence is not a defect, keyed by the repair codes JSONMend
+# Why a divergence is not a defect, keyed by the repair codes InterJSON
 # emitted while producing its answer. Names and rules come from D05 / D09;
 # the mapping is verified by `code/doc_repairs_wbtest.mbt`.
 CODE_REASON = {
@@ -350,13 +350,13 @@ def cause(codes, mine, theirs, probes, rc):
     if probes.get("skip-prose"):
         return "prose (skip_prose off by default)"
     if rc != 0 and mine is None:
-        return "jsonmend rejects, jsonrepair repairs (E001/E002/E040)"
+        return "interjson rejects, jsonrepair repairs (E001/E002/E040)"
     if not codes:
         return "UNEXPLAINED"
     return "+".join(sorted(set(codes)))
 
 def probe(cli, text, extra):
-    """Run jsonmend with extra flags; True when it agrees with json-repair."""
+    """Run interjson with extra flags; True when it agrees with json-repair."""
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
         fh.write(text)
         path = fh.name
@@ -377,7 +377,7 @@ def probe(cli, text, extra):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cli", required=True, help="path to the jsonmend binary")
+    ap.add_argument("--cli", required=True, help="path to the interjson binary")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument(
         "--node-script",
@@ -451,7 +451,7 @@ def main():
     rows = []
     node_agree = node_diverge = 0
     for text, origin in corpus:
-        rc, out, err, codes = run_jsonmend(args.cli, text)
+        rc, out, err, codes = run_interjson(args.cli, text)
         mine = None
         mine_ok = rc == 0
         if mine_ok:
@@ -518,8 +518,8 @@ def main():
         classes.setdefault(key, []).append(r)
 
     lines = []
-    lines.append("# JSONMend differential report (TC-D)\n")
-    lines.append("JSONMend is compared against two independent reference")
+    lines.append("# InterJSON differential report (TC-D)\n")
+    lines.append("InterJSON is compared against two independent reference")
     lines.append("implementations. Only *parsed JSON values* are compared, never text,")
     lines.append("because formatting is not part of the contract.\n")
     generated = datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -555,9 +555,9 @@ def main():
         )
     lines.append(f"| corpus | {len(HAND_WRITTEN)} hand written cases + {len(mutations())} automatic mutations |")
     lines.append("| corpus selection | deterministic: fixed list plus fixed mutations, no seed |")
-    lines.append("| comparison | `json.loads(jsonmend stdout)` vs `json_repair.repair_json(..., return_objects=True)` |")
-    lines.append("| reproduce | `python3 code/tests/diff/run_diff.py --cli <jsonmend binary> [--node-module-dir DIR]` (see docs/REPRODUCE.md) |\n")
-    lines.append("A divergence is *documented* when JSONMend's own repair record list")
+    lines.append("| comparison | `json.loads(interjson stdout)` vs `json_repair.repair_json(..., return_objects=True)` |")
+    lines.append("| reproduce | `python3 code/tests/diff/run_diff.py --cli <interjson binary> [--node-module-dir DIR]` (see docs/REPRODUCE.md) |\n")
+    lines.append("A divergence is *documented* when InterJSON's own repair record list")
     lines.append("explains it: the rules that fired are exactly the rules whose")
     lines.append("documented behaviour differs from the reference implementation.\n")
     lines.append("## Summary\n")
@@ -590,7 +590,7 @@ def main():
         )
 
     lines.append("## Divergence classes\n")
-    lines.append("Every class is the set of repair rules JSONMend applied to reach")
+    lines.append("Every class is the set of repair rules InterJSON applied to reach")
     lines.append("its answer; the referenced rule is why the two libraries differ.\n")
     lines.append("| rules applied | count | documented cause |")
     lines.append("| --- | --- | --- |")
@@ -602,7 +602,7 @@ def main():
             reason = "BR-15 multi_root=first (probe: --multi-root array agrees)"
         elif key.startswith("prose"):
             reason = "FR-08 skip_prose off by default (probe: --skip-prose agrees)"
-        elif key.startswith("jsonmend rejects"):
+        elif key.startswith("interjson rejects"):
             reason = "FR-01 no JSON value found (E001/E002/E040); jsonrepair invents a value"
         else:
             names = []
@@ -629,7 +629,7 @@ def main():
     else:
         for r in unexplained[:40]:
             lines.append(f"- input `{r['text']!r}`")
-            lines.append(f"  - jsonmend (rc {r['rc']}): {r['mine']!r}")
+            lines.append(f"  - interjson (rc {r['rc']}): {r['mine']!r}")
             lines.append(f"  - json-repair: {r['theirs']!r}")
         lines.append("")
 
@@ -638,7 +638,7 @@ def main():
         lines.append(f"### `{key}`\n")
         for r in classes[key][:5]:
             lines.append(f"- input `{r['text']!r}`")
-            lines.append(f"  - jsonmend (rc {r['rc']}): {r['mine']!r} {r['codes']}")
+            lines.append(f"  - interjson (rc {r['rc']}): {r['mine']!r} {r['codes']}")
             lines.append(f"  - json-repair: {r['theirs']!r}")
         lines.append("")
 
@@ -654,10 +654,10 @@ def main():
         )
         lines.append(
             "1. **Damage handling on truncated input** (R008/R009/R010/R012/R014): "
-            "when a value is cut off, JSONMend closes the string/container and fills "
+            "when a value is cut off, InterJSON closes the string/container and fills "
             "a missing value with `null`, while the reference implementations guess "
             "a string (often the empty string) or turn the fragment into an array "
-            "element. JSONMend's answer is the one that satisfies BR-13 and stays "
+            "element. InterJSON's answer is the one that satisfies BR-13 and stays "
             "monotone under streaming.\n"
         )
         lines.append(
@@ -675,7 +675,7 @@ def main():
         lines.append(
             "4. **Out of scope input**: Markdown fences, prose before the value, `#` "
             "comments, lone surrogates, `...` and inputs that contain no JSON value at "
-            "all. JSONMend strips fences and (with `skip_prose`) prose, replaces lone "
+            "all. InterJSON strips fences and (with `skip_prose`) prose, replaces lone "
             "surrogates with U+FFFD, drops `...`, and rejects input without any JSON "
             "value with E001/E002 instead of inventing a value.\n"
         )

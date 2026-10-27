@@ -1,17 +1,82 @@
-# JSONMend
+# InterJSON
 
-纯 MoonBit 实现的流式 JSON 修复与部分解析库。
+LLM 输出的执行门：本地 MCP server（`interjson mcp`）+ 纯 MoonBit 的流式 JSON 修复/部分解析引擎。
 
 | | |
 | --- | --- |
-| 模块 | `zhanshishan/jsonmend` |
-| 版本 | 1.3.0 |
+| 模块 | `zhanshishan/interjson` |
+| 版本 | 1.4.0 |
 | 许可证 | Apache-2.0 |
 | 首选后端 | `wasm`（同时支持 `native` 与 `js`） |
-| 预编译产物 | [Release `v1.3.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.3.0)——Linux / macOS arm64 / Windows 三个 CLI、wasm 探针、浏览器包、`SHA256SUMS` |
-| 发行渠道 | [mooncakes.io `zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) |
+| 预编译产物 | [Release `v1.4.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.4.0)——三个平台的 `interjson` CLI、wasm 探针、浏览器包与 `SHA256SUMS`；更早的 Release 在旧名下发布，资产文件名沿用旧前缀 |
+| 发行渠道 | [`mooncakes.io zhanshishan/interjson`](https://mooncakes.io/docs/zhanshishan/interjson) **0.11.0 已发布**（对应 1.4.0）；更早版本在旧包名 [`zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) 下 |
+
+**InterJSON 是 LLM 输出的执行门**：模型给出的工具参数与结构化结果，先过它，再决定能不能执行。
+它以 `interjson mcp` 在 stdio 上作为 MCP server 运行——一个本地原生二进制，不联网、
+不需要 API key、不监听端口，被检查的文本不离开本机；二进制以 `interjson-mcp` 为名启动时等价。
+
+一行接入（Claude Code）：
+
+```bash
+claude mcp add interjson -- interjson mcp
+```
+
+`interjson_gate`（首选，默认 `agent` 档）返回 `executable` / `decision` / `exactness` /
+`value` / `retry.prompt`；`executable == false` 时把 `retry.prompt` 原样回灌模型。
+另外三个工具是 `interjson_repair`、`interjson_validate`、`interjson_readiness`；四个工具
+都是只读的（`readOnlyHint`），结果同时走文本通道与 `structuredContent`，协议版本
+`2025-06-18`，同时接受 `2024-11-05`。完整部署说明见 [`MCP.md`](docs/MCP.md)。
+
+## 60 秒接入（MCP）
+
+```bash
+# 从源码构建（需要 MoonBit 工具链）
+moon build cmd/interjson --target native --release
+# 产物：_build/native/release/build/cmd/interjson/interjson.exe
+
+# 语言包（发布前按仓库路径安装；包名是 interjson-moonbit）
+pip install ./python      # 提供 interjson-mcp 与 interjson-http
+npm install -g ./npm      # 提供 interjson-mcp（启动器，需要 PATH 上的原生二进制）
+```
+
+```bash
+claude mcp add interjson -- interjson mcp
+```
+
+Cursor / Cline / Windsurf 用同一份 JSON：
+
+```json
+{"mcpServers":{"interjson":{"command":"interjson","args":["mcp"]}}}
+```
+
+其余客户端直接打印配置：
+
+```bash
+interjson mcp --print-config=claude    # claude mcp add interjson -- interjson mcp
+interjson mcp --print-config=cursor    # {"mcpServers":{...}}
+interjson mcp --print-config=vscode    # {"servers":{...}}
+interjson mcp --print-config=codex     # [mcp_servers.interjson] TOML
+interjson mcp --print-config=windsurf  # {"mcpServers":{...}}
+interjson mcp --print-config=zed       # {"context_servers":{...}}
+interjson mcp --print-config=json      # 默认
+```
 
 ## 特性
+
+### MCP：执行门是主入口（本版重点）
+
+- **`interjson mcp`**（别名 `interjson-mcp`）：stdio 上的 MCP server，一个本地原生二进制；
+  不联网、不需要 API key、不监听端口，被检查的文本不离开本机。stdout 只走 JSON-RPC，诊断走 stderr。
+- **四个只读工具**：`interjson_gate`（执行门，首选，默认 `agent` 档）、`interjson_repair`、
+  `interjson_validate`、`interjson_readiness`。四个工具都带 `readOnlyHint`，结果同时走文本通道与
+  `structuredContent`。
+- **`interjson_gate` 的返回**：`executable` / `decision` / `exactness` / `ambiguity` / `value` /
+  `retry.prompt`。`executable == false` 时不要执行，把 `retry.prompt` 原样回灌模型。
+- **协议**：`initialize` 返回 `serverInfo.name = interjson`、标题 `InterJSON — the execution gate`
+  与给模型的 instructions（先调 `interjson_gate`）；协议版本 `2025-06-18`，同时接受 `2024-11-05`。
+- **接进客户端**：`claude mcp add interjson -- interjson mcp`；其他客户端用
+  `interjson mcp --print-config=claude|cursor|vscode|codex|windsurf|zed|json` 打印现成配置。
+  部署与安全边界见 [`docs/MCP.md`](docs/MCP.md)。
 
 ### 0.5.0：把「能不能执行」变成一次调用
 
@@ -21,9 +86,9 @@
 - **一次调用拿到完整计划 `analyze`**：
 
   ```moonbit
-  let plan = @jsonmend.analyze(text,
-    options=@jsonmend.Options::for_agent(),
-    schema=@jsonmend.Schema::parse("{!query:string,!limit:integer}"))
+  let plan = @interjson.analyze(text,
+    options=@interjson.Options::for_agent(),
+    schema=@interjson.Schema::parse("{!query:string,!limit:integer}"))
   plan.decision          // Safe | CosmeticRepair | LossyRepair | Ambiguous | Invalid
   plan.is_executable()   // 唯一需要判断的问题
   plan.repairs           // 每条：规则、动作（remove/insert/replace/…）、位置、置信类别、是否丢信息
@@ -34,7 +99,7 @@
   `analyze` **永不抛错**：拒绝是返回值的一部分。`repair` 相对的开销是 1.00–1.03×。
 - **骨架感知就绪 `Schema` + `semantic_readiness`**：`{!query:string,!limit:integer}` 这样的声明，
   同时给出「语法就绪」与「骨架就绪」两个分数，以及缺失/类型不符的成员清单。
-  CLI `jsonmend explain --schema '…'` 直接打印两层数字。
+  CLI `interjson explain --schema '…'` 直接打印两层数字。
 - **自愈闭环示例**：`code/examples/agent_loop` 把 `plan.prompt()` 回灌给「模型」并重试，
   四个 episode 覆盖 `E011` 歧义、`E010` 截断、`E070` 骨架不符与「无改进则放弃」。
 - **实时演示页**：`static/demo/live.html` 逐帧重放四条真实场景（截断→重试→通过、
@@ -48,45 +113,47 @@
 - **修复记录**：每次修改都带有稳定编号（`R001`…`R022`）、位置（UTF-16 偏移加 1 基的行列号）、严重级别和固定英文消息。
 - **精确度标签**：每个结果都带 `Exact` / `Cosmetic` / `Lossy`；`Options::max_loss` 在第一条超预算的修复处抛 `E010`，因此「先修再执行」不会静默发生。
 - **歧义闸**：有第二种同样自洽读法的修复（`["a" "b"]`、`["a"+"b"]`、`[fast]`、`{"a":1} {"b":2}`）会带上 `Ambiguity` 分类，并在 `Options::reject_ambiguous` / `Options::for_execution()` 下以 `E011` 拒绝（先于精确度闸）。对抗语料 10/10 全部标记并拒绝，而两个参照库对同样 10 条全部静默给出取值（`docs/EVAL_AMBIGUITY.md`）。
-- **拒绝即反馈**：`MendError::retry_hint`（CLI `--retry-hint`）把拒绝变成可直接回灌模型的提示片段：错误码、修复码、位置、第二种读法、有界上下文窗口与插入符。
+- **拒绝即反馈**：`InterJSONError::retry_hint`（CLI `--retry-hint`）把拒绝变成可直接回灌模型的提示片段：错误码、修复码、位置、第二种读法、有界上下文窗口与插入符。
 - **字段就绪曲线**：`field_readiness` 给出每个顶层成员在输入消耗到多少时已定稿，`FieldTracker` 用增量流做同样的事，调用方可以在需要的字段定稿后立刻停掉生成。
 - **增量补丁流**：`Options::collect_deltas` 打开后，`drain_deltas()` 返回带 RFC 6901 指针的 `Set` / `AppendText` / `Close`，`feed_with` 提供回调形式（`FR-16`）。
-- **大模型适配器**（`jsonmend/llm` 子包，**实验性**）：Anthropic 细粒度工具流、OpenAI 兼容工具调用增量、SSE 分帧，以及从 `delta.text` / `delta.content` 中取 JSON 的文本流；调用结束分为 `Complete` / `MaxTokens` / `Interrupted` / `ProviderError`，并保留提供方的原始 `stop_reason`；`ping` 与未知事件计数后忽略。命令行见 `jsonmend llm`。
+- **大模型适配器**（`interjson/llm` 子包，**实验性**）：Anthropic 细粒度工具流、OpenAI 兼容工具调用增量、SSE 分帧，以及从 `delta.text` / `delta.content` 中取 JSON 的文本流；调用结束分为 `Complete` / `MaxTokens` / `Interrupted` / `ProviderError`，并保留提供方的原始 `stop_reason`；`ping` 与未知事件计数后忽略。命令行见 `interjson llm`。
 - **严格模式**：`Mode::Strict` 把第一条修复记录升级为致命错误 `E010`；逐规则开关关闭某条规则时同样如此。
 - **资源限制**：嵌套深度、输入总长度、单个 token 长度（`E020`/`E021`/`E022`）。
 - **多种策略**：重复键、非有限数、多根值、Markdown 围栏、前导说明文字、引号歧义、输出缩进。
 - **多后端**：库为纯 MoonBit，不使用正则，也不使用递归；`bench` 可在 `native` 与 `js` 上运行。
-- **命令行与浏览器演示**：命令行见 `cmd/jsonmend`，浏览器演示见 `examples/web`。
+- **命令行与浏览器演示**：命令行见 `cmd/interjson`，浏览器演示见 `examples/web`。
 
 ## 为什么需要它
 
-大模型应用逐 token 地流式输出 JSON，而这段输出经常在值中间被截断，或者被 Markdown 围栏包住、用单引号书写、前后混入说明文字与注释。严格解析器会直接拒绝整个负载，于是应用在结束前什么都显示不出来，有时甚至永远拿不到结果。JSONMend 在每一个分块之后都保留最后一个已经确认的前缀，并在读取过程中顺手修复瑕疵，因此部分结果可以立刻使用，最终结果也是合法 JSON。一次性修复与流式解析共用同一个引擎，两条路径不会产生分歧。
+大模型应用逐 token 地流式输出 JSON，而这段输出经常在值中间被截断，或者被 Markdown 围栏包住、用单引号书写、前后混入说明文字与注释。严格解析器会直接拒绝整个负载，于是应用在结束前什么都显示不出来，有时甚至永远拿不到结果。InterJSON 在每一个分块之后都保留最后一个已经确认的前缀，并在读取过程中顺手修复瑕疵，因此部分结果可以立刻使用，最终结果也是合法 JSON。一次性修复与流式解析共用同一个引擎，两条路径不会产生分歧。
+
+但「解析成功」不是终点：**这份结果能不能被执行，是另一个问题**。`{"a":"b","a":"c"}` 是合法 JSON 却没有唯一含义；`{"path":"/tmp/x` 补上右引号就能解析，但补出来的内容不是模型说的。修复库在这里没有答案，因为它交付的是文本；InterJSON 交付的是判定——`executable` / `decision` / `exactness` / `retry.prompt`。这也是它对外以 MCP server 的形式交付的原因：模型或宿主在真正执行工具参数之前，先问一次这道门。
 
 ## 安装
 
 用 MoonBit 工具链添加依赖：
 
 ```sh
-moon add zhanshishan/jsonmend
+moon add zhanshishan/interjson
 ```
 
 然后在你自己的 `moon.pkg` 中按本文使用的别名导入：
 
 ```
 import {
-  "zhanshishan/jsonmend" @jsonmend,
+  "zhanshishan/interjson" @interjson,
 }
 ```
 
-`moon add` 会把依赖写入模块清单（本仓库对应 `code/moon.mod`）。具体的注册表写法与当前工具链命令以 mooncakes.io 的说明为准，请在已发布的包页面上核对。
+`moon add` 会把依赖写入模块清单（本仓库对应 `code/moon.mod`）。`zhanshishan/interjson` 的 **0.11.0** 已发布到 mooncakes（对应 1.4.0）；更早版本在旧包名 `zhanshishan/jsonmend` 下。
 
 ## 三行上手
 
-`repair` 会抛出 `MendError`，因此需要包在 `try`/`catch` 中；下面三条语句就是完整示例：
+`repair` 会抛出 `InterJSONError`，因此需要包在 `try`/`catch` 中；下面三条语句就是完整示例：
 
 ```moonbit
 try {
-  let result = @jsonmend.repair("{'a': 1,}")   // RepairResult
+  let result = @interjson.repair("{'a': 1,}")   // RepairResult
   println(result.text)                         // {"a":1}
   println(result.repairs.length())             // 修复记录条数
 } catch {
@@ -94,23 +161,33 @@ try {
 }
 ```
 
-需要 `Json` 树而不是文本时改用 `@jsonmend.parse`，它同样返回 `repairs` 与 `completeness`，并额外给出 `value`。`repair` 返回 `RepairResult`，字段为 `text`、`repairs` 和 `completeness`。
+需要 `Json` 树而不是文本时改用 `@interjson.parse`，它同样返回 `repairs` 与 `completeness`，并额外给出 `value`。`repair` 返回 `RepairResult`，字段为 `text`、`repairs` 和 `completeness`。
 
 ## 接入面
 
-库是引擎；五种交付面包装同一套语义：
+库是引擎；五种交付面包装同一套语义。MCP 是模型自己能调用的面（本产品的默认入口），
+其余四种是宿主侧的面：宿主在执行工具参数前过同一道门。
 
 | 接入面 | 用途 |
 | --- | --- |
-| `moon add zhanshishan/jsonmend` | MoonBit 项目（本包） |
-| `jsonmend serve` | 任意语言；版本化 JSONL（`docs/PROTOCOL.md`） |
-| `jsonmend mcp` | Claude Code、Cursor、Codex CLI、Gemini CLI、Cline、Windsurf：四个工具 |
+| `moon add zhanshishan/interjson` | MoonBit 项目（本包） |
+| `interjson serve` | 任意语言；版本化 JSONL（`docs/PROTOCOL.md`） |
+| `interjson mcp`（别名 `interjson-mcp`） | Claude Code、Cursor、Codex CLI、Gemini CLI、Cline、Windsurf、Zed：四个工具 |
 | `npm install ./code/npm` / `pip install ./code/python` | Node 与 Python 宿主 |
-| `jsonmend-http`（Python 包） | n8n、Dify、Coze、网关 |
+| `interjson-http`（Python 包） | n8n、Dify、Coze、网关 |
+
+MCP 的四个工具：
+
+| 工具 | 用途 |
+| --- | --- |
+| `interjson_gate` | 执行门（首选）：`executable` / `decision` / `exactness` / `ambiguity` / `value` / `retry.prompt`；不传 `profile` 时默认 `agent` |
+| `interjson_repair` | 修复并返回文本与修复记录 |
+| `interjson_validate` | 只校验，不修复 |
+| `interjson_readiness` | 每个声明字段在流的哪个位置定稿 |
 
 执行门在所有接入面上是同一个调用：`analyze(text, profile="agent",
 schema_json=tool.inputSchema)` 返回 `executable`；为 false 时把 `retry.prompt`
-原样回灌模型。逐工具配方见 `docs/INTEGRATIONS.md`。
+原样回灌模型。逐工具配方见 [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md)，本地部署说明见 [`docs/MCP.md`](docs/MCP.md)。
 
 ## 流式示例
 
@@ -118,18 +195,18 @@ schema_json=tool.inputSchema)` 返回 `executable`；为 false 时把 `retry.pro
 
 ```moonbit
 try {
-  let p = @jsonmend.PartialParser::new()
+  let p = @interjson.PartialParser::new()
   p.feed("{\"name\":\"Mo")
   let s1 = p.snapshot()
   match s1.value {
     Some(v) => println(v.stringify())          // {"name":"Mo"}
     None => println("<none>")
   }
-  println(s1.completeness is @jsonmend.Partial) // true
+  println(s1.completeness is @interjson.Partial) // true
   p.feed("n\"}")
   let done = p.finish()
   println(done.text)                            // {"name":"Mon"}
-  println(done.completeness is @jsonmend.Complete) // true
+  println(done.completeness is @interjson.Complete) // true
 } catch {
   e => println(e.to_string())
 }
@@ -139,10 +216,10 @@ try {
 
 ```moonbit
 try {
-  let p = @jsonmend.PartialParser::new(options={
-    ..@jsonmend.Options::default(),
-    incomplete_number: @jsonmend.TrimToValid,
-    pending_key: @jsonmend.NullKey,
+  let p = @interjson.PartialParser::new(options={
+    ..@interjson.Options::default(),
+    incomplete_number: @interjson.TrimToValid,
+    pending_key: @interjson.NullKey,
   })
   p.feed_bytes(b"[1, 1.")
   let s = p.snapshot()
@@ -168,7 +245,7 @@ model   : {"city":["Paris" "London"]}
 gate    : E011 adjacent_strings - the gate cannot pick a reading
 refused : the gate refused to pick a reading
 prompt  :
-  JSONMend refused the arguments: E011 R006 InsertComma at line 1 column 18 (offset 17).
+  InterJSON refused the arguments: E011 R006 InsertComma at line 1 column 18 (offset 17).
   Reason: two adjacent strings may be two elements or one concatenated string
   Ambiguity: adjacent_strings
   Re-emit the arguments as valid JSON with exactly one reading.
@@ -185,7 +262,7 @@ execute : {"city":["Paris","London"]}
 
 ## 选项
 
-`Options` 的全部字段如下，`@jsonmend.Options::default()` 即文档化的默认值。
+`Options` 的全部字段如下，`@interjson.Options::default()` 即文档化的默认值。
 
 | 字段 | 类型 | 默认值 | 含义 |
 | --- | --- | --- | --- |
@@ -243,7 +320,7 @@ execute : {"city":["Paris","London"]}
 
 ## 修复记录与错误码
 
-库严格区分两类信号：修复记录是信息性的，随结果返回；致命错误会中止处理，以 `MendError` 抛出。
+库严格区分两类信号：修复记录是信息性的，随结果返回；致命错误会中止处理，以 `InterJSONError` 抛出。
 
 一条 `Repair` 包含 `code : RepairCode`、`position : Position`、`severity : Severity` 和 `message : String`。`Position.offset` 从 0 开始按 UTF-16 码元计数，`line` 与 `column` 从 1 开始。`Severity::Info` 表示值未变、只是记法被规范化；`Severity::Warning` 表示内容可能被补出、丢弃或改动。消息是固定模板，绝不嵌入用户输入。
 
@@ -262,10 +339,10 @@ execute : {"city":["Paris","London"]}
 | `E030` | `InvalidState` | 在 `finish` 之后继续 `feed`，或重复 `finish`、在致命错误后 `finish`。 |
 | `E040` | `InvalidUtf8` | `feed_bytes` 遇到非法或截断的 UTF-8（载荷为字节偏移）。 |
 | `E050` | `InvalidOption` | 选项取值越界，或选项组合不成立（如 `collect_deltas` 与 `KeepFirst`）。 |
-| `E060` | `InvalidEvent` | `jsonmend/llm` 收到无法解释的事件负载。 |
+| `E060` | `InvalidEvent` | `interjson/llm` 收到无法解释的事件负载。 |
 | `E070` | `SchemaError` | 骨架声明本身写错（括号不闭合、未知类型、成员重复）；CLI 退出码 2。 |
 
-`RepairCode::code`、`MendError::code` 和 `MendError::to_string` 分别给出稳定字符串（如 `R005`）、错误编号（如 `E020`）和单行诊断信息。完整参考见 `docs/ERRORS.md`。
+`RepairCode::code`、`InterJSONError::code` 和 `InterJSONError::to_string` 分别给出稳定字符串（如 `R005`）、错误编号（如 `E020`）和单行诊断信息。完整参考见 `docs/ERRORS.md`。
 
 ## 快照语义
 
@@ -287,14 +364,16 @@ execute : {"city":["Paris","London"]}
 构建并运行命令行工具：
 
 ```sh
-moon build cmd/jsonmend --target native --release
-echo "{'a': 1,}" | ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+moon build cmd/interjson --target native --release
+echo "{'a': 1,}" | ./_build/native/release/build/cmd/interjson/interjson.exe
 ```
 
-以下是 `cmd/jsonmend/args.mbt::help_text()` 帮助文本的逐字引用：
+以下是 `cmd/interjson/args.mbt::help_text()` 帮助文本的逐字引用：
+
+以下是 `interjson --help` 的逐字输出（`interjson mcp --help` 另列 MCP 子命令）：
 
 ```text
-jsonmend [选项] [文件]
+interjson [选项] [文件]
 
 读取文件或标准输入，把修复后的 JSON 写到标准输出。
 
@@ -306,6 +385,14 @@ jsonmend [选项] [文件]
   --skip-prose        跳过 JSON 之前的说明文字
   --quote-lookahead   启用引号歧义前瞻
   --max-repairs N     最多记录多少条修复记录，默认 10000
+  --max-prose-buffer N
+                      跳过前言时最多缓存多少码元供结束回放（默认 65536），超过则按原样拒绝
+  --max-input-len N   最多接受多少码元，超过报 E021 资源限制（默认 67108864）
+  --max-depth N       容器最大嵌套深度，超过报 E020（默认 512）
+  --max-token-len N   单个 token 的最大码元数，超过报 E022（默认 16777216）
+                      这三个上限默认与库一致；调用方可以自己收紧或放宽
+  --with-text         与 explain --json 同用时在计划里带上修复后的全文
+                      （默认不带：机器可读的计划已有 value，全文是重复的一份）
   --max-loss LEVEL    精确度上限：exact、cosmetic 或 lossy，默认 lossy
   --for-execution     执行档：等价于 --max-loss cosmetic --reject-ambiguous
   --reject-ambiguous  拒绝有第二种读法的修复，报 E011（退出码 5）
@@ -319,21 +406,35 @@ jsonmend [选项] [文件]
   --batch             逐行读取 {"id","input"} JSON，逐行输出结果 JSON
                       与 --chunk N 同用可把每条输入按 N 字节分块喂入
 
-jsonmend explain [选项] [文件]
+interjson explain [选项] [文件]
   打印完整分析：修复了什么、为什么、风险多大、能不能执行；拒绝时给可直接回灌模型的提示。
-  退出码与 jsonmend 相同（可执行 0，拒绝 5）。
+  退出码与 interjson 相同（可执行 0，拒绝 5）。
 
-jsonmend readiness [选项] [文件]
+interjson repair [选项] [文件]
+  修复并输出：省略子命令时的默认动作。写出这个子命令名，只为让命令与文档一致。
+
+interjson readiness [选项] [文件]
   打印字段就绪曲线：每个顶级字段在输入消耗到多少时已定稿。
   --step N            每 N 个码元观察一次，默认按长度自适应
 
-jsonmend llm [选项] [文件]
+interjson llm [选项] [文件]
   把模型的事件流喂给 provider 适配器，每个工具调用输出一行结果 JSON。
   --provider NAME     anthropic（默认）或 openai
   --sse               输入是 SSE 文本（默认按每行一个事件 JSON 读取）
   --text              读取文本增量（delta.content / text_delta）而不是工具调用参数（配 --skip-prose 可跳过前言）
   --follow            每次增量都输出一行，而不是只在结束时输出
-  -h, --help          显示帮助
+
+interjson serve [选项]
+  长驻 stdio 协议（PROTOCOL.md）：每行一个请求 JSON，每行一个响应 JSON。
+  方法：hello、repair、analyze、validate、readiness、watch.*、llm.*、shutdown。
+  进程级选项（--policy 等）作为默认值，请求里的 profile/schema 逐条覆盖。
+
+interjson mcp [选项]
+  MCP stdio server（JSON-RPC 2.0）：interjson_gate（执行门）、interjson_repair、
+  interjson_validate、interjson_readiness 四个工具，供 agent 直接调用。
+  --print-config[=CLIENT] 打印客户端配置后退出；CLIENT 为 claude、cursor、vscode、
+                      codex、windsurf、zed 或 json（默认）
+  -h, --help          显示 mcp 帮助
   --version           显示版本
 
 文件为 `-` 或缺省时读取标准输入。
@@ -357,9 +458,9 @@ jsonmend llm [选项] [文件]
 | `--max-loss LEVEL` | `exact`、`cosmetic` 或 `lossy`（默认）：超出即退出码 5，并指出是哪条修复。 |
 | `--explain` | 逐条打印级别、位置与带插入符的片段，末尾给出精确度小结。 |
 | `--batch` | 逐行读 `{"id","input"}`，逐行输出 `{"id","rc","exactness","codes","value","text"}`。 |
-| `llm` 子命令 | `jsonmend llm [--provider anthropic\|openai] [--sse] [--follow] [文件]`：把事件流喂给 provider 适配器。 |
+| `llm` 子命令 | `interjson llm [--provider anthropic\|openai] [--sse] [--follow] [文件]`：把事件流喂给 provider 适配器。 |
 | `-h`、`--help` | 显示帮助。 |
-| `--version` | 显示版本（`jsonmend 1.0.0`）。 |
+| `--version` | 显示版本（`interjson 1.4.0`）。 |
 | `--policy NAME` | 安全档位：`permissive`、`interactive`、`execution`、`agent` 或 `strict`（见 `SafetyPolicy`）。 |
 | `--schema DECL` | 骨架声明，如 `{!query:string,!limit:integer}`；`explain` 会额外打印语法就绪与骨架就绪两层数字。 |
 | `--json` | 与 `explain` 同用：输出机器可读的 JSON 计划，而不是文本块。 |
@@ -380,7 +481,7 @@ jsonmend llm [选项] [文件]
 | `5` | 严格模式违规（`E010`，含 `--max-loss` 超限）。 |
 | `70` | 内部错误（`E030`）。 |
 
-浏览器演示的源码位于 `examples/web`，构建好的页面是 `static/demo/index.html`，可以直接用浏览器打开。该包导出三个「字符串进、字符串出」的入口：`repair_text`、`report_text` 和 `snapshot_text`（返回某个前缀的值、完整性与打开路径），并通过 `globalThis.jsonmendRegister*` 注册到宿主页面，因此页面内没有第二份实现。重新生成 bundle 用 `bash static/demo/build.sh`；构建步骤与无头校验见 `docs/REPRODUCE.md`。
+浏览器演示的源码位于 `examples/web`，构建好的页面是 `static/demo/index.html`，可以直接用浏览器打开。该包导出三个「字符串进、字符串出」的入口：`repair_text`、`report_text` 和 `snapshot_text`（返回某个前缀的值、完整性与打开路径），并通过 `globalThis.interjsonRegister*` 注册到宿主页面，因此页面内没有第二份实现。重新生成 bundle 用 `bash static/demo/build.sh`；构建步骤与无头校验见 `docs/REPRODUCE.md`。
 
 ## 测试
 
@@ -389,18 +490,18 @@ cd code
 moon test                      # 默认后端（wasm-gc）
 moon test --target native      # 本机后端
 moon test --target js          # JavaScript 后端
-bash tests/cli_smoke.sh        # 62 项命令行断言
+bash tests/cli_smoke.sh        # 106 项命令行断言
 bash tests/examples.sh         # 示例输入与 code/examples/cases/*.expected 对照
-python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
-python3 tests/eval/run_eval.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
-python3 tests/eval/run_eval_paths.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
+python3 tests/eval/run_eval.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
+python3 tests/eval/run_eval_paths.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
 python3 tests/eval/check_amb_guard.py    # 对抗语料的判据机制本身可失败的守卫
-python3 tests/eval/run_ambiguity.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
-python3 tests/eval/refcompare.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/eval/run_ambiguity.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
+python3 tests/eval/refcompare.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
 python3 tests/gen_llm_fixtures.py --check
-python3 tests/memory_baseline.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe
+python3 tests/memory_baseline.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
 python3 tests/eval/run_independent.py    # 内置 nst/JSONTestSuite，独立于自造语料
-python3 tests/eval/run_readiness.py --cli ./_build/native/release/build/cmd/jsonmend/jsonmend.exe --check
+python3 tests/eval/run_readiness.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe --check
 moon run examples/agent_loop --target native --release   # 自愈闭环
 ```
 
@@ -413,7 +514,7 @@ moon run examples/agent_loop --target native --release   # 自愈闭环
 | 大模型适配器（TC-LLM） | 9 个生成夹具 + 文档转录事件形状，30 例 | 通过 |
 | 适配器真值路径 | 1200 条 ×（双 provider × 工具流 / 文本流） | 四条路径均 **1200/1200**（[docs/EVAL_PATHS.md](docs/EVAL_PATHS.md)） |
 | 对抗歧义语料 `amb-1` | 24 条手写，指纹冻结 | 10/10 标记并拒绝，14/14 对照放行，失败 0（[docs/EVAL_AMBIGUITY.md](docs/EVAL_AMBIGUITY.md)） |
-| 参照库并列对照 | 1200 条 ×（`jsonrepair` 3.15.0、`json_repair` 0.64.0） | JSONMend 静默错值 0，`jsonrepair` 122，`json_repair` 189（[docs/EVAL_REFERENCE.md](docs/EVAL_REFERENCE.md)） |
+| 参照库并列对照 | 1200 条 ×（`jsonrepair` 3.15.0、`json_repair` 0.64.0） | InterJSON 静默错值 0，`jsonrepair` 122，`json_repair` 189（[docs/EVAL_REFERENCE.md](docs/EVAL_REFERENCE.md)） |
 | 分块路径真值 | 1200 条 × 分块 1/3/7/随机 | 每条路径 1200/1200，零分歧 |
 | 真值评测（TC-EVAL） | 1200 条，协议先冻结 | 恢复率 100.00%，漏标 0，五条判据全 PASS（含 `eval-3` 新增的判据 3b） |
 | 属性与模糊测试（TC-P-01…TC-P-06） | 8 组 × 400 例 | 通过，无反例 |
@@ -422,29 +523,29 @@ moon run examples/agent_loop --target native --release   # 自愈闭环
 | 骨架就绪表 | 10 个场景 | 6 个存在落差（713‰–908‰），4 个两层同时到达末尾（[docs/READINESS.md](docs/READINESS.md)） |
 | 公共面（逐个 R 码与 E 码） | 22 + 12 个码的断言 | 通过 |
 | 选项策略与字节输入 | 10 例 | 通过 |
-| 命令行冒烟（退出码 0/1/2/3/4/5/70） | 62 项断言，含 `explain` 14 条 | 通过 |
+| 命令行冒烟（退出码 0/1/2/3/4/5/70） | 106 项断言，含 `explain` 14 条与 MCP 配置/握手 4 条 | 通过 |
 | 差分语料（对照 `jsonrepair` / `json-repair`） | 402 条 | 202 处差异全部有文档解释，未解释 0 |
 | 库代码行覆盖率 | 根包 3748/3983 行、`llm` 包 337/391 行 | 94.1% / 86.2% |
 
-三个后端结果一致：wasm-gc、native 与 JavaScript 均为 129 个测试全通过。`.github/workflows/ci.yml`
+四个后端结果一致：wasm-gc、native、JavaScript 与 wasm 均为 217 个测试全通过。`.github/workflows/ci.yml`
 在每次推送时执行同一组命令（含差分、真值评测与产物体积），因此上表是重新推导出来的结果，
 而不是一次性记录。0.4.0 的 `ci.yml` 与 `release.yml` 运行记录见仓库 Actions 页，
-`release.yml` 在 `v0.5.0` 标签上产出 [Release `JSONMend v0.5.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.5.0)
+`release.yml` 在 `v0.5.0` 标签上产出 [Release `v0.5.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.5.0)
 （Linux CLI、wasm 探针、演示 bundle、`SHA256SUMS`）。
 复现步骤、阈值与两项已知未达标项见 `docs/REPRODUCE.md`
 与 `docs/TRACEABILITY.md`。
 
 ## 与 jsonrepair 的差异
 
-JSONMend 不是 `jsonrepair` 的移植，也不追求逐字节一致的输出。若干差异是有意为之、且已文档化的策略选择：根值之后的尾随内容默认保留第一个值而不是合并，Markdown 围栏默认去除，重复键默认保留最后一个值，未完成的数字在快照中默认不出现，严格模式与逐规则开关也没有直接对应物。差分工具在手工编写与自动变异的语料上同时运行 `jsonrepair`（TypeScript/Node）与 `json-repair`（Python），比较解析后的值，并对每一处差异分类。0.3.0 与 0.4.0 的改动都没有让这份报告变动一个字节：精确度标签、`R022` 判据与规则编号调整都不改变任何取值。0.4.0 另加了一份**同语料上的并列对照**：1200 条里 JSONMend 的静默错值为 0，`jsonrepair` 为 122、`json_repair` 为 189（`docs/EVAL_REFERENCE.md`）。在 0.4.0 提交的那份差分报告中，202 处差异全部有文档化的成因，没有无法解释的差异。方法与分类结果、参照库版本见 [docs/DIVERGENCES.md](docs/DIVERGENCES.md)；规则与需求的映射见 `docs/TRACEABILITY.md`。
+InterJSON 不是 `jsonrepair` 的移植，也不追求逐字节一致的输出。若干差异是有意为之、且已文档化的策略选择：根值之后的尾随内容默认保留第一个值而不是合并，Markdown 围栏默认去除，重复键默认保留最后一个值，未完成的数字在快照中默认不出现，严格模式与逐规则开关也没有直接对应物。差分工具在手工编写与自动变异的语料上同时运行 `jsonrepair`（TypeScript/Node）与 `json-repair`（Python），比较解析后的值，并对每一处差异分类。0.3.0 与 0.4.0 的改动都没有让这份报告变动一个字节：精确度标签、`R022` 判据与规则编号调整都不改变任何取值。0.4.0 另加了一份**同语料上的并列对照**：1200 条里 InterJSON 的静默错值为 0，`jsonrepair` 为 122、`json_repair` 为 189（`docs/EVAL_REFERENCE.md`）。在 0.4.0 提交的那份差分报告中，202 处差异全部有文档化的成因，没有无法解释的差异。方法与分类结果、参照库版本见 [docs/DIVERGENCES.md](docs/DIVERGENCES.md)；规则与需求的映射见 `docs/TRACEABILITY.md`。
 
 ## 性能
 
 ![字段就绪曲线](../static/readiness-curve.svg)
 
-上图由 `code/tests/readiness_figure.py` 依据 `jsonmend readiness` 的真实输出生成：
-左panel是工具调用文档（`name` 188、`arguments` 858、`id` 981，中位数 858/1000），
-右panel是 200 个顶层成员的扁平记录的十分位曲线（`0 10 21 30 41 51 61 71 80 90 100`）。
+上图由 `code/tests/readiness_figure.py` 依据 `interjson readiness` 的真实输出生成：
+左panel是工具调用文档（`name` 198、`arguments` 858、`id` 990，中位数 858/1000），
+右panel是 200 个顶层成员的扁平记录的十分位曲线（`0 10 21 31 41 51 61 71 80 90 100`）。
 虚线是理想基线（字段在它自己那一段输入读完时就定稿）。这张图替代了上一轮的
 「95% 覆盖」指标：后者在对象结构上几乎恒为 95.3%，区分不出好坏。限制同样写在图上——
 指标只覆盖**顶层**成员，所以 `arguments` 要等它的容器闭合才就绪，这正是左panel偏离
@@ -463,7 +564,7 @@ moon run bench --target js --release
 摊还 0.08 µs/feed、36 MB/s，290 000 次 feed 里没有一次达到毫秒时钟分辨率；
 按 1 MB 文档口径打开 `collect_deltas` 的代价仍是基线的 **1.40–1.46 倍**（**已知未达标项**，
 不是成绩），但这个开销在真实场景（整条流 0.115 ms）里不在关键路径上。
-就绪曲线取代了「95% 覆盖」：十分位 `0 10 21 30 41 51 61 71 80 90 100`，
+就绪曲线取代了「95% 覆盖」：十分位 `0 10 21 31 41 51 61 71 80 90 100`，
 成本约 1.8 ms/KiB（它是测量工具，不是热路径）。
 
 0.5.0 另加了一组「安全层要多少钱」的基准（`bench` 的 `gate` 行）：同一份 4.9 KiB 工具调用、
@@ -493,8 +594,8 @@ moon run bench --target js --release
 - **`incomplete_number` 与 `pending_key` 只影响快照。** 它们不改变 `finish`：最终结果按各自的规则裁剪数字（`R011`）、把悬空键填为 `null`（`R008`）。
 - **孤立代理项在不同后端表现不同。** wasm 后端上 `\uD800` 这类孤立代理项会保留在输出中；其他后端走 `InvalidUtf8`（`E040`）路径，替换为 U+FFFD。
 - **长文本输入（单条字符串吃掉整篇文档）。** 字节入口对完整的多字节 UTF-8 序列批量并入后，CJK 按字节与 ASCII 同价：4 Mi 码元 `feed_bytes` 209.7–220.8 Mu/s（此前 38.5–39.6），25.17 MB 单条 CJK 字符串 `--check` 峰值 RSS 53.7 MB（2.2 × 输入，此前 9.5 ×）。仍未优化的三点：转义密集文本 311.6 Mu/s（每行一个 `\n`，每个转义断一次 run）；按 1 字节分块喂入时批量条件不成立，退化为逐码元（25.17 MB 从 0.04 s 升到 0.43 s，真实 provider 事件是几十到几千字节，不触发）；单个 token 超过 `max_token_len`（默认 16 Mi 码元）报 `E022`。
-- **命令行仅支持 native。** `cmd/jsonmend/moon.pkg` 声明了 `supported_targets = "native"`。
-- **修复保证是启发式的，不构成一致性声明。** JSONMend 不是 JSON 标准，也不保证对每种畸形输入都给出唯一解释；差分报告才是其已记录行为的证据。
+- **命令行仅支持 native。** `cmd/interjson/moon.pkg` 声明了 `supported_targets = "native"`。
+- **修复保证是启发式的，不构成一致性声明。** InterJSON 不是 JSON 标准，也不保证对每种畸形输入都给出唯一解释；差分报告才是其已记录行为的证据。
 - **`Json` 数字遵循 core 的表示。** 超大整数在树中可能损失精度，但修复后的文本保留数字原文。
 - **`quote_lookahead` 默认关闭。** 开启后，缺少逗号的连续字符串会偏向解释为字符串内容。
 - **修复记录受 `max_repairs` 限制（默认 10000 条）。** 超出后仍会继续修复但不再记录，结果把 `repairs_truncated` 置为 `true`，CLI 另向标准错误打印提示。
@@ -506,10 +607,12 @@ moon run bench --target js --release
 - **文本模式默认不跳前言。** `--skip-prose` 从 `{` 或 `[` 开始取值，标量根由 `finish` 回放恢复；前言加标量根（`Sure!\n42`）仍会抛 `E002`，因为前言在哪里结束不可判定。
 - **JS 后端仍会为每个码元分配一个 `Position`。** n/2n/4n 比值因此会到 2.3–2.8（阈值 2.3）；绝对吞吐远高于 5 MB/s 下限，因此记录为决策而不是立即修。
 - **解析器实例非线程安全。** 每个输入流应使用独立实例。
+- **MCP 只有本地 stdio 一种传输。** 没有 HTTP/SSE 传输、没有鉴权层，也没有把 `serve` 的 `watch` / `llm` 流式方法带进 MCP；`mcp` 每条连接只服务请求—响应式的工具调用。
+- **MCP 的请求行上限是 8 MiB。** 超过的行按 JSON-RPC `-32700` 拒绝并丢弃到下一个换行，不会扩容进程；需要检查更大的文档时用 `serve` 或库。
 
 ## 路线图
 
-- ~~发布到 mooncakes.io~~：`zhanshishan/jsonmend` 0.3.0 … **0.7.0** 已发布。`1.0.0` **无法**发布——mooncakes 现阶段只接受 `0.x.y`；`0.8.0` 是 `1.1.0` 的 registry 版本，两者除版本字符串外逐字节相同。接入面（`serve`、`mcp`、npm、pip）已在 `1.1.0` / `0.8.0` 发布。
+- ~~发布到 mooncakes.io~~：已发布的历史 0.3.0 … **0.8.1** 都在**旧包名** `zhanshishan/jsonmend` 下；更名后的 `zhanshishan/interjson` 从 **0.11.0** 开始（1.4.0 的 registry 对应号），已于 **2026-10-27** 上传。`1.x` **无法**发布——mooncakes 现阶段只接受 `0.x.y`；patch / minor 位按发布序顺延（`1.1.x` ↔ `0.8.x`、`1.2.x` ↔ `0.9.x`、`1.3.x` ↔ `0.10.x`、`1.4.x` ↔ `0.11.x`），除版本字符串与 registry 包名外逐字节相同。
 - ~~给浏览器演示页加一个播放「模型流」的标签页~~：`static/demo/live.html` 已落地（四个真实场景逐帧重放，含重试面板），线上地址 <https://wenhuang2333.github.io/Moonbit-haker/live.html>。
 - ~~把就绪曲线扩展到「调用方真正需要的字段」~~：`Schema` + `semantic_readiness` 已落地（语法/骨架两层分数）。
 - ~~给骨架加约束~~：`minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern`（字符类子集，不是正则）已在 0.7.0 落地。
@@ -534,7 +637,7 @@ moon run bench --target js --release
 
 ## 许可证与致谢
 
-JSONMend 以 Apache License 2.0 发布（`code/moon.mod` 中 `license = "Apache-2.0"`）。`LICENSE`/`NOTICE` 文件属于发布清单。
+InterJSON 以 Apache License 2.0 发布（`code/moon.mod` 中 `license = "Apache-2.0"`）。`LICENSE`/`NOTICE` 文件属于发布清单。
 
 - [jsonrepair](https://github.com/josdejong/jsonrepair)（TypeScript）与 [json-repair](https://github.com/mangiucugna/json_repair)（Python）在差分报告中作为行为参照。它们仅用于对照，未内嵌任何代码。
 - MoonBit 核心库（`moonbitlang/core/json`、`moonbitlang/core/string`）提供 `Json` 类型与字符串处理。

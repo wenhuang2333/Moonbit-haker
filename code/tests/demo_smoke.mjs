@@ -1,10 +1,10 @@
 // Smoke test for the built browser demo bundle (P1-1 CI guard).
 //
-//   node code/tests/demo_smoke.mjs [path/to/jsonmend.js]
+//   node code/tests/demo_smoke.mjs [path/to/interjson.js]
 //
 // The bundle is a plain script that calls the host hooks on `globalThis`, so
 // it can be evaluated in Node exactly as the demo page does. This catches a
-// stale bundle (source changed, `static/demo/jsonmend.js` not rebuilt) and a
+// stale bundle (source changed, `static/demo/interjson.js` not rebuilt) and a
 // broken JS backend build.
 
 import { readFileSync } from "node:fs";
@@ -13,16 +13,16 @@ import { dirname, resolve } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const bundle =
-  process.argv[2] || resolve(here, "..", "..", "static", "demo", "jsonmend.js");
+  process.argv[2] || resolve(here, "..", "..", "static", "demo", "interjson.js");
 
 const registered = {};
-globalThis.jsonmendRegister1 = (name, fn) => {
+globalThis.interjsonRegister1 = (name, fn) => {
   registered[name] = fn;
 };
-globalThis.jsonmendRegister2 = (name, fn) => {
+globalThis.interjsonRegister2 = (name, fn) => {
   registered[name] = fn;
 };
-globalThis.jsonmendRegister3 = (name, fn) => {
+globalThis.interjsonRegister3 = (name, fn) => {
   registered[name] = fn;
 };
 globalThis.print = () => {};

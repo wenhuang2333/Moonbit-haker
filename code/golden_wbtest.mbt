@@ -38,7 +38,7 @@ fn recs_text(rs : Array[Repair]) -> String {
 
 ///|
 /// `E020(3,@3)` style rendering of a fatal error.
-fn err_text(e : MendError) -> String {
+fn err_text(e : InterJSONError) -> String {
   match e {
     EmptyInput => "E001"
     NoJsonFound(o) => "E002@" + o.to_string()

@@ -69,7 +69,7 @@ pub fn hint_context(
 /// `input` is optional: without it the hint still names the position, but it
 /// cannot quote the surrounding text.
 pub fn RetryHint::of_error(
-  e : MendError,
+  e : InterJSONError,
   input? : String,
   radius? : Int32,
 ) -> RetryHint? {
@@ -103,7 +103,7 @@ pub fn RetryHint::of_error(
 /// refused position, so a caller can put it in a retry message as is.
 pub fn RetryHint::to_prompt(self : RetryHint) -> String {
   let sb = StringBuilder()
-  sb.write_string("JSONMend refused the arguments: ")
+  sb.write_string("InterJSON refused the arguments: ")
   sb.write_string(self.error_code)
   sb.write_string(" ")
   sb.write_string(self.repair_code)
@@ -156,8 +156,8 @@ pub fn RetryHint::to_string(self : RetryHint) -> String {
 
 ///|
 /// Convenience: the hint of a refusal, or `None`.
-pub fn MendError::retry_hint(
-  self : MendError,
+pub fn InterJSONError::retry_hint(
+  self : InterJSONError,
   input? : String,
   radius? : Int32,
 ) -> RetryHint? {

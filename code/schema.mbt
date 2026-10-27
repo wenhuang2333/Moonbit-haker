@@ -4,7 +4,7 @@
 // The library has never been and is still not a JSON Schema validator. There is
 // no `$ref`, no `oneOf`, no `format`, no `pattern`, and no plan to add them:
 // validating a finished document is a solved problem with mature
-// implementations, and JSONMend's contribution is the streaming half.
+// implementations, and InterJSON's contribution is the streaming half.
 //
 // What a streaming consumer actually knows that the document does not is *what
 // it is waiting for*. A tool call declares its arguments; a UI declares the
@@ -606,7 +606,7 @@ fn sp_at(p : SchemaParser, word : String) -> Bool {
 
 ///|
 /// Parse a schema at `p.i`, leaving the cursor after it.
-fn sp_schema(p : SchemaParser) -> Schema raise MendError {
+fn sp_schema(p : SchemaParser) -> Schema raise InterJSONError {
   sp_skip_ws(p)
   let n = p.text.length()
   if p.i >= n {
@@ -717,7 +717,7 @@ fn sp_schema(p : SchemaParser) -> Schema raise MendError {
 fn sp_wrap_constraints(
   p : SchemaParser,
   base : Schema,
-) -> Schema raise MendError {
+) -> Schema raise InterJSONError {
   if p.i >= p.text.length() || p.text.at(p.i).to_int() != 0x28 {
     return base
   }
@@ -734,7 +734,7 @@ fn sp_wrap_constraints(
 fn sp_constraints(
   p : SchemaParser,
   base : Schema,
-) -> Constraints raise MendError {
+) -> Constraints raise InterJSONError {
   let n = p.text.length()
   p.i = p.i + 1
   let out = Constraints::none()
@@ -787,7 +787,7 @@ fn sp_constraints(
 ///|
 /// One constraint name: ASCII letters, matched case-insensitively against the
 /// eight names the language has.
-fn sp_constraint_name(p : SchemaParser) -> String raise MendError {
+fn sp_constraint_name(p : SchemaParser) -> String raise InterJSONError {
   let n = p.text.length()
   let sb = StringBuilder()
   while p.i < n {
@@ -845,7 +845,7 @@ fn sp_constraint_value(
   base : Schema,
   name_at : Int32,
   out : Constraints,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   let kind = base.name()
   if name_eq_ci(name, "minimum") ||
     name_eq_ci(name, "exclusiveMinimum") ||
@@ -923,7 +923,7 @@ fn sp_constraint_value(
 fn sp_constraint_number(
   p : SchemaParser,
   name : String,
-) -> Double raise MendError {
+) -> Double raise InterJSONError {
   let at = p.i
   let tok = sp_constraint_token(p)
   if tok == "" {
@@ -986,7 +986,7 @@ fn sp_constraint_token(p : SchemaParser) -> String {
 fn sp_constraint_length(
   p : SchemaParser,
   name : String,
-) -> Int32 raise MendError {
+) -> Int32 raise InterJSONError {
   let at = p.i
   let d = sp_constraint_number(p, name)
   if !(d >= 0.0) || d > 2147483647.0 || d != d.to_int().to_double() {
@@ -1009,7 +1009,7 @@ fn sp_constraint_length(
 fn sp_constraint_enum(
   p : SchemaParser,
   base : Schema,
-) -> Array[Json] raise MendError {
+) -> Array[Json] raise InterJSONError {
   let n = p.text.length()
   if p.i >= n || p.text.at(p.i).to_int() != 0x5B {
     raise SchemaError(
@@ -1072,7 +1072,10 @@ fn sp_constraint_enum(
 ///|
 /// Index just after the bracket run that starts at `start`: a JSON array (or
 /// any bracketed text) balanced across strings and escapes.
-fn sp_scan_brackets(p : SchemaParser, start : Int32) -> Int32 raise MendError {
+fn sp_scan_brackets(
+  p : SchemaParser,
+  start : Int32,
+) -> Int32 raise InterJSONError {
   let n = p.text.length()
   let mut i = start
   let mut depth = 0
@@ -1112,7 +1115,7 @@ fn sp_scan_brackets(p : SchemaParser, start : Int32) -> Int32 raise MendError {
 
 ///|
 /// A `pattern` value: one character class, `[...]`, and nothing else.
-fn sp_constraint_class(p : SchemaParser) -> String raise MendError {
+fn sp_constraint_class(p : SchemaParser) -> String raise InterJSONError {
   let n = p.text.length()
   if p.i >= n || p.text.at(p.i).to_int() != 0x5B {
     raise SchemaError(
@@ -1152,7 +1155,7 @@ fn sp_constraint_class(p : SchemaParser) -> String raise MendError {
 /// a range that starts or ends at an escape, and an inverted range. Everything
 /// else (including `.`, `*` and `+` inside the brackets) is a literal character,
 /// which is the whole point of "a character class, not a regular expression".
-fn guard_class(inner : String, open : Int32) -> Unit raise MendError {
+fn guard_class(inner : String, open : Int32) -> Unit raise InterJSONError {
   let n = inner.length()
   let mut i = 0
   let mut prev_escape = false
@@ -1235,7 +1238,7 @@ fn guard_class(inner : String, open : Int32) -> Unit raise MendError {
 
 ///|
 /// A member name: a bare identifier, or a double quoted string.
-fn sp_key(p : SchemaParser) -> String raise MendError {
+fn sp_key(p : SchemaParser) -> String raise InterJSONError {
   let n = p.text.length()
   if p.i < n && p.text.at(p.i).to_int() == 0x22 {
     p.i = p.i + 1
@@ -1269,7 +1272,7 @@ fn sp_key(p : SchemaParser) -> String raise MendError {
 /// Reject a declaration that names the same member twice: the order of the two
 /// would decide which one wins, which is exactly the kind of silent choice this
 /// library refuses to make elsewhere.
-fn guard_no_dup(members : Array[SchemaMember]) -> Unit raise MendError {
+fn guard_no_dup(members : Array[SchemaMember]) -> Unit raise InterJSONError {
   for i = 0; i < members.length(); i = i + 1 {
     for j = i + 1; j < members.length(); j = j + 1 {
       if members[i].key == members[j].key {
@@ -1284,7 +1287,7 @@ fn guard_no_dup(members : Array[SchemaMember]) -> Unit raise MendError {
 ///|
 /// Parse the text form of a skeleton (FR-36). Raises `E070` with the offset of
 /// the problem; the text is never partially accepted.
-pub fn Schema::parse(text : String) -> Schema raise MendError {
+pub fn Schema::parse(text : String) -> Schema raise InterJSONError {
   let p : SchemaParser = { text, i: 0, }
   let s = sp_schema(p)
   sp_skip_ws(p)
@@ -1760,7 +1763,7 @@ pub fn semantic_readiness(
   schema : Schema,
   step? : Int32,
   options? : Options,
-) -> SemanticReadiness raise MendError {
+) -> SemanticReadiness raise InterJSONError {
   let opts = match options {
     Some(o) => o
     None => Options::default()

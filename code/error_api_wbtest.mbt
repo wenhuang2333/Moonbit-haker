@@ -73,7 +73,7 @@ test "TC-E-API-01 repair code table is complete and self consistent" {
 
 ///|
 test "TC-E-API-02 every fatal error exposes a code and a message" {
-  let errors : Array[MendError] = [
+  let errors : Array[InterJSONError] = [
     EmptyInput,
     NoJsonFound(0),
     StrictViolation(RemoveExtraComma, { offset: 6, line: 1, column: 7, }, "x"),

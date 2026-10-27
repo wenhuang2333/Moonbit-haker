@@ -2,7 +2,7 @@
 """Conformance runner for the `serve` protocol and the MCP server.
 
     python3 code/tests/conformance/run_conformance.py \
-        --cli code/_build/native/release/build/cmd/jsonmend/jsonmend.exe
+        --cli code/_build/native/release/build/cmd/interjson/interjson.exe
 
 Every case in `cases.jsonl` is one connection; a multi-step case keeps the
 connection open so `watch`/`llm` state is exercised the way a client uses it.
@@ -10,8 +10,9 @@ The expected value is a *subset*: a case pins the fields that matter, so adding
 a field to a response does not require rewriting the corpus, while removing or
 changing one does fail.
 
-The MCP half checks the four tool names, a successful `tools/call`, a refusal
-(`isError`), and the notification rule (a notification must produce no line).
+The MCP half checks the four tool names, the gate's safe default, structured
+content, a schema refusal (`isError`), protocol negotiation, and the
+notification rule (a notification must produce no line).
 """
 
 from __future__ import annotations
@@ -19,13 +20,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_CLI = HERE.parents[1] / "_build/native/release/build/cmd/jsonmend/jsonmend.exe"
+DEFAULT_CLI = HERE.parents[1] / "_build/native/release/build/cmd/interjson/interjson.exe"
 
 
 def subset(actual: Any, expected: Any) -> bool:
@@ -234,13 +237,20 @@ def run_mcp(binary: str) -> list[str]:
             }
         )
         init = connection.read()
-        if init.get("result", {}).get("protocolVersion") != "2024-11-05":
-            failures.append("initialize did not echo the client's protocol version")
-        if init.get("result", {}).get("serverInfo", {}).get("name") != "jsonmend":
-            failures.append("initialize did not report serverInfo.name=jsonmend")
+        result = init.get("result", {})
+        if result.get("protocolVersion") != "2024-11-05":
+            failures.append("initialize did not echo a supported legacy protocol version")
+        if result.get("serverInfo", {}).get("name") != "interjson":
+            failures.append("initialize did not report serverInfo.name=interjson")
+        if not result.get("serverInfo", {}).get("title"):
+            failures.append("initialize did not report serverInfo.title")
+        if "interjson_gate" not in result.get("instructions", ""):
+            failures.append("initialize did not tell the model to use interjson_gate")
 
         # A notification must produce no response: the next line must be the
-        # ping's answer, not an empty notification answer.
+        # ping's answer, not an empty notification answer. A request without an
+        # `id` is a notification too, so `tools/list` sent that way is silent.
+        connection.send({"jsonrpc": "2.0", "method": "tools/list"})
         connection.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
         connection.send({"jsonrpc": "2.0", "id": 2, "method": "ping"})
         ping = connection.read()
@@ -249,24 +259,33 @@ def run_mcp(binary: str) -> list[str]:
 
         connection.send({"jsonrpc": "2.0", "id": 3, "method": "tools/list"})
         tools = connection.read()
-        names = [tool.get("name") for tool in tools.get("result", {}).get("tools", [])]
+        declared = tools.get("result", {}).get("tools", [])
+        names = [tool.get("name") for tool in declared]
         expected = [
-            "jsonmend_repair",
-            "jsonmend_analyze",
-            "jsonmend_validate",
-            "jsonmend_readiness",
+            "interjson_gate",
+            "interjson_repair",
+            "interjson_validate",
+            "interjson_readiness",
         ]
         if names != expected:
             failures.append(f"tools/list: expected {expected}, got {names}")
+        for tool in declared:
+            annotations = tool.get("annotations", {})
+            if annotations.get("readOnlyHint") is not True:
+                failures.append(f"{tool.get('name')}: missing readOnlyHint annotation")
+            if tool.get("outputSchema", {}).get("type") != "object":
+                failures.append(f"{tool.get('name')}: missing object outputSchema")
 
+        # The gate is safe by default: the execution profile refuses the
+        # truncated argument even though no profile was passed.
         connection.send(
             {
                 "jsonrpc": "2.0",
                 "id": 4,
                 "method": "tools/call",
                 "params": {
-                    "name": "jsonmend_analyze",
-                    "arguments": {"text": '{"words":["a" "b"]}', "profile": "execution"},
+                    "name": "interjson_gate",
+                    "arguments": {"text": '{"path":"/tmp/x"'},
                 },
             }
         )
@@ -277,16 +296,45 @@ def run_mcp(binary: str) -> list[str]:
         except json.JSONDecodeError:
             failures.append(f"tools/call content is not JSON: {content[:120]!r}")
             plan = {}
-        if plan.get("decision") != "ambiguous" or call.get("result", {}).get("isError"):
-            failures.append(f"tools/call analyze: unexpected result {plan.get('decision')}")
+        if plan.get("executable") is not False:
+            failures.append(f"gate default profile executed a truncated value: {plan}")
+        if "E010" not in (plan.get("retry") or {}).get("prompt", ""):
+            failures.append("gate refusal did not carry an E010 retry prompt")
+        if call.get("result", {}).get("structuredContent") != plan:
+            failures.append("gate structuredContent is not the same object as the text channel")
 
+        # A two-reading repair is reported, not executed.
         connection.send(
             {
                 "jsonrpc": "2.0",
                 "id": 5,
                 "method": "tools/call",
                 "params": {
-                    "name": "jsonmend_analyze",
+                    "name": "interjson_gate",
+                    "arguments": {
+                        "text": '{"words":["a" "b"]}',
+                        "profile": "execution",
+                    },
+                },
+            }
+        )
+        ambiguous = connection.read()
+        ambiguous_plan = json.loads(
+            ambiguous.get("result", {}).get("content", [{}])[0].get("text", "{}")
+        )
+        if ambiguous_plan.get("decision") != "ambiguous" or ambiguous.get(
+            "result", {}
+        ).get("isError"):
+            failures.append(f"gate ambiguous: unexpected result {ambiguous_plan.get('decision')}")
+
+        # A schema the engine cannot honour is a tool error, not a silent pass.
+        connection.send(
+            {
+                "jsonrpc": "2.0",
+                "id": 6,
+                "method": "tools/call",
+                "params": {
+                    "name": "interjson_gate",
                     "arguments": {"text": "{}", "schema_json": {"$ref": "#/x"}},
                 },
             }
@@ -296,13 +344,112 @@ def run_mcp(binary: str) -> list[str]:
             failures.append("tools/call with an unsupported schema keyword was not isError")
         if "E070" not in refused.get("result", {}).get("content", [{}])[0].get("text", ""):
             failures.append("tools/call refusal did not name E070")
+        if "structuredContent" in refused.get("result", {}):
+            failures.append("an error result must not carry structuredContent")
 
-        connection.send({"jsonrpc": "2.0", "id": 6, "method": "nope"})
+        # An unknown tool is a protocol error, not a success with isError.
+        connection.send(
+            {
+                "jsonrpc": "2.0",
+                "id": 7,
+                "method": "tools/call",
+                "params": {"name": "no_such_tool", "arguments": {}},
+            }
+        )
+        unknown_tool = connection.read()
+        if unknown_tool.get("result", {}).get("isError") is not True:
+            failures.append("unknown tool did not produce an isError tool result")
+
+        connection.send({"jsonrpc": "2.0", "id": 8, "method": "nope"})
         unknown = connection.read()
         if unknown.get("error", {}).get("code") != -32601:
             failures.append(f"unknown method: expected -32601, got {unknown.get('error')}")
     finally:
         connection.close()
+
+    # The printed client configurations are part of the deployment surface: a
+    # typo here is what a user copies into their client, so they are pinned.
+    config = subprocess.run(
+        [binary, "mcp", "--print-config=claude"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    if config.returncode != 0 or config.stdout.strip() != (
+        "claude mcp add interjson -- interjson mcp"
+    ):
+        failures.append(f"--print-config=claude printed {config.stdout!r}")
+    cursor = subprocess.run(
+        [binary, "mcp", "--print-config=cursor"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    try:
+        printed = json.loads(cursor.stdout)
+    except json.JSONDecodeError:
+        printed = {}
+    if printed.get("mcpServers", {}).get("interjson", {}).get("args") != ["mcp"]:
+        failures.append(f"--print-config=cursor is not a usable config: {cursor.stdout!r}")
+
+    # The `interjson-mcp` alias: a copy or symlink under that name starts the
+    # MCP server with no arguments. This is how package managers and client
+    # configs invoke the server, so the dispatch is exercised, not assumed.
+    alias_dir = tempfile.mkdtemp(prefix="interjson-mcp-")
+    try:
+        alias = os.path.join(
+            alias_dir, "interjson-mcp.exe" if os.name == "nt" else "interjson-mcp"
+        )
+        if os.name == "nt":
+            shutil.copy2(binary, alias)
+        else:
+            os.symlink(binary, alias)
+        alias_proc = subprocess.Popen(
+            [alias],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            bufsize=1,
+        )
+        try:
+            assert alias_proc.stdin is not None and alias_proc.stdout is not None
+            alias_proc.stdin.write(
+                json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}) + "\n"
+            )
+            alias_proc.stdin.flush()
+            alias_tools = json.loads(alias_proc.stdout.readline())
+            names = [t.get("name") for t in alias_tools.get("result", {}).get("tools", [])]
+            if names != expected:
+                failures.append(f"interjson-mcp alias did not start the server: {names}")
+        finally:
+            alias_proc.kill()
+            alias_proc.wait(timeout=10)
+    finally:
+        shutil.rmtree(alias_dir, ignore_errors=True)
+
+    # An unsupported protocol revision must be answered with the newest
+    # revision the server implements, never echoed back.
+    probe = Connection(binary, "mcp")
+    try:
+        probe.send(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "1999-01-01",
+                    "capabilities": {},
+                    "clientInfo": {"name": "conformance", "version": "0"},
+                },
+            }
+        )
+        unsupported = probe.read().get("result", {}).get("protocolVersion")
+        if unsupported != "2025-06-18":
+            failures.append(f"unsupported protocol version: expected 2025-06-18, got {unsupported}")
+    finally:
+        probe.close()
     return failures
 
 
@@ -313,7 +460,7 @@ def main() -> int:
     args = parser.parse_args()
     binary = os.path.abspath(args.cli)
     if not os.path.isfile(binary):
-        print(f"jsonmend not found: {binary}", file=sys.stderr)
+        print(f"interjson not found: {binary}", file=sys.stderr)
         return 2
 
     total = 0

@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """Side-by-side comparison with the two reference repair libraries (I-4).
 
-The registered evaluation measures JSONMend alone. This harness runs the *same*
+The registered evaluation measures InterJSON alone. This harness runs the *same*
 frozen corpus and the *same* truth through three repairers:
 
-  * JSONMend                (`jsonmend --batch`, plus the `--for-execution` gate)
+  * InterJSON                (`interjson --batch`, plus the `--for-execution` gate)
   * `jsonrepair` 3.15.0     (npm, via `oracle_node.mjs`)
   * `json_repair` 0.64.0    (PyPI, in process)
 
 The interesting column is not the raw recovery rate but *silent wrong answers*:
 a repairer that returns a parseable value which differs from the truth, without
-saying so. JSONMend labels every such result `lossy`, and the `--for-execution`
+saying so. InterJSON labels every such result `lossy`, and the `--for-execution`
 gate refuses it instead of returning it; the two reference libraries have no
 such channel, so for them a wrong value is indistinguishable from a right one.
 
-    python3 code/tests/eval/refcompare.py --cli <path to jsonmend> [--node-dir DIR]
+    python3 code/tests/eval/refcompare.py --cli <path to interjson> [--node-dir DIR]
 
 `--node-dir` is the directory that holds `node_modules/jsonrepair`; it defaults
 to `/private/tmp` , which is where the pinned oracle is unpacked.
@@ -46,7 +46,7 @@ def load_corpus():
     return cases
 
 
-def run_jsonmend(cli, cases, extra=()):
+def run_interjson(cli, cases, extra=()):
     prose = [c for c in cases if c["family"] == "prose"]
     rest = [c for c in cases if c["family"] != "prose"]
     rows = {}
@@ -145,7 +145,7 @@ def score(tool, cases, rows, get):
             continue
         if same(value, c["truth"]):
             recovered += 1
-        elif tool == "jsonmend" and label == "lossy":
+        elif tool == "interjson" and label == "lossy":
             labelled_wrong += 1
         else:
             silent_wrong += 1
@@ -169,8 +169,8 @@ def main() -> int:
     cases = load_corpus()
     fingerprint = corpus_mod.fingerprint(cases)
 
-    jm = run_jsonmend(args.cli, cases)
-    jm_gate = run_jsonmend(args.cli, cases, extra=["--for-execution"])
+    jm = run_interjson(args.cli, cases)
+    jm_gate = run_interjson(args.cli, cases, extra=["--for-execution"])
     jr = run_jsonrepair(cases, args.node_dir)
     jp = run_json_repair_py(cases)
 
@@ -185,7 +185,7 @@ def main() -> int:
         return (row.get("value"), row.get("valid"), "")
 
     scores = {
-        "jsonmend": score("jsonmend", cases, jm, get_jm),
+        "interjson": score("interjson", cases, jm, get_jm),
         "jsonrepair": score("jsonrepair", cases, jr, get_oracle),
         "json_repair": score("json_repair", cases, jp, get_oracle),
     }
@@ -230,7 +230,7 @@ def main() -> int:
             continue
         row = {"family": fam, "n": len(group), "refused": gate_refused_by_family.get(fam, 0)}
         for tool, (rows, getter) in {
-            "jsonmend": (jm, get_jm),
+            "interjson": (jm, get_jm),
             "jsonrepair": (jr, get_oracle),
             "json_repair": (jp, get_oracle),
         }.items():
@@ -244,7 +244,7 @@ def main() -> int:
         families.append(row)
 
     version_lines = [
-        ("jsonmend", "round 5 build"),
+        ("interjson", "round 5 build"),
         ("jsonrepair", "3.15.0 (npm)"),
         ("json_repair", "0.64.0 (PyPI)"),
     ]
@@ -269,7 +269,7 @@ def main() -> int:
         "| repairer | recovered truth | silent wrong value | labelled wrong (`lossy`) | raised | produced non-JSON |"
     )
     lines.append("| --- | --- | --- | --- | --- | --- |")
-    for name in ("jsonmend", "jsonrepair", "json_repair"):
+    for name in ("interjson", "jsonrepair", "json_repair"):
         s = scores[name]
         lines.append(
             "| %s | %d / %d (%.1f%%) | %d | %d | %d | %d |"
@@ -288,7 +288,7 @@ def main() -> int:
     lines.append(
         "`silent wrong value` counts a parseable answer that differs from the "
         "truth and carries no warning. For the two reference libraries that is "
-        "every wrong answer, because neither has a channel for it. For JSONMend "
+        "every wrong answer, because neither has a channel for it. For InterJSON "
         "it is 0 by construction: the wrong answers appear in the `labelled "
         "wrong` column, and the execution gate refuses them."
     )
@@ -336,7 +336,7 @@ def main() -> int:
     lines.append("")
     lines.append("## Per-family recovery")
     lines.append("")
-    lines.append("| family | cases | gate refused | jsonmend | jsonrepair | json_repair |")
+    lines.append("| family | cases | gate refused | interjson | jsonrepair | json_repair |")
     lines.append("| --- | --- | --- | --- | --- | --- |")
     for row in families:
         lines.append(
@@ -345,14 +345,14 @@ def main() -> int:
                 row["family"],
                 row["n"],
                 row["refused"],
-                row["jsonmend"],
+                row["interjson"],
                 row["jsonrepair"],
                 row["json_repair"],
             )
         )
     lines.append("")
     lines.append(
-        "Families where a reference library beats JSONMend are visible above and "
+        "Families where a reference library beats InterJSON are visible above and "
         "are the honest form of this comparison: a single number hides that the "
         "corpus is dominated by notation repairs."
     )
@@ -361,7 +361,7 @@ def main() -> int:
     lines.append("")
     lines.append(
         "The corpus has one family that cannot be read with the default options: "
-        "`prose` puts a sentence in front of the value, and JSONMend only skips "
+        "`prose` puts a sentence in front of the value, and InterJSON only skips "
         "prose when `--skip-prose` is set (the default is to refuse, so that a "
         "scalar root such as `Sure!\\n42` is never silently discarded). That "
         "family is therefore run with `--skip-prose` in every harness "
@@ -369,8 +369,8 @@ def main() -> int:
     )
     lines.append("")
     lines.append(
-        "This is not a concession made to JSONMend: **both reference libraries "
-        "strip leading prose by default**, so the flag puts JSONMend in the same "
+        "This is not a concession made to InterJSON: **both reference libraries "
+        "strip leading prose by default**, so the flag puts InterJSON in the same "
         "position rather than a better one. The number of cases affected is 60 "
         "of 1200; every other case runs with default options on both sides."
     )

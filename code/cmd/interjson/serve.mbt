@@ -1,4 +1,4 @@
-// `jsonmend serve` — the long-lived, versioned protocol (PROTOCOL.md).
+// `interjson serve` — the long-lived, versioned protocol (PROTOCOL.md).
 //
 // `--stdio` is accepted as an explicit alias: stdio is the only transport,
 // so the flag selects nothing. It exists so that the command line printed in
@@ -7,7 +7,7 @@
 // One request per line on stdin, one response per line on stdout, UTF-8. The
 // response echoes the client's `id`. stdout carries protocol bytes and nothing
 // else; diagnostics go to stderr. The engine is the same one the one-shot CLI
-// uses, so `serve` cannot disagree with `jsonmend repair`.
+// uses, so `serve` cannot disagree with `interjson repair`.
 //
 // The protocol is deliberately stateless for `repair`/`analyze`/`validate` and
 // single-stream for `watch`/`llm`: one active stream per connection. That is
@@ -23,14 +23,14 @@ const PROTOCOL_VERSION : Int32 = 1
 ///|
 /// The engine version this build reports. Kept in one place so the protocol,
 /// `--version` and the tests cannot drift.
-const ENGINE_VERSION : String = "1.3.0"
+const ENGINE_VERSION : String = "1.4.0"
 
 ///|
 /// The mooncakes registry version that corresponds to `ENGINE_VERSION`
 /// (mooncakes currently only accepts `0.x.y`). The two numbers are different
 /// channels of the same bytes; `hello` reports both so a client never has to
 /// guess which one it is looking at.
-const REGISTRY_VERSION : String = "0.10.0"
+const REGISTRY_VERSION : String = "0.11.0"
 
 ///|
 /// Largest request line accepted. A request larger than this is answered with
@@ -127,26 +127,26 @@ fn jnum(n : Int32) -> Json {
 
 ///|
 /// `Completeness` as the stable word the protocol uses.
-fn completeness_name(c : @mend.Completeness) -> String {
+fn completeness_name(c : @ij.Completeness) -> String {
   match c {
-    @mend.Empty => "empty"
-    @mend.Partial => "partial"
-    @mend.Complete => "complete"
+    @ij.Empty => "empty"
+    @ij.Partial => "partial"
+    @ij.Complete => "complete"
   }
 }
 
 ///|
 /// `Severity` as the stable word the protocol uses.
-fn severity_name(s : @mend.Severity) -> String {
+fn severity_name(s : @ij.Severity) -> String {
   match s {
-    @mend.Info => "info"
-    @mend.Warning => "warning"
+    @ij.Info => "info"
+    @ij.Warning => "warning"
   }
 }
 
 ///|
 /// One repair record.
-fn repair_json(r : @mend.Repair) -> Json {
+fn repair_json(r : @ij.Repair) -> Json {
   jobj([
     ("code", Json::string(r.code.code())),
     ("threshold", Json::string(r.code.name())),
@@ -161,7 +161,7 @@ fn repair_json(r : @mend.Repair) -> Json {
 
 ///|
 /// One delta.
-fn delta_json(d : @mend.Delta) -> Json {
+fn delta_json(d : @ij.Delta) -> Json {
   jobj([
     ("path", Json::string(d.pointer())),
     ("op", Json::string(d.op.name())),
@@ -179,15 +179,15 @@ fn delta_json(d : @mend.Delta) -> Json {
 
 ///|
 /// A snapshot path as `a/0/b`.
-fn snapshot_path(s : @mend.Snapshot) -> String {
+fn snapshot_path(s : @ij.Snapshot) -> String {
   let sb = StringBuilder()
   for i = 0; i < s.open_path.length(); i = i + 1 {
     if i > 0 {
       sb.write_char('/')
     }
     match s.open_path[i] {
-      @mend.Key(k) => sb.write_string(k)
-      @mend.Index(x) => sb.write_string(x.to_string())
+      @ij.Key(k) => sb.write_string(k)
+      @ij.Index(x) => sb.write_string(x.to_string())
     }
   }
   sb.to_string()
@@ -195,7 +195,7 @@ fn snapshot_path(s : @mend.Snapshot) -> String {
 
 ///|
 /// A finished parse.
-fn final_json(f : @mend.FinalResult) -> Json {
+fn final_json(f : @ij.FinalResult) -> Json {
   jobj([
     ("text", Json::string(f.text)),
     ("value", f.value),
@@ -209,7 +209,7 @@ fn final_json(f : @mend.FinalResult) -> Json {
 
 ///|
 /// A one-shot repair result (no `value`; `analyze` carries the value).
-fn repair_out_json(r : @mend.RepairResult) -> Json {
+fn repair_out_json(r : @ij.RepairResult) -> Json {
   jobj([
     ("text", Json::string(r.text)),
     ("exactness", Json::string(r.exactness.name())),
@@ -222,7 +222,7 @@ fn repair_out_json(r : @mend.RepairResult) -> Json {
 
 ///|
 /// One readiness event with the offset it fired at.
-fn event_json(e : @mend.ReadinessEvent, at : Int32, fed : Int32) -> Json {
+fn event_json(e : @ij.ReadinessEvent, at : Int32, fed : Int32) -> Json {
   let base = @json.parse(e.to_json()) catch { _ => Json::null() }
   match base {
     Json::Object(m) => {
@@ -242,7 +242,7 @@ fn event_json(e : @mend.ReadinessEvent, at : Int32, fed : Int32) -> Json {
 
 ///|
 /// A schema verdict.
-fn verdict_json(v : @mend.SchemaVerdict) -> Json {
+fn verdict_json(v : @ij.SchemaVerdict) -> Json {
   let mismatched : Array[Json] = []
   for m in v.mismatched {
     mismatched.push(
@@ -286,7 +286,7 @@ fn tool_call_json(v : @llm.ToolCallView) -> Json {
 
 ///|
 /// A fatal error as a structured object, never as stderr text.
-fn error_json(e : @mend.MendError) -> Json {
+fn error_json(e : @ij.InterJSONError) -> Json {
   let m : Map[String, Json] = Map([])
   m["code"] = Json::string(e.code())
   m["message"] = Json::string(e.to_string())
@@ -310,7 +310,7 @@ fn response_ok(id : Json, result : Json) -> String {
 
 ///|
 /// `{"id":…,"ok":false,"error":…}`.
-fn response_err(id : Json, e : @mend.MendError) -> String {
+fn response_err(id : Json, e : @ij.InterJSONError) -> String {
   jobj([("id", id), ("ok", Json::boolean(false)), ("error", error_json(e))]).stringify()
 }
 
@@ -327,7 +327,7 @@ fn hello_json() -> Json {
     Json::string("llm"),
   ]
   jobj([
-    ("name", Json::string("jsonmend")),
+    ("name", Json::string("interjson")),
     ("engine", Json::string(ENGINE_VERSION)),
     ("registry", Json::string(REGISTRY_VERSION)),
     ("protocol", Json::number(PROTOCOL_VERSION.to_double())),
@@ -338,11 +338,11 @@ fn hello_json() -> Json {
 
 ///|
 /// Read `text` from the request.
-fn text_param(params : Map[String, Json]) -> String raise @mend.MendError {
+fn text_param(params : Map[String, Json]) -> String raise @ij.InterJSONError {
   match params.get("text") {
     Some(Json::String(s)) => s
-    Some(_) => raise @mend.InvalidOption("`text` must be a string")
-    None => raise @mend.InvalidOption("missing `text`")
+    Some(_) => raise @ij.InvalidOption("`text` must be a string")
+    None => raise @ij.InvalidOption("missing `text`")
   }
 }
 
@@ -352,11 +352,11 @@ fn int_param(
   params : Map[String, Json],
   key : String,
   fallback : Int32,
-) -> Int32 raise @mend.MendError {
+) -> Int32 raise @ij.InterJSONError {
   match params.get(key) {
     Some(Json::Number(d, ..)) => d.to_int()
     Some(Json::Null) => fallback
-    Some(_) => raise @mend.InvalidOption("`" + key + "` must be a number")
+    Some(_) => raise @ij.InvalidOption("`" + key + "` must be a number")
     None => fallback
   }
 }
@@ -366,13 +366,13 @@ fn int_param(
 /// `schema` (the library's DSL).
 fn schema_param(
   params : Map[String, Json],
-) -> @mend.Schema? raise @mend.MendError {
+) -> @ij.Schema? raise @ij.InterJSONError {
   match params.get("schema_json") {
-    Some(v) => Some(@mend.Schema::of_json_schema(v))
+    Some(v) => Some(@ij.Schema::of_json_schema(v))
     None =>
       match params.get("schema") {
-        Some(Json::String(s)) => Some(@mend.Schema::parse(s))
-        Some(_) => raise @mend.InvalidOption("`schema` must be a string")
+        Some(Json::String(s)) => Some(@ij.Schema::parse(s))
+        Some(_) => raise @ij.InvalidOption("`schema` must be a string")
         None => None
       }
   }
@@ -383,28 +383,28 @@ fn schema_param(
 /// options. A profile replaces the safety fields and keeps the protocol fields
 /// (`collect_deltas`, `want_text`, …), which is what `with_policy` exists for.
 fn options_from_params(
-  base : @mend.Options,
+  base : @ij.Options,
   params : Map[String, Json],
-) -> @mend.Options raise @mend.MendError {
+) -> @ij.Options raise @ij.InterJSONError {
   let mut opts = base
   match params.get("profile") {
     Some(Json::String(name)) =>
       match parse_policy_name(name) {
         Some(p) => opts = opts.with_policy(p)
         None =>
-          raise @mend.InvalidOption(
+          raise @ij.InvalidOption(
             "unknown profile `" +
             name +
             "`; use permissive, interactive, execution, agent or strict",
           )
       }
-    Some(_) => raise @mend.InvalidOption("`profile` must be a string")
+    Some(_) => raise @ij.InvalidOption("`profile` must be a string")
     None => ()
   }
   match params.get("skip_prose") {
     Some(Json::True) => opts = { ..opts, skip_prose: true, }
     Some(Json::False) => opts = { ..opts, skip_prose: false, }
-    Some(_) => raise @mend.InvalidOption("`skip_prose` must be a boolean")
+    Some(_) => raise @ij.InvalidOption("`skip_prose` must be a boolean")
     None => ()
   }
   match params.get("max_loss") {
@@ -412,12 +412,12 @@ fn options_from_params(
       match parse_max_loss(name) {
         Some(x) => opts = { ..opts, max_loss: x, }
         None =>
-          raise @mend.InvalidOption(
+          raise @ij.InvalidOption(
             "unknown max_loss `" + name + "`; use exact, cosmetic or lossy",
           )
       }
     None => ()
-    Some(_) => raise @mend.InvalidOption("`max_loss` must be a string")
+    Some(_) => raise @ij.InvalidOption("`max_loss` must be a string")
   }
   opts
 }
@@ -425,8 +425,8 @@ fn options_from_params(
 ///|
 /// One open stream per connection.
 struct ServeState {
-  mut watch_parser : @mend.PartialParser?
-  mut watch_watcher : @mend.SemanticWatcher?
+  mut watch_parser : @ij.PartialParser?
+  mut watch_watcher : @ij.SemanticWatcher?
   mut llm_stream : @llm.ToolStream?
 }
 
@@ -440,31 +440,31 @@ fn ServeState::new() -> ServeState {
 /// `repair`: one document in, one repaired document out.
 fn handle_repair(
   params : Map[String, Json],
-  base : @mend.Options,
-) -> Json raise @mend.MendError {
+  base : @ij.Options,
+) -> Json raise @ij.InterJSONError {
   let text = text_param(params)
   let opts = options_from_params(base, params)
   // The one-shot entry point, not a hand-rolled feed/finish: it also carries
   // the scalar-root retry that `skip_prose` needs, so `serve` cannot disagree
-  // with `jsonmend repair`.
-  repair_out_json(@mend.repair(text, options=opts))
+  // with `interjson repair`.
+  repair_out_json(@ij.repair(text, options=opts))
 }
 
 ///|
 /// `analyze`: the never-raising decision call, as the full plan object.
 fn handle_analyze(
   params : Map[String, Json],
-  base : @mend.Options,
-) -> Json raise @mend.MendError {
+  base : @ij.Options,
+) -> Json raise @ij.InterJSONError {
   let text = text_param(params)
   let opts = options_from_params(base, params)
   let schema = schema_param(params)
   let plan = match schema {
-    Some(s) => @mend.analyze(text, options=opts, schema=s)
-    None => @mend.analyze(text, options=opts)
+    Some(s) => @ij.analyze(text, options=opts, schema=s)
+    None => @ij.analyze(text, options=opts)
   }
   @json.parse(plan.to_json()) catch {
-    _ => raise @mend.InvalidState("the plan could not be serialised")
+    _ => raise @ij.InvalidState("the plan could not be serialised")
   }
 }
 
@@ -474,16 +474,16 @@ fn handle_analyze(
 /// what is there, it does not repair.
 fn handle_validate(
   params : Map[String, Json],
-  base : @mend.Options,
-) -> Json raise @mend.MendError {
+  base : @ij.Options,
+) -> Json raise @ij.InterJSONError {
   let text = text_param(params)
   let schema = schema_param(params)
-  if @mend.is_valid_json(text) {
+  if @ij.is_valid_json(text) {
     let result : Map[String, Json] = Map([])
     result["valid"] = Json::boolean(true)
     match schema {
       Some(s) => {
-        let parsed = @mend.parse(text)
+        let parsed = @ij.parse(text)
         let verdict = s.evaluate(parsed.value)
         result["schema"] = verdict_json(verdict)
       }
@@ -496,7 +496,7 @@ fn handle_validate(
   let out : Map[String, Json] = Map([])
   out["valid"] = Json::boolean(false)
   let strict = try {
-    ignore(@mend.repair(text, options=@mend.Options::strict()))
+    ignore(@ij.repair(text, options=@ij.Options::strict()))
     None
   } catch {
     e => Some(e)
@@ -506,7 +506,7 @@ fn handle_validate(
     None => ()
   }
   let repaired = Some(
-    @mend.repair(text, options=options_from_params(base, params)),
+    @ij.repair(text, options=options_from_params(base, params)),
   ) catch {
     _ => None
   }
@@ -526,13 +526,13 @@ fn handle_validate(
 /// `readiness`: the two fractions and the verdict, without a stream.
 fn handle_readiness(
   params : Map[String, Json],
-  base : @mend.Options,
-) -> Json raise @mend.MendError {
+  base : @ij.Options,
+) -> Json raise @ij.InterJSONError {
   let text = text_param(params)
   let step = int_param(params, "step", 0)
   match schema_param(params) {
     Some(s) => {
-      let r = @mend.semantic_readiness(
+      let r = @ij.semantic_readiness(
         text,
         s,
         step~,
@@ -547,7 +547,7 @@ fn handle_readiness(
       ])
     }
     None => {
-      let p = @mend.syntax_readiness_permille(text, step~)
+      let p = @ij.syntax_readiness_permille(text, step~)
       jobj([
         ("syntax_permille", jnum(p)),
         ("schema_permille", jnum(-1)),
@@ -563,23 +563,23 @@ fn handle_readiness(
 fn handle_watch_start(
   state : ServeState,
   params : Map[String, Json],
-  base : @mend.Options,
-) -> Json raise @mend.MendError {
+  base : @ij.Options,
+) -> Json raise @ij.InterJSONError {
   if state.watch_parser is Some(_) {
-    raise @mend.InvalidState(
+    raise @ij.InvalidState(
       "a watch stream is already open; call `watch.finish` first",
     )
   }
   let schema = match schema_param(params) {
     Some(s) => s
-    None => @mend.Schema::Any
+    None => @ij.Schema::Any
   }
-  let opts : @mend.Options = {
+  let opts : @ij.Options = {
     ..options_from_params(base, params),
     collect_deltas: true,
   }
-  state.watch_parser = Some(@mend.PartialParser::new(options=opts))
-  state.watch_watcher = Some(@mend.SemanticWatcher::new(schema, options=opts))
+  state.watch_parser = Some(@ij.PartialParser::new(options=opts))
+  state.watch_watcher = Some(@ij.SemanticWatcher::new(schema, options=opts))
   jobj([
     ("ok", Json::boolean(true)),
     ("schema", Json::string(schema.stringify())),
@@ -591,11 +591,11 @@ fn handle_watch_start(
 fn handle_watch_feed(
   state : ServeState,
   params : Map[String, Json],
-) -> Json raise @mend.MendError {
+) -> Json raise @ij.InterJSONError {
   let chunk = match params.get("chunk") {
     Some(Json::String(s)) => s
-    Some(_) => raise @mend.InvalidOption("`chunk` must be a string")
-    None => raise @mend.InvalidOption("missing `chunk`")
+    Some(_) => raise @ij.InvalidOption("`chunk` must be a string")
+    None => raise @ij.InvalidOption("missing `chunk`")
   }
   match (state.watch_parser, state.watch_watcher) {
     (Some(parser), Some(watcher)) => {
@@ -612,13 +612,13 @@ fn handle_watch_feed(
         ("bytes", jnum(watcher.bytes())),
       ])
     }
-    _ => raise @mend.InvalidState("no active watch stream")
+    _ => raise @ij.InvalidState("no active watch stream")
   }
 }
 
 ///|
 /// `watch.finish`: close the stream and return the final parse.
-fn handle_watch_finish(state : ServeState) -> Json raise @mend.MendError {
+fn handle_watch_finish(state : ServeState) -> Json raise @ij.InterJSONError {
   match (state.watch_parser, state.watch_watcher) {
     (Some(parser), Some(watcher)) => {
       let mut err = ""
@@ -649,10 +649,10 @@ fn handle_watch_finish(state : ServeState) -> Json raise @mend.MendError {
               },
             ),
           ])
-        None => raise @mend.InvalidState(err)
+        None => raise @ij.InvalidState(err)
       }
     }
-    _ => raise @mend.InvalidState("no active watch stream")
+    _ => raise @ij.InvalidState("no active watch stream")
   }
 }
 
@@ -660,7 +660,7 @@ fn handle_watch_finish(state : ServeState) -> Json raise @mend.MendError {
 /// The provider named by a request.
 fn provider_param(
   params : Map[String, Json],
-) -> @llm.Provider raise @mend.MendError {
+) -> @llm.Provider raise @ij.InterJSONError {
   match params.get("provider") {
     Some(Json::String(s)) =>
       if s == "anthropic" {
@@ -668,12 +668,12 @@ fn provider_param(
       } else if s == "openai" || s == "openai_compat" {
         @llm.OpenAICompat
       } else {
-        raise @mend.InvalidOption(
+        raise @ij.InvalidOption(
           "unknown provider `" + s + "`; use anthropic or openai",
         )
       }
     None => @llm.Anthropic
-    Some(_) => raise @mend.InvalidOption("`provider` must be a string")
+    Some(_) => raise @ij.InvalidOption("`provider` must be a string")
   }
 }
 
@@ -682,10 +682,10 @@ fn provider_param(
 fn handle_llm_open(
   state : ServeState,
   params : Map[String, Json],
-  base : @mend.Options,
-) -> Json raise @mend.MendError {
+  base : @ij.Options,
+) -> Json raise @ij.InterJSONError {
   if state.llm_stream is Some(_) {
-    raise @mend.InvalidState(
+    raise @ij.InvalidState(
       "a provider stream is already open; call `llm.close` first",
     )
   }
@@ -712,11 +712,11 @@ fn handle_llm_open(
 fn handle_llm_feed(
   state : ServeState,
   params : Map[String, Json],
-) -> Json raise @mend.MendError {
+) -> Json raise @ij.InterJSONError {
   let event = match params.get("event") {
     Some(Json::String(s)) => s
-    Some(_) => raise @mend.InvalidOption("`event` must be a string")
-    None => raise @mend.InvalidOption("missing `event`")
+    Some(_) => raise @ij.InvalidOption("`event` must be a string")
+    None => raise @ij.InvalidOption("missing `event`")
   }
   match state.llm_stream {
     Some(stream) => {
@@ -726,13 +726,13 @@ fn handle_llm_feed(
       state.llm_stream = Some(stream)
       jobj([("calls", Json::array(views.map(tool_call_json)))])
     }
-    None => raise @mend.InvalidState("no active provider stream")
+    None => raise @ij.InvalidState("no active provider stream")
   }
 }
 
 ///|
 /// `llm.close`: finish every call and report the provider's verdict.
-fn handle_llm_close(state : ServeState) -> Json raise @mend.MendError {
+fn handle_llm_close(state : ServeState) -> Json raise @ij.InterJSONError {
   match state.llm_stream {
     Some(stream) => {
       let views = stream.finish()
@@ -745,7 +745,7 @@ fn handle_llm_close(state : ServeState) -> Json raise @mend.MendError {
         ("ignored_events", jnum(ignored)),
       ])
     }
-    None => raise @mend.InvalidState("no active provider stream")
+    None => raise @ij.InvalidState("no active provider stream")
   }
 }
 
@@ -754,8 +754,8 @@ fn handle_llm_close(state : ServeState) -> Json raise @mend.MendError {
 /// event list.
 fn handle_llm_run(
   params : Map[String, Json],
-  base : @mend.Options,
-) -> Json raise @mend.MendError {
+  base : @ij.Options,
+) -> Json raise @ij.InterJSONError {
   let provider = provider_param(params)
   let stream = @llm.ToolStream::new(
     provider,
@@ -768,10 +768,10 @@ fn handle_llm_run(
           Json::String(s) => {
             let _ = stream.push_event(s)
           }
-          _ => raise @mend.InvalidOption("`events` must be an array of strings")
+          _ => raise @ij.InvalidOption("`events` must be an array of strings")
         }
       }
-    Some(_) => raise @mend.InvalidOption("`events` must be an array of strings")
+    Some(_) => raise @ij.InvalidOption("`events` must be an array of strings")
     None => ()
   }
   let views = stream.finish()
@@ -786,10 +786,10 @@ fn handle_llm_run(
 /// Dispatch one method.
 fn handle_request(
   state : ServeState,
-  base : @mend.Options,
+  base : @ij.Options,
   meth : String,
   params : Map[String, Json],
-) -> Json raise @mend.MendError {
+) -> Json raise @ij.InterJSONError {
   if meth == "hello" {
     hello_json()
   } else if meth == "repair" {
@@ -815,7 +815,7 @@ fn handle_request(
   } else if meth == "llm.run" {
     handle_llm_run(params, base)
   } else {
-    raise @mend.InvalidOption("unknown method `" + meth + "`")
+    raise @ij.InvalidOption("unknown method `" + meth + "`")
   }
 }
 
@@ -863,7 +863,7 @@ fn request_params(v : Json) -> Map[String, Json] {
 fn run_serve(o : CliOpts) -> Unit {
   let stream = open_input(None)
   if stream == 0L {
-    eprintln("jsonmend: 无法读取 <stdin>")
+    eprintln("interjson: 无法读取 <stdin>")
     return quit(3)
   }
   let reader = LineReader::new(stream)
@@ -940,7 +940,7 @@ fn run_serve(o : CliOpts) -> Unit {
         } else if meth == "" {
           write_line(
             proto,
-            response_err(id, @mend.InvalidOption("missing `method`")),
+            response_err(id, @ij.InvalidOption("missing `method`")),
           )
         } else {
           let out = response_ok(id, handle_request(state, base, meth, params)) catch {

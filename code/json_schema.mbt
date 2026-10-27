@@ -41,7 +41,7 @@ fn json_schema_annotation(key : String) -> Bool {
 
 ///|
 /// Refuse a keyword the skeleton cannot represent.
-fn json_schema_unsupported(key : String) -> Unit raise MendError {
+fn json_schema_unsupported(key : String) -> Unit raise InterJSONError {
   raise SchemaError(
     "json schema: unsupported keyword `" +
     key +
@@ -51,7 +51,7 @@ fn json_schema_unsupported(key : String) -> Unit raise MendError {
 
 ///|
 /// A numeric field, accepting an integer or a finite double.
-fn json_schema_number(v : Json, key : String) -> Double raise MendError {
+fn json_schema_number(v : Json, key : String) -> Double raise InterJSONError {
   match v {
     Json::Number(d, ..) =>
       if d.is_nan() || d.is_inf() {
@@ -65,7 +65,7 @@ fn json_schema_number(v : Json, key : String) -> Double raise MendError {
 
 ///|
 /// A non-negative integer field.
-fn json_schema_uint(v : Json, key : String) -> Int32 raise MendError {
+fn json_schema_uint(v : Json, key : String) -> Int32 raise InterJSONError {
   let d = json_schema_number(v, key)
   let n = d.to_int()
   if n.to_double() != d || n < 0 {
@@ -78,7 +78,7 @@ fn json_schema_uint(v : Json, key : String) -> Int32 raise MendError {
 
 ///|
 /// A string field.
-fn json_schema_string(v : Json, key : String) -> String raise MendError {
+fn json_schema_string(v : Json, key : String) -> String raise InterJSONError {
   match v {
     Json::String(s) => s
     _ => raise SchemaError("json schema: `" + key + "` must be a string")
@@ -87,7 +87,7 @@ fn json_schema_string(v : Json, key : String) -> String raise MendError {
 
 ///|
 /// `required` as a lookup table.
-fn json_schema_required(v : Json) -> Map[String, Bool] raise MendError {
+fn json_schema_required(v : Json) -> Map[String, Bool] raise InterJSONError {
   let out : Map[String, Bool] = Map([])
   match v {
     Json::Array(items) =>
@@ -111,7 +111,7 @@ priv struct PatternSpec {
 
 ///|
 /// Parse a decimal integer used in a `{n,m}` quantifier.
-fn json_schema_quantifier_int(s : StringView) -> Int32 raise MendError {
+fn json_schema_quantifier_int(s : StringView) -> Int32 raise InterJSONError {
   if s.length() == 0 {
     raise SchemaError("json schema: empty quantifier bound")
   }
@@ -149,7 +149,7 @@ fn json_schema_quantifier_int(s : StringView) -> Int32 raise MendError {
 ///
 /// Everything else — `.`, `*` inside the class, escapes, alternation, groups —
 /// is an `E070`.
-fn json_schema_pattern(s : String) -> PatternSpec raise MendError {
+fn json_schema_pattern(s : String) -> PatternSpec raise InterJSONError {
   let n = s.length()
   if n < 4 || s.at(0).to_int() != 0x5E || s.at(n - 1).to_int() != 0x24 {
     raise SchemaError(
@@ -223,7 +223,7 @@ fn json_schema_pattern(s : String) -> PatternSpec raise MendError {
 fn json_schema_constraints(
   obj : Map[String, Json],
   kind : Schema,
-) -> Constraints? raise MendError {
+) -> Constraints? raise InterJSONError {
   let c = Constraints::none()
   let mut any = false
   let mut pattern_spec : PatternSpec? = None
@@ -335,7 +335,7 @@ fn json_schema_constraints(
 
 ///|
 /// Translate one JSON Schema node into a skeleton.
-fn json_schema_node(v : Json) -> Schema raise MendError {
+fn json_schema_node(v : Json) -> Schema raise InterJSONError {
   match v {
     Json::Object(obj) => {
       // Walk every keyword first so an unsupported one is named even if another
@@ -471,13 +471,13 @@ fn json_schema_node(v : Json) -> Schema raise MendError {
 ///
 /// is the same skeleton as `{!query:string,?limit:integer(minimum:1)}`.
 /// Unsupported keywords raise `E070`; annotations are ignored.
-pub fn Schema::of_json_schema(value : Json) -> Schema raise MendError {
+pub fn Schema::of_json_schema(value : Json) -> Schema raise InterJSONError {
   json_schema_node(value)
 }
 
 ///|
 /// Parse JSON Schema text and translate it.
-pub fn Schema::parse_json_schema(text : String) -> Schema raise MendError {
+pub fn Schema::parse_json_schema(text : String) -> Schema raise InterJSONError {
   let value = @json.parse(text) catch {
     _ => raise SchemaError("json schema: input is not valid JSON")
   }

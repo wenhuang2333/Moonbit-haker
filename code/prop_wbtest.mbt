@@ -12,12 +12,12 @@
 let tc_cases_default : Int32 = 400
 
 ///|
-/// Cases generated per property. `JSONMEND_LONGRUN=N` raises the count, which
+/// Cases generated per property. `INTERJSON_LONGRUN=N` raises the count, which
 /// is how the nightly workflow runs the same properties for much longer
 /// (O-6). The seed of every property is a constant, so a failure is always
 /// reproducible at the default count as well.
 fn tc_cases() -> Int32 {
-  match @env.get_env_var("JSONMEND_LONGRUN") {
+  match @env.get_env_var("INTERJSON_LONGRUN") {
     Some(v) => {
       let mut n = 0
       let mut ok = v.length() > 0

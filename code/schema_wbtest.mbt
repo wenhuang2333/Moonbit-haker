@@ -771,7 +771,10 @@ test "a refusal keeps the rule that was refused as an operation" {
   assert_eq(strict.repairs[0].rule, "R003")
   assert_eq(strict.repairs[0].confidence_class, "refused")
   assert_true(strict.explain_text().contains("R003"), msg=strict.explain_text())
-  assert_true(strict.prompt().contains("JSONMend refused"), msg=strict.prompt())
+  assert_true(
+    strict.prompt().contains("InterJSON refused"),
+    msg=strict.prompt(),
+  )
   // The other refusal shape is an ambiguity refused by the execution profile.
   let ambiguous = analyze("[\"a\" \"b\"]", options=Options::for_execution())
   assert_eq(ambiguous.error_code, "E011")

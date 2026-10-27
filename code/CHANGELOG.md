@@ -1,9 +1,57 @@
 # Changelog
 
-本文件记录 JSONMend 的所有重要变更。
+本文件记录 InterJSON 的所有重要变更。
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+
+## [1.4.0] - 2026-10-27
+
+更名 **InterJSON**，把「LLM 输出的执行门」作为产品定位，对外主入口改为**本地部署的
+MCP server**。引擎、修复语义与全部不变量不变；版本对应 **1.4.0**（GitHub）↔
+**0.11.0**（mooncakes）。这是模块路径与 MCP 工具名的破坏性重命名，但 1.3.0/0.10.0
+尚未发布，因此对已发布历史（0.3.0 … 0.8.1）不构成升级路径变更。registry 对应号
+**0.11.0 已于 2026-10-27 上传 mooncakes**。
+
+### 更名与 MCP
+
+- **产品与模块统一更名**：产品、MoonBit 模块（`zhanshishan/interjson`）、CLI、
+  npm/Python 包装层与浏览器 bundle（`interjson.js`）全部使用 InterJSON 命名。
+  引擎与修复语义不变；公共 API 的**形状**不变，两处名字随之更改：
+  `MendError` → `InterJSONError`，Python 侧 `JsonMendError` → `InterJSONError`。
+  这是破坏性的导入变更，因此本轮直接按 minor 发布：版本 1.4.0 ↔ 0.11.0。
+- **MCP 主工具改名**：`interjson_analyze` → `interjson_gate`，其余三个工具为
+  `interjson_repair` / `interjson_validate` / `interjson_readiness`。`interjson_gate`
+  不带 `profile` 时默认走 **`agent`** 档：lossy 或 ambiguous 的修复一律拒绝，
+  不替模型猜；结果仍是 `decision` / `executable` / `exactness` / `value` /
+  `retry.prompt`。
+- **MCP 面补齐协议细节**：`initialize` 返回服务端 instructions；四个工具都声明
+  `readOnlyHint` 与 `outputSchema`；协议协商首选 `2025-06-18`、接受 `2024-11-05`，不支持的版本回落到
+  `2025-06-18`。stdout 只写 JSON-RPC；没有 `id` 的请求（通知）一律不回答。
+  成功结果同时带 `content` 文本与 `structuredContent`，错误结果只带可读文本。
+- **配置生成**：`interjson mcp --print-config[=claude|cursor|vscode|codex|windsurf|zed|json]`
+  打印对应客户端配置；`--print-config=claude` 输出
+  `claude mcp add interjson -- interjson mcp`。
+- **同一入口的别名**：`interjson-mcp` 等价于 `interjson mcp`；npm 包
+  `interjson-moonbit` 的 bin 为 `interjson-mcp`（需本机原生二进制），Python 包
+  同时提供 `interjson-mcp` 控制台入口。
+- **文档**：新增 `docs/MCP.md` 作为本地部署指南；`docs/PROTOCOL.md` 补充
+  `serve` 与 MCP 的分工（宿主侧传输 vs 模型侧传输）；演示页、CHANGELOG 与
+  其余接入文档同步新工具名。更早的版本记录、`static/demo/mcp-claude-session.txt`
+  与 `产品文档.md` 是录制/历史证据，保留当时的旧名原文。
+- **历史记录的处理**：更早的版本记录、`static/demo/mcp-claude-session.txt` 与
+  `产品文档.md` 中出现的 `jsonmend` 与本次改名后的 `interjson` 指代同一对象；
+  录制证据保持逐字节原文。已经发布的 Release（`v1.3.0` 及更早）资产文件名仍带
+  旧前缀（`jsonmend-*`），下载链接以对应 Release 页面为准；下一次发布起资产改用
+  `interjson-*`，命名规则见 `docs/MCP.md`。
+- **不变量与数字均未变**：输出必合法 JSON、修复幂等、流式分块不变、快照是稳定
+  前缀、任何字节序列不得 panic；README 与文档中的全部数字保持原值。版本统一为
+  **1.4.0**（`code/moon.mod`、`--version`、npm/Python 清单与 `serve` 的
+  `engine` 字段一致），mooncakes 对应号 **0.11.0**。
+- **演示媒体随版本刷新**：`static/demo/` 下的截图与 GIF 在生产构建上重新生成
+  （`screenshot.png`、`mcp-screenshot.png`、`mcp-demo.gif`、`live-demo.gif`、
+  `demo.mp4`），不再保留更名前的旧画面；`static/demo/mcp-claude-session.txt`
+  作为真实会话的文字证据保留原文，其派生 GIF 不再作为现行演示素材。
 
 ## [1.3.0] - 2026-10-26
 
@@ -112,7 +160,7 @@ Minor 版：修 89 条可修标量根误拒、把 `R011` 按值是否改变分�
   重扫。1 MiB 字符串按 64 码元分块、每块 drain 一次，从 374 ms 降到 201 ms；
   `AppendText` 契约与重放测试不变。
 - **默认 `repair`/`--check` 路径执行 `--schema`**：以前只有 `explain` 与
-  `readiness` 读取骨架，`jsonmend --schema '{!n:integer}'` 对 `{"n":1.5}` 会
+  `readiness` 读取骨架，`interjson --schema '{!n:integer}'` 对 `{"n":1.5}` 会
   静默输出；现在不满足时打印 missing/mismatch 并以退出码 5 拒绝。
 - **测试与门禁**：`moon test` 仍为 210/210（新增断言扩展现有测试块）；
   `cli_smoke.sh` 从 89 条增加到 **94 条**，覆盖标量根、R011、`--schema` 默认
@@ -160,21 +208,21 @@ Minor 版：修 89 条可修标量根误拒、把 `R011` 按值是否改变分�
 ### 修复
 
 - **文档里的两条命令其实跑不通（评审视角发现的）**：
-  - `jsonmend serve --stdio` 在整个仓库里被写了十几次（README、`code/README*.md`、
+  - `interjson serve --stdio` 在整个仓库里被写了十几次（README、`code/README*.md`、
     ONEPAGE、PROTOCOL、INTEGRATIONS、CONFORMANCE、npm README、Python 包说明、
     产品文档），**但 CLI 根本没有 `--stdio` 这个选项**——照抄会得到
-    `jsonmend: 未知选项 --stdio`，退出码 2。而 `serve` 本身就是 stdio 协议
+    `interjson: 未知选项 --stdio`，退出码 2。而 `serve` 本身就是 stdio 协议
     （`serve` 后面那个 `--stdio` 是多余的）。现在 CLI **接受** `--stdio` 作为
     显式别名（它不切换任何东西，因为没有别的传输），文档统一改成最短的
-    `jsonmend serve`。**两种写法现在都能跑。**
-  - `jsonmend repair` 同理：它是「省略子命令时的默认动作」，但写成命令名会被当成
+    `interjson serve`。**两种写法现在都能跑。**
+  - `interjson repair` 同理：它是「省略子命令时的默认动作」，但写成命令名会被当成
     **文件名**，报 `无法读取 repair`。现在 `repair` 是真的子命令。
 - **新增门禁：文档提到的子命令必须真的存在**（`tests/cli_smoke.sh`）。
-  门禁把 `jsonmend --help` 里出现的子命令与文档里出现的 `jsonmend <子命令>`
+  门禁把 `interjson --help` 里出现的子命令与文档里出现的 `interjson <子命令>`
   做差集，差集非空就失败并打印双方清单。这两个缺陷之所以能一路发到评审面前，
   就是因为**没有任何一步把文档的词汇表和 CLI 的词汇表对过**。
 - **Release 少挂了一个产物（1.1.0 的缺陷）**：`release.yml` 的 `cli` 矩阵新增了
-  `windows-latest`，打包步骤把 `jsonmend-windows-x86_64.exe` 放进 `dist/` 并写进
+  `windows-latest`，打包步骤把 `jsonmend-windows-x86_64.exe`（当时的资产前缀）放进 `dist/` 并写进
   `SHA256SUMS`，但 `gh release create` 的**附件列表没有跟着更新**——于是
   **v1.1.0 的 `SHA256SUMS` 列着一个 Release 里并不存在的文件**：想核对 Windows
   校验和的人会去找一个下不到的东西，而 README 同时写着「三个 OS」。
@@ -190,8 +238,8 @@ Minor 版：修 89 条可修标量根误拒、把 `R011` 按值是否改变分�
 ### 新增
 
 - **真实 Claude Code 会话**（`static/demo/mcp-claude-session.txt` + 动画 + 封面帧）：
-  Claude Code 2.1.301 连上 `jsonmend mcp`，把被 `max_tokens` 截断的工具参数交给
-  `jsonmend_analyze`，收到 **E010 拒绝**（`decision=lossy_repair`、`executable=false`、
+  Claude Code 2.1.301 连上 `interjson mcp`，把被 `max_tokens` 截断的工具参数交给
+  `interjson_analyze`（现名 `interjson_gate`），收到 **E010 拒绝**（`decision=lossy_repair`、`executable=false`、
   带位置与上下文片段的 `retry.prompt`），模型改对后再调用一次即**放行**
   （`decision=safe`、`executable=true`）。原始 `stream-json` 事件流**逐字节**附在
   文本文件里，会话 id、时间戳、模型名、工具入参与返回都在，可逐条核对。
@@ -239,14 +287,14 @@ Minor 版：修 89 条可修标量根误拒、把 `R011` 按值是否改变分�
 
 **新增**
 
-- **`jsonmend serve --stdio`（协议 v1）**：长驻 JSONL 协议，方法 `hello`、`repair`、
+- **`interjson serve --stdio`（协议 v1）**：长驻 JSONL 协议，方法 `hello`、`repair`、
   `analyze`、`validate`、`readiness`、`watch.start/feed/finish`、
   `llm.open/feed/close/run`、`shutdown`。`hello` 同时返回 `engine`、`registry`
   与 `protocol` 三个版本号；每条连接一个 `watch` 流和一个 `llm` 流。
   规范见 `code/docs/PROTOCOL.md`。
-- **`jsonmend mcp`**：MCP stdio server（JSON-RPC 2.0），工具
-  `jsonmend_analyze` / `jsonmend_repair` / `jsonmend_validate` /
-  `jsonmend_readiness`；通知不产生响应，未知方法返回 `-32601`。
+- **`interjson mcp`**：MCP stdio server（JSON-RPC 2.0），工具
+  `interjson_analyze`（现名 `interjson_gate`） / `interjson_repair` / `interjson_validate` /
+  `interjson_readiness`；通知不产生响应，未知方法返回 `-32601`。
 - **`Schema::of_json_schema` / `Schema::parse_json_schema`**（公开面新增，minor 级）：
   受控 JSON Schema 子集桥——`type`/`properties`/`required`/`items`/`enum`/`const`/
   `minimum`/`maximum`/`exclusiveMinimum`/`exclusiveMaximum`/`minLength`/`maxLength`/
@@ -259,11 +307,11 @@ Minor 版：修 89 条可修标量根误拒、把 `R011` 按值是否改变分�
   bundle；新增 `repairResult`、`analyze`（DSL 与 JSON Schema）、`repair_opts`。
   导入不再向 stdout 打印 banner。
 - **Python 包**（`code/python/`）：`Client`（长驻 `serve` 子进程、请求/响应 id
-  校验、结构化 `JsonMendError`）、一次性 `repair`/`analyze`/`validate`、
-  `watch_*`/`llm_*`、无依赖 HTTP facade（`jsonmend-http`）与
-  `jsonmend-mcp` 控制台入口。
+  校验、结构化 `InterJSONError`）、一次性 `repair`/`analyze`/`validate`、
+  `watch_*`/`llm_*`、无依赖 HTTP facade（`interjson-http`）与
+  `interjson-mcp` 控制台入口。
 - **Windows 预编译**：`release.yml` 增加 `windows-latest`，产物
-  `jsonmend-windows-x86_64.exe` 进入 Release 与 `SHA256SUMS`；CI 增加 Windows
+  `jsonmend-windows-x86_64.exe`（当时的资产前缀）进入 Release 与 `SHA256SUMS`；CI 增加 Windows
   原生构建与协议/MCP 一致性任务。
   **更正（1.1.1）**：Windows 二进制**构建成功**并进入了 `SHA256SUMS`，但
   **没有真正挂到 Release 上**——发布步骤的附件列表没跟着更新。因此 v1.1.0 的
@@ -277,7 +325,7 @@ Minor 版：修 89 条可修标量根误拒、把 `R011` 按值是否改变分�
 - **`serve`/`mcp` 的 stdout 在交互式客户端下会死锁**：首版用 `println` +
   `fflush(NULL)`，输出只在进程退出时到达；改为逐字节 `fread`（避免管道上
   等待 64 KiB）与显式 `fwrite`/`fflush` 的协议写入口，每行立即送达。
-- **浏览器 bundle 导入时打印 `jsonmend demo bundle ready`**：会污染任何
+- **浏览器 bundle 导入时打印 `interjson demo bundle ready`**：会污染任何
   行协议；已移除，`demo_smoke.mjs` 增加“导入无输出”断言。
 - **`code/README.md` / `README.zh.md` 声称 mooncakes 已发布 1.0.0**：与根
   README 的 0.7.0 冲突（平台只收 `0.x.y`）；已更正并指向通道映射。
@@ -462,13 +510,13 @@ Q-23 往返语料扩到 25 条受限声明。
 - `code/docs/SPEC.md`：规范性规格（SR-1…SR-33），把 §20.1 的就绪表格冻结为 SR-12，
   并写入 delta 契约、精确度格、四个字段与 `settled = 1000‰` 的含义。
 - **浏览器演示已发布**：https://wenhuang2333.github.io/Moonbit-haker/
-  （`index.html` / `live.html` / `jsonmend.js` 三者实测 200），
+  （`index.html` / `live.html` / `interjson.js` 三者实测 200），
   并录制了 69 秒走查（`static/demo/demo.mp4`，1280×800）与 10 秒 GIF（README 首屏）。
 - `产品文档-精简版.md`：**356 行**的交付评审版（归档 `产品文档.md` 2691 行保留为历史）。
 - **版本一致性进 CI**：`cli_smoke.sh` 新增 5 项断言，要求根 `README.md`、
   `code/README.md`、`code/README.zh.md`、`产品文档-精简版.md` 与 `--version`
   全部等于 `code/moon.mod` 的版本号，不一致时点名文件与两个字符串。
-  顺带删掉 `cli_smoke.sh` 里硬编码的 `jsonmend 0.6.1`——那是个陷阱：
+  顺带删掉 `cli_smoke.sh` 里硬编码的 `interjson 0.6.1`——那是个陷阱：
   每次发版都要手改，忘了就让一个正确的发版变红。
 
 ### 已知边界（诚实记录，未修）
@@ -525,9 +573,9 @@ Q-23 往返语料扩到 25 条受限声明。
   都是合法 JSON（RFC 8259 允许任何值作为根），但任何开启 `skip_prose` 的路径都会拒绝它们：
   跳过前言只看第一个 `{` 或 `[`（`code/engine_flow.mbt` 前言阶段），标量根没有这个字符，
   整份输入被当成前言丢光，最后抛 `E002 NoJsonFound`。受影响的是
-  `jsonmend explain`（默认 agent 协议）、`jsonmend --skip-prose`、
+  `interjson explain`（默认 agent 协议）、`interjson --skip-prose`、
   `analyze(input, options=Options::for_agent())`。
-  独立语料 `jsonmend-haker` 的 95 个 `y_*`（合法 JSON）文件里有 **8 个** 被直接拒绝。
+  独立语料 `interjson-haker` 的 95 个 `y_*`（合法 JSON）文件里有 **8 个** 被直接拒绝。
   现在 `repair` / `analyze` / 流式 CLI 三条可拿到全文的入口都会在
   `NoJsonFound` 且 `is_valid_json(输入)` 为真时撤销跳过重解析；判断条件是"严格解析器接受全文"，
   因此前言不会被误读成值（`true story: {"a":1}` 仍然走 `R021` 并取到对象）。
@@ -553,13 +601,13 @@ Q-23 往返语料扩到 25 条受限声明。
   - `Schema::at_path(path)`：按路径取声明，供事件把路径映射回声明的类型。
 - **`SemanticReadiness.settled_permille`**：每个声明成员"值已定"的输入比例，
   **不管类型对不对**；`schema_permille` 保持原义（已定 *且* 骨架满足），
-  因此可判定的非法文档仍然报 `1000`。`jsonmend explain` 与 `explain --json` 现在同时打印三者。
+  因此可判定的非法文档仍然报 `1000`。`interjson explain` 与 `explain --json` 现在同时打印三者。
   这修掉了 0.5.0 的观测盲点：`{"query":"MoonBit","limit":"ten",…}` 过去只能看到
   `syntax-ready 999/1000 schema-ready 1000/1000`，看起来像"永远没结论"，
   现在是 `settled 218/1000` —— 结论早就到了，结论是"不行"。
-- **`jsonmend explain --json` 增加四个字段（Q-26）**：`valid_json`、`normalized`、
+- **`interjson explain --json` 增加四个字段（Q-26）**：`valid_json`、`normalized`、
   `ambiguity`（`none` / `syntactic` / `semantic`）、`execution`（`allowed` / `blocked`）。
-  `valid_json` 的口径是"输入本身是合法 JSON，JSONMend 只对重复键做了归一化"；
+  `valid_json` 的口径是"输入本身是合法 JSON，InterJSON 只对重复键做了归一化"；
   该口径在独立语料的 95 个合法文件上验证过：只有 `R018` 会在合法 JSON 上触发。
   因此 `{"a":"b","a":"c"}` 现在报
   `valid_json:true, normalized:true, exactness:lossy, ambiguity:"semantic", execution:"blocked"`，
@@ -604,8 +652,8 @@ Q-23 往返语料扩到 25 条受限声明。
 而是把「这个值能不能用」变成一次调用就能拿到、并且可以回灌模型的对象。
 本轮新增 7 条需求（`FR-32` … `FR-38`），不改动任何既有规则与既有输出。
 
-**已发布**：mooncakes 上的 `zhanshishan/jsonmend@0.5.0`（`moon publish` 退出码 0，
-页面 https://mooncakes.io/docs/zhanshishan/jsonmend/0.5.0 返回 200）；`v0.5.0` 标签已推送，
+**已发布**：mooncakes 上的 `zhanshishan/interjson@0.5.0`（`moon publish` 退出码 0，
+页面 https://mooncakes.io/docs/zhanshishan/interjson/0.5.0 返回 200）；`v0.5.0` 标签已推送，
 `release.yml` 产出预编译产物。0.5.0 也修正了 0.4.0 记录的
 「`moon publish --dry-run` 返回 255」现象：本轮未复现。
 
@@ -634,7 +682,7 @@ Q-23 往返语料扩到 25 条受限声明。
 - **流式 live 演示（FR-37）**。`static/demo/live.html`：四个真实场景（截断参数→重试、
   歧义→重试、唯一读法→直接通过、长尾→19% 即可停），逐帧播放「模型流 / 实时结构 /
   成员就绪 ✓◐ / 三个 readiness + verdict / 重试面板」。
-  打包入口 `jsonmendRegister3("live", …)` 与 `code/tests/demo_smoke.mjs` 的 14 条断言。
+  打包入口 `interjsonRegister3("live", …)` 与 `code/tests/demo_smoke.mjs` 的 14 条断言。
 - **独立第三方语料（FR-38，本次一并落地）**。内置 `nst/JSONTestSuite`（318 个文件，
   MIT，commit `1ef36fa0`）与 `tests/eval/run_independent.py`：`y_` 误修 2/95、
   `n_` 产出合法值 165/188（`json_repair` 166、`jsonrepair` 144）。
@@ -666,7 +714,7 @@ Q-23 往返语料扩到 25 条受限声明。
 
 ## [0.4.0] - 2026-10-15
 
-第五轮优化版本（`JSONMend 第五轮：优化、完善与扩展方向.md`），主题是**让证据经得起质疑**：
+第五轮优化版本（`InterJSON 第五轮：优化、完善与扩展方向.md`），主题是**让证据经得起质疑**：
 补上歧义这一层被排除的难例、把评测跑到流式与适配器两条真实路径上、与参照库做并列对照，
 并把性能对齐到产品真实场景（4 KB、3 码元分块）。
 
@@ -676,7 +724,7 @@ Q-23 往返语料扩到 25 条受限声明。
   `adjacent_strings` / `concat_operator` / `trailing_content`）进入每条修复记录；
   新的 `Options::reject_ambiguous` 在精确度闸**之前**抛 `E011 AmbiguousRepair`（退出码 5），
   因为「值没变」和「只有一种读法」是两件事。新增错误码编号 `E011`（错误码 10 → 11）。
-- **拒绝即反馈（FR-28）**。`RetryHint`（`MendError::retry_hint`）：错误码、修复码、位置、
+- **拒绝即反馈（FR-28）**。`RetryHint`（`InterJSONError::retry_hint`）：错误码、修复码、位置、
   歧义类、原因、有界上下文窗口与插入符，`to_prompt()` 可直接回灌模型；CLI `--retry-hint`。
 - **字段就绪曲线（FR-29）**。`field_readiness` / `readiness_median` / `readiness_deciles` /
   `early_stop_saving` 与增量驱动的 `FieldTracker`；CLI `readiness` 子命令。
@@ -704,7 +752,7 @@ Q-23 往返语料扩到 25 条受限声明。
 - `R022 NormalizeLiteral` 的判据从「长度相同」改为「仅 ASCII 大小写不同」：
   `None` 补成 `null` 是发明取值（`R012`），`True` 补成 `true` 才是记法（`R022`）。
   该问题由对抗语料 `amb-1` 首次运行时发现。取值不变，因此 `DIVERGENCES.md` 逐字节不变。
-- 模块名 `wenhuang2333/jsonmend` → `zhanshishan/jsonmend`（与 mooncakes 账号一致，发布前提）。
+- 模块名 `wenhuang2333/interjson` → `zhanshishan/interjson`（与 mooncakes 账号一致，发布前提）。
 
 ### 证据
 
@@ -714,13 +762,13 @@ Q-23 往返语料扩到 25 条受限声明。
   **不排除任何用例**，1200 条上五条判据全 PASS。
 - 对抗歧义语料 `amb-1` 24 例：10 例歧义全部标记且全部拒绝，14 例对照全部放行，失败 0；
   同一批用例上 `jsonrepair` 静默给出 8 个值、`json_repair` 10 个（`docs/EVAL_AMBIGUITY.md`）。
-- 参照库对照：JSONMend 静默错值 0，`jsonrepair` 122，`json_repair` 189；
+- 参照库对照：InterJSON 静默错值 0，`jsonrepair` 122，`json_repair` 189；
   `--for-execution` 拒绝 **254/1200** 且放行的错值 0（`docs/EVAL_REFERENCE.md`；
   `eval-3` 的标签修订使这 11 条 `null`→`None` 用例也进入拒绝集，见 `docs/EVAL_REGISTRATION.md` §11）。
 - 场景基准：4 KB 工具调用文档按 3 码元分块，0.08 µs/feed（摊还），290 000 次 feed 中
   只有 17 次跨过 1 ms 时钟格、**没有任何一次单 feed 达到 1 ms 量级**（p99 只能给上界）；
   就绪曲线十分位 `0 10 21 30 41 51 61 71 80 90 100`（`docs/BENCHMARK.md`）。
-- 内存横向基线：12.95 MB 输入下 JSONMend 13.7 ×、Node 10.6 ×、Python 14.3 ×；
+- 内存横向基线：12.95 MB 输入下 InterJSON 13.7 ×、Node 10.6 ×、Python 14.3 ×；
   「≤ 4 ×」对任何建树实现都不现实（`docs/MEMORY.md`）。
 - `moon test` 95/95（wasm-gc / native / js 一致）；`tests/cli_smoke.sh` 48/48。
 
@@ -736,7 +784,7 @@ Q-23 往返语料扩到 25 条受限声明。
 
 ## [0.3.0] - 2026-10-15
 
-第四轮优化版本（`JSONMend 优化完善与创新方向建议.md` 的 I-1…I-6 / O-1…O-15），主题是**让「修好了」这件事可以被执行方信任**：
+第四轮优化版本（`InterJSON 优化完善与创新方向建议.md` 的 I-1…I-6 / O-1…O-15），主题是**让「修好了」这件事可以被执行方信任**：
 修复结果现在携带一个三级的精确度标签，调用方可以在执行之前拒绝它。
 
 ### 新增
@@ -755,13 +803,13 @@ Q-23 往返语料扩到 25 条受限声明。
   `Retract`），路径用 JSON Pointer（RFC 6901）。契约由属性测试保证：
   把增量依次应用到上一次的快照上，结果与 `snapshot().value` 逐值相同。
   与 `KeepFirst` 重复键策略、`TrimToValid` 未完成数字不兼容，`validate()` 会拒绝。
-- **`jsonmend/llm` 子包（FR-22 / I-3）**：Anthropic 细粒度工具流
+- **`interjson/llm` 子包（FR-22 / I-3）**：Anthropic 细粒度工具流
   （`content_block_delta` → `input_json_delta` → `partial_json`）与
   OpenAI 兼容流（`choices[].delta.tool_calls[].function.arguments`）的适配器，
   支持多路并发工具调用、SSE 行解析（`SseBuffer`）、截断（`max_tokens`）时
   自动收尾并标 `Lossy`。9 个夹具（`llm/fixtures/*.jsonl`）由生成脚本与
   MoonBit 内嵌副本同源产出。
-- **CLI `jsonmend llm`**：把录制的事件流喂给适配器，每个工具调用输出一行 JSON，
+- **CLI `interjson llm`**：把录制的事件流喂给适配器，每个工具调用输出一行 JSON，
   `--follow` 每次增量都输出一行（演示「边收边展示」）。
 - **CLI `--batch`**：逐行读 `{"id","input"}`、逐行输出
   `{"id","rc","exactness","codes","value","text"}`，让评测脚本不必为每个用例
@@ -771,12 +819,12 @@ Q-23 往返语料扩到 25 条受限声明。
 - **R022 `NormalizeLiteral`**：`True`/`FALSE` 这类只改大小写的字面量单独成码
   （Info）。此前它与「补全字面量」（`tru` → `true`，确实造值）共用 R012（Warning），
   导致纯记法修复被误报为信息损失。**R001–R021 的含义没有任何变化，码只追加。**
-- **`E060 InvalidEvent`**：`jsonmend/llm` 遇到无法解释的事件负载时抛出。
+- **`E060 InvalidEvent`**：`interjson/llm` 遇到无法解释的事件负载时抛出。
 - **真值评测（I-4）**：`tests/eval/corpus.py` 生成 1200 条带真值的用例
   （20 族单点变异，60 条/族），`tests/eval/run_eval.py` 驱动 `--batch` 并生成
   `docs/EVAL.md`。协议先冻结在 `docs/EVAL_REGISTRATION.md`（含数据集 sha256）。
   当前结果：恢复率 **100.00%**，漏标率 **0**，四条预登记判据全部 PASS。
-- **长跑属性测试（O-6）**：`JSONMEND_LONGRUN=N` 把每个属性的用例数从 400 提到 N，
+- **长跑属性测试（O-6）**：`INTERJSON_LONGRUN=N` 把每个属性的用例数从 400 提到 N，
   夜间工作流用 1,000,000（本机约 50 s）。
 - **夜间与发布工作流**：`.github/workflows/nightly.yml`（长跑 + 差分 + 评测）、
   `.github/workflows/release.yml`（tag 触发，产出 native CLI、wasm 探针、演示
@@ -791,7 +839,7 @@ Q-23 往返语料扩到 25 条受限声明。
 - **标签精度**：`R015`/`R017`/`R021` 由 Warning 降为 Info（只改记法）；
   `R018` 在两次取值结构相等时记为 Info。记法类修复的 `lossy` 误报
   从 300/900 降到 0/900。
-- `RepairCode` 21 → 22 条；`MendError` 9 → 10 个变体（新增 `E060`）。
+- `RepairCode` 21 → 22 条；`InterJSONError` 9 → 10 个变体（新增 `E060`）。
 - 模块版本 0.2.0 → 0.3.0。
 
 ### 性能
@@ -814,7 +862,7 @@ Q-23 往返语料扩到 25 条受限声明。
 ## [0.2.0] - 2026-10-15（待发布）
 
 第二轮优化版本。`moon package` 已能产出
-`wenhuang2333-jsonmend-0.2.0.zip`（128 KB）；发布到 mooncakes.io 仍阻塞在
+`wenhuang2333-interjson-0.2.0.zip`（128 KB）；发布到 mooncakes.io 仍阻塞在
 `moon whoami` 未登录（`moon login` 只有交互式浏览器流程，无法在无人值守环境完成）。
 
 ### 新增
@@ -898,7 +946,7 @@ Q-23 往返语料扩到 25 条受限声明。
 - 前导说明文字跳过选项（`skip_prose`）与引号歧义前瞻选项（`quote_lookahead`）。
 - 按规则粒度的开关（`RuleSet::enable`/`disable`），关闭某条规则后对应情形按
   严格模式处理。
-- 原生命令行工具 `cmd/jsonmend`：支持 `--strict`、`--check`、`--report`、
+- 原生命令行工具 `cmd/interjson`：支持 `--strict`、`--check`、`--report`、
   `--indent N`、`--multi-root MODE`、`--skip-prose`、`--quote-lookahead`、
   `-h/--help`，从文件或标准输入读取并输出修复后的 JSON；输入按 64 KB 分块流式读入，
   不再把整份输入复制成一份 `Bytes`。

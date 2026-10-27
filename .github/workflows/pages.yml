@@ -1,9 +1,9 @@
 # Publish the browser demo to GitHub Pages.
 #
 # static/demo/ is a static directory with no build step: live.html and
-# index.html drive the MoonBit-compiled jsonmend.js in the browser. The whole
+# index.html drive the MoonBit-compiled interjson.js in the browser. The whole
 # directory is uploaded verbatim, so every relative reference (including
-# ./jsonmend.js) resolves at the published URL:
+# ./interjson.js) resolves at the published URL:
 #
 #   https://wenhuang2333.github.io/Moonbit-haker/          -> index.html
 #   https://wenhuang2333.github.io/Moonbit-haker/live.html -> the live demo
@@ -46,7 +46,7 @@ jobs:
           cp -R static/demo/. _site/
           test -f _site/live.html
           test -f _site/index.html
-          test -f _site/jsonmend.js
+          test -f _site/interjson.js
           ls -l _site
 
       - uses: actions/configure-pages@v5

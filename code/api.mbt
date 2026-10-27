@@ -224,7 +224,9 @@ pub struct PartialParser {
 
 ///|
 /// Create a parser. Invalid options raise `E050`.
-pub fn PartialParser::new(options? : Options) -> PartialParser raise MendError {
+pub fn PartialParser::new(
+  options? : Options,
+) -> PartialParser raise InterJSONError {
   let opts = match options {
     Some(o) => o
     None => Options::default()
@@ -238,7 +240,7 @@ pub fn PartialParser::new(options? : Options) -> PartialParser raise MendError {
 pub fn PartialParser::feed(
   self : PartialParser,
   chunk : String,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   errdefer {
     self.engine.phase = PFailed
   }
@@ -250,7 +252,7 @@ pub fn PartialParser::feed(
 pub fn PartialParser::feed_bytes(
   self : PartialParser,
   bytes : Bytes,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   errdefer {
     self.engine.phase = PFailed
   }
@@ -324,7 +326,7 @@ pub fn PartialParser::feed_with(
   self : PartialParser,
   chunk : String,
   on_delta : (Delta) -> Unit,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   self.feed(chunk)
   for d in self.drain_deltas() {
     on_delta(d)
@@ -337,7 +339,7 @@ pub fn PartialParser::feed_bytes_with(
   self : PartialParser,
   bytes : Bytes,
   on_delta : (Delta) -> Unit,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   self.feed_bytes(bytes)
   for d in self.drain_deltas() {
     on_delta(d)
@@ -349,7 +351,7 @@ pub fn PartialParser::feed_bytes_with(
 /// documentation in one place.
 pub fn PartialParser::drain_deltas(
   self : PartialParser,
-) -> Array[Delta] raise MendError {
+) -> Array[Delta] raise InterJSONError {
   self.require_deltas()
   self.engine.drain_deltas()
 }
@@ -365,7 +367,7 @@ pub fn PartialParser::drain_deltas(
 /// it once per delta.
 pub fn PartialParser::drain_views(
   self : PartialParser,
-) -> Array[DeltaView] raise MendError {
+) -> Array[DeltaView] raise InterJSONError {
   self.require_deltas()
   self.engine.drain_views()
 }
@@ -380,7 +382,7 @@ pub fn PartialParser::drain_views(
 pub fn PartialParser::for_each_delta(
   self : PartialParser,
   on : (DeltaView) -> Unit,
-) -> Unit raise MendError {
+) -> Unit raise InterJSONError {
   self.require_deltas()
   self.engine.for_each_delta(on)
 }
@@ -406,7 +408,9 @@ pub fn PartialParser::delta_pointer(
 
 ///|
 /// Raise `E050` unless the parser records deltas.
-fn PartialParser::require_deltas(self : PartialParser) -> Unit raise MendError {
+fn PartialParser::require_deltas(
+  self : PartialParser,
+) -> Unit raise InterJSONError {
   if !self.engine.opts.collect_deltas {
     raise InvalidOption(
       "delta collection requires collect_deltas: use Options::for_llm()",
@@ -419,7 +423,7 @@ fn PartialParser::require_deltas(self : PartialParser) -> Unit raise MendError {
 /// value. Calling it twice, or after a fatal error, raises `E030`.
 pub fn PartialParser::finish(
   self : PartialParser,
-) -> FinalResult raise MendError {
+) -> FinalResult raise InterJSONError {
   errdefer {
     self.engine.phase = PFailed
   }
@@ -449,7 +453,7 @@ pub fn PartialParser::prose_overflow(self : PartialParser) -> Bool {
 pub fn repair(
   input : String,
   options? : Options,
-) -> RepairResult raise MendError {
+) -> RepairResult raise InterJSONError {
   let opts = match options {
     Some(o) => o
     None => Options::default()
@@ -473,7 +477,10 @@ pub fn repair(
 
 ///|
 /// One attempt at repairing `input` with `opts`.
-fn repair_once(input : String, opts : Options) -> RepairResult raise MendError {
+fn repair_once(
+  input : String,
+  opts : Options,
+) -> RepairResult raise InterJSONError {
   let engine = Engine::make(opts)
   engine.feed_str(input)
   let fin = engine.finish_engine()
@@ -489,7 +496,10 @@ fn repair_once(input : String, opts : Options) -> RepairResult raise MendError {
 
 ///|
 /// Repair `input` and return the resulting `Json` value.
-pub fn parse(input : String, options? : Options) -> ParseResult raise MendError {
+pub fn parse(
+  input : String,
+  options? : Options,
+) -> ParseResult raise InterJSONError {
   let opts = match options {
     Some(o) => o
     None => Options::default()
