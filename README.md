@@ -49,17 +49,14 @@ server，把被 `max_tokens` 截断的工具参数交给执行门，收到 **E01
 `retry.prompt`；模型改对后再调用一次即**放行**。逐字节的原始事件流附在
 [`mcp-claude-session.txt`](static/demo/mcp-claude-session.txt)
 （真实会话 id、时间戳、工具入参与返回都在里面，可逐条核对；录制于本次更名之前，
-事件流里的服务名与工具名保留当时的名称，内容未做改写）。
+事件流里的服务名与工具名保留当时的名称，内容未做改写）。派生动画与封面已按发布
+清理规则删除，文字证据保留。
 
 > **关于模型（如实说明）**：客户端与 MCP 协议是 Anthropic 的真货，但本机的
 > `ANTHROPIC_BASE_URL` 指向第三方网关，所以**驱动这段会话的权重不是 Anthropic 的**
 > （会话记录里写着实际模型名与 `modelUsage`）。把那个 `env` 换成 Anthropic 端点、
 > 重跑 `code/tests/media/record_claude_mcp.py`，得到的就是 Claude 模型的会话。**引擎那一侧
 > 百分之百是真的**——E010 与放行都是本仓库的 `interjson` 自己判的。
-
-真实 Claude Code 会话的文字证据见
-[`mcp-claude-session.txt`](static/demo/mcp-claude-session.txt)（录制于更名前，
-原文保留）；派生动画/封面已按本节规则清理，不再作为现行演示素材。
 
 交互版 [mcp.html](https://wenhuang2333.github.io/Moonbit-haker/mcp.html)。
 
