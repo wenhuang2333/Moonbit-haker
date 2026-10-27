@@ -5,8 +5,8 @@ This script is the only producer of the judge-facing assets:
 
     static/demo/mcp-claude-session.txt   verbatim transcript of the capture
     static/demo/mcp-claude-session.txt   the transcript itself (committed)
-    static/demo/mcp-claude-demo.gif      animation painted from the capture (not committed)
-    static/demo/mcp-claude-poster.png    poster painted from the capture (not committed)
+    code/tests/media/out/mcp-claude-demo.gif   optional animation (not committed)
+    code/tests/media/out/mcp-claude-poster.png optional poster (not committed)
 
 Nothing is hand-written.  Every tool input, every tool response and every
 sentence of the final summary is read out of the `claude --output-format
@@ -48,8 +48,8 @@ ROOT = Path(__file__).resolve().parents[3]
 BIN = ROOT / "code" / "_build" / "native" / "release" / "build" / "cmd" / "interjson" / "interjson.exe"
 RAW = ROOT / "code" / "tests" / "media" / "mcp-claude-raw.jsonl"
 OUT_TXT = ROOT / "static" / "demo" / "mcp-claude-session.txt"
-OUT_GIF = ROOT / "static" / "demo" / "mcp-claude-demo.gif"
-OUT_PNG = ROOT / "static" / "demo" / "mcp-claude-poster.png"
+OUT_GIF = ROOT / "code" / "tests" / "media" / "out" / "mcp-claude-demo.gif"
+OUT_PNG = ROOT / "code" / "tests" / "media" / "out" / "mcp-claude-poster.png"
 
 CLAUDE = shutil.which("claude") or str(Path.home() / ".npm-global/bin/claude")
 MOON = shutil.which("moon") or str(Path.home() / ".moon/bin/moon")
