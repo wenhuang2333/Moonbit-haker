@@ -48,10 +48,14 @@ MCP server**。引擎、修复语义与全部不变量不变；版本对应 **1.
   前缀、任何字节序列不得 panic；README 与文档中的全部数字保持原值。版本统一为
   **1.4.0**（`code/moon.mod`、`--version`、npm/Python 清单与 `serve` 的
   `engine` 字段一致），mooncakes 对应号 **0.11.0**。
-- **演示媒体随版本刷新**：`static/demo/` 下的截图与 GIF 在生产构建上重新生成
-  （`screenshot.png`、`mcp-screenshot.png`、`mcp-demo.gif`、`live-demo.gif`、
-  `demo.mp4`），不再保留更名前的旧画面；`static/demo/mcp-claude-session.txt`
-  作为真实会话的文字证据保留原文，其派生 GIF 不再作为现行演示素材。
+- **演示媒体随版本刷新**：`static/demo/` 下的截图、GIF 与录屏由
+  `bash code/tests/media/refresh.sh` 在当前构建上重新生成（生成器移入
+  `code/tests/media/`），不再保留更名前的旧画面；旧版派生素材
+  （`mcp-claude-demo.gif`、`mcp-claude-poster.png`）已删除，
+  `static/demo/mcp-claude-session.txt` 作为真实会话的逐字节文字证据保留原文。
+- **发布后本地清理**：提交/发布后本地只保留当前版本——`_build/`、`test/`、
+  缓存与旧演示媒体删除，历史版本由 GitHub 的提交历史与 Release 保存；旧文档
+  不删除，但开头标注「历史档案」且不进入现行入口。规则见 `AGENTS.md`。
 
 ## [1.3.0] - 2026-10-26
 
