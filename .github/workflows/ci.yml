@@ -135,6 +135,17 @@ jobs:
             --cli ./_build/native/release/build/cmd/interjson/interjson.exe \
             --check
 
+      # The ratios the memory documents quote are the ratios this build has.
+      # `docs/MEMORY.md` is a report that only ever gets printed, so a figure
+      # in it has drifted before without anything noticing; this measures the
+      # same shapes and fails when one grows past its recorded ceiling.
+      - name: Peak memory per shape (must exit 0)
+        working-directory: code
+        run: |
+          moon build cmd/interjson --target native --release
+          python3 tests/memory_gate.py \
+            --cli ./_build/native/release/build/cmd/interjson/interjson.exe
+
       - name: Library coverage (floors and the monotonic ratchet are enforced)
         working-directory: code
         run: |

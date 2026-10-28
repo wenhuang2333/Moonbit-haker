@@ -7,7 +7,7 @@
 | 模块 | `zhanshishan/interjson` |
 | 版本 | 1.5.0 |
 | 许可证 | Apache-2.0 |
-| 后端 | wasm-gc / native / JS / wasm，同一套测试，各 243/243 通过 |
+| 后端 | wasm-gc / native / JS / wasm，同一套测试，各 249/249 通过 |
 | 发行渠道 | GitHub `v1.5.0`（8 个产物：三系统四二进制 + wasm 探针 + 浏览器包 + 安装脚本 + `SHA256SUMS`）；[mooncakes](https://mooncakes.io/docs/zhanshishan/interjson) `0.12.0`（2026-10-28 发布）。**npm 与 PyPI 上还没有 `interjson-moonbit`**，两个语言包按仓库路径安装 |
 
 **本页是中文 API 速查**：`Options`、`PartialParser`、`Schema`、修复规则、错误码、快照语义。
@@ -191,8 +191,12 @@ interjson explain --policy agent --json tool_call.json
 
 ## 已知限制
 
-- **内存是输入的 13.7 倍**（`repair()`，12.95 MB → 177.9 MB）；4 倍预算对任何建树实现都不现实，
-  `--check` 峰值 8.0 倍。要达到 4 倍需要「只出文本、不建树」的模式。
+- **内存取决于形状，值密集的容器最差。** 基准文档（12.95 MB、每对象 12 个成员）
+  `repair()` 峰值 13.2 倍、`--check` 7.5 倍；同字节量的长文本 `--check` 只有 3.6 倍。
+  但**值密集**文档（20 万个单键对象，每个值只有 7 字节）是 **24 倍**——成本按值的个数
+  算而不是按字节算：`{}` 是一次 `Map` 分配、`[1]` 是一次 `Array` 加一个装箱 `Json`。
+  要覆盖这些形状需要「不建树」的模式，目前没有，设计见
+  [`docs/NOTREE.md`](docs/NOTREE.md)。倍数由 `tests/memory_gate.py` 实测并守门。
 - **增量流是基线的 1.39–1.51 倍**（native），未达到「不低于基线 90%」：每条变更都要分配一个
   `Delta` 与一份路径数组。
 - **`max_depth` 只能收紧**；上限与成因见 [`SECURITY.md`](SECURITY.md)。骨架约束是字符类子集，

@@ -446,7 +446,7 @@ python3 tests/eval/run_eval.py --cli ./_build/native/release/build/cmd/interjson
 moon run examples/agent_loop --target native --release
 ```
 
-Cross-backend results are identical: **243/243** tests pass on each of wasm-gc,
+Cross-backend results are identical: **249/249** tests pass on each of wasm-gc,
 native, JS and wasm. `.github/workflows/ci.yml` runs the same commands on every
 push, so the numbers are re-derived rather than trusted. Reproduction steps,
 thresholds and the known shortfalls are in `docs/REPRODUCE.md` and
@@ -535,10 +535,16 @@ The full method, the historical tables and the decision records are in
   `'ok'`, `True`, `+1`, `42 // done` and a fenced `42` are recovered; prose followed
   by a scalar (`Sure!\n42`) still raises `E002`, and so does a scalar with a tail
   (`42 is the answer`).
-- **Memory is 13.7 × the input for `repair()`** (177.9 MB for a 12.95 MB document),
-  and the CLI reads the whole input into memory. `--check` skips rendering and peaks
-  at 8.0 ×. Reaching 4 × requires a "render text without building a tree" mode
-  ([`docs/MEMORY.md`](docs/MEMORY.md)).
+- **Memory depends on the shape, and value-dense containers are the worst case.**
+  On the benchmark document (a 12.95 MB array of 12-member objects) `repair()`
+  peaks at 13.2 × and `--check` at 7.5 ×; the same number of bytes as one long
+  text peaks at 3.6 ×. On a *value-dense* document — 200 000 one-key objects,
+  which is 7 bytes per value — the ratio is 24 ×, because the cost is per value
+  and not per byte: `{}` is a `Map` allocation and `[1]` is an `Array` plus a
+  boxed `Json`. Reaching 4 × for those needs a mode that does not build the
+  value at all; there is not one, and the design is in
+  [`docs/NOTREE.md`](docs/NOTREE.md). The ratios are measured and gated by
+  `tests/memory_gate.py`.
 - **The per-feed p99 is only an upper bound.** The runtime clock is
   millisecond-resolution and exposes no allocation counter.
 - **The readiness curve covers top-level members only.** A nested member is ready

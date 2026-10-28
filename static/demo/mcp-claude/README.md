@@ -112,7 +112,7 @@ python3 code/tests/media/record_claude_mcp.py --keep-server   # 录完保留 MCP
 | --- | --- |
 | 平台 | macOS 14/15（Darwin 25.5.0, arm64） |
 | Claude Code | 2.1.301 |
-| 引擎 | `interjson` 1.1.1（录制时的构建；当前版本 1.4.0） |
+| 引擎 | `interjson` 1.1.1（录制时的构建；当前版本 1.5.0） |
 | 会话 | `claude -p`，3 turns，`stop_reason: end_turn` |
 
 会话 id、时间戳、模型名、逐字节的工具入参与返回，都写在

@@ -30,15 +30,23 @@ or damaged input can make the parser do, not about authentication.
   total input and single-token size; exceeding them raises `E020`/`E021`/`E022`
   instead of allocating without limit. The record list is capped at 10 000
   entries.
-- **Recursion is bounded by construction.** `Options::max_depth` has a hard
-  ceiling — which is also the documented default, so a caller can tighten it but
-  not loosen it; a larger value is refused with `E050` rather than risking a
-  stack overflow. Declarations (JSON Schema or the library's skeleton language)
-  have a tighter bound and are refused with `E070`. The reason for the ceiling is
-  measured, not guessed: the wasm backend's stack overflows in a recursive walk
-  somewhere between 896 and 1024 frames. The constants themselves
-  (`MAX_VALUE_DEPTH`, `MAX_SCHEMA_DEPTH`) live in `code/options.mbt` and
-  `code/schema.mbt`; this document states the guarantee, not a frozen number.
+- **Recursion is bounded by construction, and the bound is not a stack bound.**
+  Every walk over a value — the copy, the comparison, the schema evaluation and
+  the renderer — carries an explicit work list instead of recursing, so the
+  depth a caller may configure is bounded by the heap and not by the native
+  stack. `Options::max_depth` can therefore be loosened: a 100 000-level
+  document parses, renders and compares on every backend. The ceiling that
+  remains (`MAX_VALUE_DEPTH`, `MAX_SCHEMA_DEPTH` in `code/options.mbt`) is a
+  sanity bound, so that a typo cannot ask for an allocation the machine cannot
+  make; a value above it is refused with `E050`.
+  Declarations (JSON Schema or the library's skeleton language) are still read
+  by two recursive parsers, so they keep a real bound and are refused with
+  `E070` past `MAX_SCHEMA_DEPTH`.
+  This used to be the other way round: the walks were recursive, the wasm
+  backend's stack overflowed between 896 and 1024 frames, and `max_depth` had
+  to be capped at 512 to keep "a refusal, never a crash" true — which meant a
+  caller could tighten the limit but never loosen it. `code/docs/NOTREE.md`
+  records that history and what is still open.
 - **No code execution, no I/O.** Repair is pure text transformation. There is no
   `eval`, no dynamic loading, and the library never opens files or sockets.
 - **Log injection is not possible through messages.** Repair messages are fixed

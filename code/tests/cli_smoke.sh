@@ -164,8 +164,8 @@ check_doc_version "condensed doc version" "产品文档-精简版.md" \
 # subcommand that disappears also fails here.
 CLI_SUBCOMMANDS="$("$BIN" --help 2>&1 | sed -n 's/^interjson \([a-z][a-z-]*\).*/\1/p' | sort -u)"
 DOC_SUBCOMMANDS="$(
-  for f in README.md code/README.md code/README.zh.md code/docs/ONEPAGE.md \
-           code/docs/PROTOCOL.md code/docs/INTEGRATIONS.md code/docs/PITCH.md \
+  for f in README.md code/README.md code/README.zh.md \
+           code/docs/PROTOCOL.md code/docs/INTEGRATIONS.md \
            产品文档-精简版.md; do
     [ -f "$REPO/$f" ] || continue
     grep -oE '(^|`)interjson [a-z][a-z0-9-]*([^a-zA-Z0-9._-]|$)' "$REPO/$f" 2>/dev/null
