@@ -13,6 +13,7 @@ import queue
 import shutil
 import subprocess
 import threading
+import time
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -94,7 +95,7 @@ class Client:
         *,
         args: Iterable[str] = (),
         timeout: float = 30.0,
-        stderr: int | None = subprocess.DEVNULL,
+        stderr: int | None = None,
     ) -> None:
         self.binary = binary or find_binary()
         self.timeout = timeout
@@ -102,6 +103,12 @@ class Client:
         self._next_id = 0
         self._responses: "queue.Queue[Any]" = queue.Queue()
         self._stderr_lines: list[str] = []
+        # `stderr` defaults to a pipe rather than DEVNULL. The engine writes
+        # its diagnostics there, and `stderr=DEVNULL` meant that every error
+        # message the client raised about a dead or misbehaving process ended
+        # with an empty `stderr:` field -- the one piece of evidence that says
+        # *why* the engine exited was thrown away by default. Pass
+        # `stderr=subprocess.DEVNULL` to opt out.
         self.proc = subprocess.Popen(
             [self.binary, "serve", *args],
             stdin=subprocess.PIPE,
@@ -138,6 +145,20 @@ class Client:
             if len(self._stderr_lines) > 100:
                 del self._stderr_lines[:50]
 
+    def _resync(self) -> None:
+        """Drop every buffered answer.
+
+        The reader thread is left alone: starting a second one would let two
+        threads feed the same queue, and the answers would interleave. What
+        matters is that a *late* answer cannot be mistaken for the next
+        request's answer, which `request` handles by matching ids.
+        """
+        while True:
+            try:
+                self._responses.get_nowait()
+            except queue.Empty:
+                break
+
     def request(self, method: str, **params: Any) -> Any:
         """Send one request and return its `result`, or raise `InterJSONError`."""
         with self._lock:
@@ -154,23 +175,41 @@ class Client:
             assert self.proc.stdin is not None
             self.proc.stdin.write(json.dumps(payload, ensure_ascii=False) + "\n")
             self.proc.stdin.flush()
-            try:
-                response = self._responses.get(timeout=self.timeout)
-            except queue.Empty as exc:
-                raise TimeoutError(f"interjson did not answer `{method}` in {self.timeout}s") from exc
-            if response is _EOF:
-                raise RuntimeError(
-                    f"interjson closed the stream; stderr: {' | '.join(self._stderr_lines[-3:])}"
-                )
-            if response.get("id") != request_id:
-                # The protocol answers in order; a mismatch means the stream is
-                # out of sync, which is worth reporting rather than guessing.
-                raise RuntimeError(
-                    f"interjson answered id {response.get('id')} for request {request_id}"
-                )
-            if response.get("ok"):
-                return response["result"]
-            raise InterJSONError(response.get("error") or {})
+            # Wait for *this* request's answer, discarding anything else.
+            #
+            # A timed-out request leaves its answer in flight: the reader
+            # thread delivers it after the caller has given up, and it then
+            # sits at the head of the queue. Reading it as the next request's
+            # answer either raised a confusing id mismatch or, when the ids
+            # happened to line up, returned the wrong result. Matching on the
+            # id is what makes a late answer harmless.
+            deadline = time.monotonic() + self.timeout
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self._resync()
+                    raise TimeoutError(
+                        f"interjson did not answer `{method}` in {self.timeout}s"
+                    )
+                try:
+                    response = self._responses.get(timeout=remaining)
+                except queue.Empty:
+                    self._resync()
+                    raise TimeoutError(
+                        f"interjson did not answer `{method}` in {self.timeout}s"
+                    )
+                if response is _EOF:
+                    raise RuntimeError(
+                        f"interjson closed the stream; "
+                        f"stderr: {' | '.join(self._stderr_lines[-3:])}"
+                    )
+                if response.get("id") != request_id:
+                    # An answer to an abandoned request. Drop it and keep
+                    # waiting for the one this call is owed.
+                    continue
+                if response.get("ok"):
+                    return response["result"]
+                raise InterJSONError(response.get("error") or {})
 
     # -- methods ----------------------------------------------------------
 

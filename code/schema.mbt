@@ -570,6 +570,9 @@ pub fn Schema::at_path(self : Schema, path : String) -> Schema? {
 priv struct SchemaParser {
   text : String
   mut i : Int32
+  /// Nesting depth of the declaration being read. A declaration is external
+  /// input, so it must not be able to exhaust the stack; see `MAX_VALUE_DEPTH`.
+  mut depth : Int32
 }
 
 ///|
@@ -607,6 +610,22 @@ fn sp_at(p : SchemaParser, word : String) -> Bool {
 ///|
 /// Parse a schema at `p.i`, leaving the cursor after it.
 fn sp_schema(p : SchemaParser) -> Schema raise InterJSONError {
+  if p.depth > MAX_SCHEMA_DEPTH {
+    raise SchemaError(
+      "schema: declaration nests deeper than " +
+      MAX_SCHEMA_DEPTH.to_string() +
+      " levels",
+    )
+  }
+  p.depth = p.depth + 1
+  let s = sp_schema_body(p)
+  p.depth = p.depth - 1
+  s
+}
+
+///|
+/// The body of `sp_schema`, with the depth already accounted for.
+fn sp_schema_body(p : SchemaParser) -> Schema raise InterJSONError {
   sp_skip_ws(p)
   let n = p.text.length()
   if p.i >= n {
@@ -1288,7 +1307,7 @@ fn guard_no_dup(members : Array[SchemaMember]) -> Unit raise InterJSONError {
 /// Parse the text form of a skeleton (FR-36). Raises `E070` with the offset of
 /// the problem; the text is never partially accepted.
 pub fn Schema::parse(text : String) -> Schema raise InterJSONError {
-  let p : SchemaParser = { text, i: 0, }
+  let p : SchemaParser = { text, i: 0, depth: 0, }
   let s = sp_schema(p)
   sp_skip_ws(p)
   if p.i < text.length() {
@@ -1436,7 +1455,7 @@ pub fn Schema::evaluate(self : Schema, value : Json) -> SchemaVerdict {
   let satisfied : Array[Int32] = [0]
   let missing : Array[String] = []
   let mismatched : Array[SchemaMismatch] = []
-  walk_schema(self, value, "", total, satisfied, missing, mismatched)
+  walk_schema(self, value, "", total, satisfied, missing, mismatched, 0)
   let ok = missing.length() == 0 && mismatched.length() == 0
   { total: total[0], satisfied: satisfied[0], missing, mismatched, ok, }
 }
@@ -1451,7 +1470,22 @@ fn walk_schema(
   satisfied : Array[Int32],
   missing : Array[String],
   mismatched : Array[SchemaMismatch],
+  depth : Int32,
 ) -> Unit {
+  // The value being checked can be deeper than the engine's own limit -- it
+  // was built by the caller, not parsed here -- so the walk is bounded too.
+  // Past the bound the node is reported as unsatisfied rather than walked: a
+  // refusal is the safe answer, and a crash is not.
+  if depth > MAX_VALUE_DEPTH {
+    // The bound can only fire at depth 1 or more, so the path is never empty:
+    // the root is walked at depth 0.
+    mismatched.push({
+      path,
+      expected: "a value within " + MAX_VALUE_DEPTH.to_string() + " levels",
+      got: kind_of(value),
+    })
+    return
+  }
   match schema {
     Obj(members) =>
       match value {
@@ -1482,6 +1516,7 @@ fn walk_schema(
                     satisfied,
                     missing,
                     mismatched,
+                    depth + 1,
                   )
                 _ => ()
               }
@@ -1518,6 +1553,7 @@ fn walk_schema(
                 satisfied,
                 missing,
                 mismatched,
+                depth + 1,
               )
             } else {
               mismatched.push({

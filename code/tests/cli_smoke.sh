@@ -581,6 +581,184 @@ else
   fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "mcp initialize" "$mcp_init"
 fi
 
+# --- 1.5 regressions --------------------------------------------------------
+# Each of these is a defect that shipped in 1.4.x. They are here, in the
+# cheapest gate, because each one is a one-line command away from being
+# checked and each one was found by reading rather than by running.
+
+# `--max-repairs` rejected the value its own help text recommends (the bound
+# was 64, the documented default 10000).
+if printf '{"a":1}' | "$BIN" --max-repairs 10000 >/dev/null 2>&1; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "--max-repairs accepts 10000"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n' "--max-repairs accepts 10000"
+fi
+if printf '{"a":1}' | "$BIN" --max-repairs 0 >/dev/null 2>&1; then
+  fail=$((fail + 1)); printf 'FAIL %-34s\n' "--max-repairs rejects 0"
+else
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "--max-repairs rejects 0"
+fi
+
+# `--max-prose-buffer=` sliced one character too far, so 65536 silently became
+# 5536. The buffer is what bounds the replay of skipped prose, so the effect
+# is a refusal on a document that should fit.
+if printf '{"a":1}' | "$BIN" --max-prose-buffer=65536 >/dev/null 2>&1; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "--max-prose-buffer=65536 accepted"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n' "--max-prose-buffer=65536 accepted"
+fi
+
+# A multi-byte character straddling the 64 KiB read boundary was decoded as
+# two replacement characters. The document is written so that the character
+# lands exactly on the boundary.
+# `--batch` reads one envelope per line, so the document goes inside one. The
+# padding puts the two bytes of e-acute across the 65536-byte read boundary.
+python3 - "$BIN" <<'PYEOF'
+import json, subprocess, sys
+binary = sys.argv[1]
+
+# The reader consumes 65536 bytes at a time, so the multi-byte character has
+# to start at byte 65535 *of the stream* -- the batch envelope counts, and
+# getting that wrong was how this test first passed against the broken code.
+# The padding is therefore solved for, not guessed.
+def build(pad_len):
+    doc = '{"k":"' + "a" * pad_len + '\u00e9"}'
+    # `ensure_ascii=False` matters: the default escapes the character into six
+    # ASCII bytes and the test then checks a stream with no multi-byte
+    # character in it at all.
+    return json.dumps({"id": "edge", "input": doc}, ensure_ascii=False)
+
+pad_len = 0
+while True:
+    envelope = build(pad_len)
+    at = envelope.encode("utf-8").index("\u00e9".encode("utf-8"))
+    if at >= 65535:
+        break
+    pad_len += 65535 - at
+envelope = build(pad_len)
+at = envelope.encode("utf-8").index("\u00e9".encode("utf-8"))
+assert at == 65535, at
+assert len(envelope.encode("utf-8")) > 65536, len(envelope.encode("utf-8"))
+out = subprocess.run([binary, "--batch"], input=envelope + "\n",
+                     capture_output=True, text=True)
+if "\ufffd" in out.stdout or "\ufffd" in out.stderr:
+    print("FAIL boundary-utf8: replacement character in the output")
+    sys.exit(1)
+if '"rc":0' not in out.stdout:
+    print("FAIL boundary-utf8: the document was not accepted")
+    print((out.stdout or out.stderr)[:300])
+    sys.exit(1)
+sys.exit(0)
+PYEOF
+if [ "$?" = 0 ]; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "multi-byte char on the 64 KiB edge"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n' "multi-byte char on the 64 KiB edge"
+fi
+
+# The gate's two channels are different objects: the text channel is a
+# summary for the model, `structuredContent` is the payload.
+gate_out="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"interjson_gate","arguments":{"text":"{\"a\":1,}"}}}' | "$BIN" mcp | tail -1)"
+if printf '%s' "$gate_out" | grep -qF '"structuredContent"' \
+   && printf '%s' "$gate_out" | grep -qF 'decision='; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "gate carries a summary and a payload"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "gate carries a summary and a payload" "$gate_out"
+fi
+
+# The agent profile is the agent profile: a sentence in front of the
+# arguments is not part of the arguments.
+if printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"interjson_gate","arguments":{"text":"Here are the args:\n{\"a\":1}"}}}' | "$BIN" mcp | tail -1 | grep -qF '"executable":true'; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "agent profile skips prose"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n' "agent profile skips prose"
+fi
+
+# ...and `execution` is not the agent profile.
+if printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"interjson_gate","arguments":{"text":"Here are the args:\n{\"a\":1}","profile":"execution"}}}' | "$BIN" mcp | tail -1 | grep -qF '"executable":false'; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "execution profile refuses prose"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n' "execution profile refuses prose"
+fi
+
+# Every refusal carries the sentence to send back to the model, and no value.
+refusal="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"interjson_gate","arguments":{"text":"{\"a\":1}","schema_json":{"type":"object","properties":{"a":{"type":"string"}},"required":["a"]}}}}' | "$BIN" mcp | tail -1)"
+if printf '%s' "$refusal" | grep -qF '"executable":false' \
+   && printf '%s' "$refusal" | grep -qF '"prompt"' \
+   && printf '%s' "$refusal" | grep -qF '"value":null'; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "refusal carries prompt, drops value"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "refusal carries prompt, drops value" "$refusal"
+fi
+
+# Two different integers that share a Double are two different values: the
+# merge must be recorded as a loss, not as a no-op.
+big="$(printf '{"id":9007199254740993,"id":9007199254740992}' | "$BIN" explain --json)"
+if printf '%s' "$big" | grep -qF '"exactness":"lossy"' \
+   && printf '%s' "$big" | grep -qF '"severity":"warning"'; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "unsafe-integer merge is lossy"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "unsafe-integer merge is lossy" "$big"
+fi
+
+# Two spellings of the same number are the same number: `1` and `1.0` merge
+# without losing anything, so the gate must not refuse it.
+spelling="$(printf '{"a":1,"a":1.0}' | "$BIN" explain --json)"
+if printf '%s' "$spelling" | grep -qF '"severity":"info"'; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "1 and 1.0 merge as one value"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     %s\n' "1 and 1.0 merge as one value" "$spelling"
+fi
+
+# The space form of `--print-config` used to be read as a file name.
+if [ "$("$BIN" mcp --print-config claude)" = 'claude mcp add interjson -- interjson mcp' ]; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "mcp --print-config claude (space)"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n' "mcp --print-config claude (space)"
+fi
+if "$BIN" mcp --print-config bogus >/dev/null 2>&1; then
+  fail=$((fail + 1)); printf 'FAIL %-34s\n' "mcp --print-config rejects a typo"
+else
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "mcp --print-config rejects a typo"
+fi
+
+# MCP is a session protocol: a request before the handshake is refused.
+if printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | "$BIN" mcp | grep -qF -- '-32002'; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "tools/list before initialize"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n' "tools/list before initialize"
+fi
+
+# `--chunk N` drives the one-shot path too. It used to affect only `--batch`,
+# so the flag whose whole purpose is to exercise the streaming path never
+# touched it.
+if [ "$(printf '{"a":1,}' | "$BIN" --chunk 1)" = '{"a":1}' ]; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "--chunk drives the one-shot path"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s %s\n' "--chunk drives the one-shot path" "$(printf '{"a":1,}' | "$BIN" --chunk 1)"
+fi
+
+# Conflicting flags are refused, not silently resolved: `--policy` replaces
+# the safety knobs, so `--strict --policy permissive` used to drop one of them
+# without a word.
+conflict_rc=0
+"$BIN" --strict --policy permissive </dev/null >/dev/null 2>&1 || conflict_rc=$?
+if [ "$conflict_rc" = 2 ]; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "--strict --policy is refused"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s rc=%s\n' "--strict --policy is refused" "$conflict_rc"
+fi
+
+# A schema deep enough to exhaust the stack is refused, not crashed.
+deep_schema="$(python3 -c 'print("[" * 400 + "]" * 400)')"
+deep_rc=0
+printf '{"a":1}' | "$BIN" explain --json --schema "$deep_schema" >/dev/null 2>&1 || deep_rc=$?
+if [ "$deep_rc" -lt 128 ]; then
+  pass=$((pass + 1)); printf 'ok   %-34s\n' "deep declaration refused, not crashed"
+else
+  fail=$((fail + 1)); printf 'FAIL %-34s\n     rc=%s\n' "deep declaration refused, not crashed" "$deep_rc"
+fi
+
 if [ "$skipped" -gt 0 ]; then
   printf '\n%d passed, %d failed, %d skipped (document not published)\n' \
     "$pass" "$fail" "$skipped"

@@ -24,6 +24,14 @@ moon.lock
 #   code/docs/CONFORMANCE.md     协议与 MCP 一致性套件的规范，测试与接入方需要它
 #   code/CHANGELOG.md             release.yml 从它抽取每个版本的 Release 正文；
 #                                 属于发布元数据，不是说明文档
+#   code/SECURITY.md              安全披露渠道；GitHub 的 Security 面板与
+#                                 研究者都需要它，缺了等于「不接收报告」
+#   code/CONTRIBUTING.md          贡献者入口；mooncakes 与 GitHub 都会指向它
+#   code/docs/SPEC.md             兼容性契约，接入方需要它
+#   LICENSE / NOTICE              许可证正文；根目录缺失时 GitHub 侧栏显示
+#                                 「无许可证」，而 README 的 badge 指向子目录
+#   .github/ISSUE_TEMPLATE/*.md   缺陷与规则提案模板；原先被 *.md 吞掉，
+#                                 于是 GitHub 上「新建 Issue」是空白页
 #   code/docs/EVAL*.md            CI 跑出来的测量报告，由 run_eval.py、
 #   code/docs/READINESS.md        run_independent.py、run_readiness.py、
 #   code/docs/MEMORY.md           memory_baseline.py 直接写入，CI 还把它们
@@ -39,6 +47,9 @@ moon.lock
 !**/README.md
 !**/README.zh.md
 !code/CHANGELOG.md
+!code/SECURITY.md
+!code/CONTRIBUTING.md
+!code/docs/SPEC.md
 !code/docs/MCP.md
 !code/docs/INTEGRATIONS.md
 !code/docs/PROTOCOL.md
@@ -53,6 +64,11 @@ moon.lock
 !code/docs/MEMORY.md
 !code/docs/DIVERGENCES.md
 !code/tests/eval/third_party/**
+!code/tests/media/README.md
+!LICENSE
+!NOTICE
+!.github/ISSUE_TEMPLATE/*.md
+!.github/PULL_REQUEST_TEMPLATE.md
 
 # 差分报告的本地副本（提交版是 docs/DIVERGENCES.md）
 code/tests/diff/report.md

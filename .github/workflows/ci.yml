@@ -11,6 +11,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # The release workflow calls this one, so a tag cannot publish a build whose
+  # gates CI would reject. The release used to depend on two jobs that only
+  # built and ran the binaries; a checksum says nothing about correctness, so
+  # a red test suite did not stop a release.
+  workflow_call:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -46,6 +51,20 @@ jobs:
           moon test
           moon test --target native
           moon test --target js
+
+      # The byte-level fuzz, at a size the pull request can afford. The
+      # property tests generate strings that look like damaged JSON; these
+      # generate bytes, so "no panic on any byte sequence" is a claim with a
+      # gate behind it rather than a sentence in a document. The nightly
+      # workflow runs the same properties for far longer.
+      - name: Byte-level fuzz (must exit 0)
+        working-directory: code
+        run: |
+          INTERJSON_FUZZ=2000 moon test --target wasm-gc
+
+      - name: The interface files are in sync
+        working-directory: code
+        run: moon info
 
       - name: LLM fixtures are in sync
         working-directory: code

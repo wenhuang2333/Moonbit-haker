@@ -15,16 +15,26 @@
 
 ///|
 /// Read all of standard input as text.
+///
+/// The stream is decoded once, not chunk by chunk. Decoding each 64 KiB piece
+/// on its own looks equivalent and is not: a multi-byte character that
+/// straddles a chunk boundary is a malformed sequence in *both* pieces, so a
+/// lossy decode turns it into two U+FFFD replacement characters. For Chinese
+/// text and emoji that is a silent wrong result — the command reports success
+/// and the document it read is not the document that was written. Reading the
+/// bytes first and decoding once removes the boundary entirely.
 fn read_all(stream : Int64) -> String {
   // `stream` is a stdio `FILE *`, the same handle the single document path
   // reads from.
-  let sb = StringBuilder()
+  let all : Array[Byte] = []
   let mut piece = read_chunk(stream, 65536)
   while piece.length() > 0 {
-    sb.write_string(@utf8.decode_lossy(piece[:]))
+    for i = 0; i < piece.length(); i = i + 1 {
+      all.push(piece[i])
+    }
     piece = read_chunk(stream, 65536)
   }
-  sb.to_string()
+  @utf8.decode_lossy(Bytes::from_array(all[:])[:])
 }
 
 ///|

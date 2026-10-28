@@ -24,6 +24,7 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from . import __version__
 from .client import Client, InterJSONError, find_binary
 
 __all__ = ["InterJSONHTTPServer", "create_server", "main"]
@@ -47,7 +48,7 @@ class InterJSONHTTPServer(ThreadingHTTPServer):
 
 
 class _Handler(BaseHTTPRequestHandler):
-    server_version = "interjson/1.0.0"
+    server_version = "interjson/" + __version__
     protocol_version = "HTTP/1.1"
 
     # -- helpers ----------------------------------------------------------

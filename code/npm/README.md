@@ -10,9 +10,11 @@ that starts the local MCP server from the native binary.
 npm install ./code/npm      # from the repository root
 ```
 
-> The package is distributed as `interjson-moonbit` (the suffix identifies the
-> MoonBit engine); the import name is `interjson`. Install from the repository
-> until the registry publication.
+> The package name is **`interjson-moonbit`** on npm (the suffix identifies the
+> MoonBit engine); the import name is `interjson`. **Publication is pending**:
+> version 1.5.0 is not on the npm registry yet, so install from the repository
+> path above. Nothing on this page claims the package is installable with
+> `npm install interjson-moonbit`.
 
 ```js
 import { analyze, repair } from "interjson-moonbit";
@@ -43,7 +45,7 @@ stdout but protocol messages). Resolution order:
 
 ```bash
 npm install -g ./code/npm
-interjson --version              # interjson 1.4.0: the native engine must resolve first
+interjson --version              # interjson 1.5.0: the native engine must resolve first
 interjson-mcp --version          # passed through to `<binary> mcp --version`
 interjson-mcp --print-config=claude
 ```
@@ -73,7 +75,14 @@ Zed, with the privacy model and troubleshooting, is in
 
 The server exposes four read-only tools: `interjson_gate` (the gate; `executable`,
 `decision`, `exactness`, `value`, `retry.prompt`), `interjson_repair`,
-`interjson_validate`, and `interjson_readiness`.
+`interjson_validate`, and `interjson_readiness`. The gate defaults to the
+`agent` profile, which equals `Options::for_agent()` — prose before the
+arguments is skipped rather than refused. A refused result always carries a
+non-empty `retry.prompt` and `value: null`; `content[0].text` is a summary and
+`structuredContent` is the payload. **MCP is advisory**: the model can decline
+to call the gate, so the host must gate the call itself (a Claude Code
+`PreToolUse` hook or a host-SDK `gate()` — see
+[`docs/INTEGRATIONS.md`](../docs/INTEGRATIONS.md#making-the-gate-mandatory)).
 
 ## Exports
 
@@ -111,8 +120,10 @@ the MoonBit `PartialParser`.
 ## Scope
 
 This package wraps the same bundle as `static/demo/interjson.js`; it does not
-reimplement the engine. The version is the engine version (`1.4.0`). The
-MoonBit package on mooncakes is `0.11.0` because the registry currently accepts
-only `0.x.y`; the bytes are the same.
+reimplement the engine. The version is the engine version (`1.5.0`). The
+MoonBit package on mooncakes is `0.12.0` because the registry currently accepts
+only `0.x.y`; the bytes are the same. **Neither is published yet**: the npm
+package and the 0.12.0 mooncakes upload are both pending, and the published
+mooncakes history stops at `0.11.0` (the 1.4.0 correspondence).
 
 License: Apache-2.0.

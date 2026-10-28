@@ -14,16 +14,20 @@ that.
 
 This document is the contract for `interjson serve`: the **host-side** transport.
 `interjson mcp` is the **model-side** transport — it speaks MCP (JSON-RPC 2.0 over
-stdio, protocol `2025-06-18`, with `2024-11-05` accepted) and exposes the same
-engine as four read-only tools: `interjson_gate` (primary, defaults to the
-`agent` profile), `interjson_repair`, `interjson_validate` and
+stdio, protocol `2025-06-18`, with `2025-03-26` and `2024-11-05` accepted) and
+exposes the same engine as four read-only tools: `interjson_gate` (primary,
+defaults to the `agent` profile, which equals `Options::for_agent()` including
+`skip_prose`), `interjson_repair`, `interjson_validate` and
 `interjson_readiness`.
 
 The two are separate transports over one engine, not two implementations: a
 host that gates tool arguments itself drives `serve` from its own code, while a
 host that wants the model to be able to ask for the gate exposes `mcp` and lets
 the model call the tools. Both return the same decisions because both call the
-same engine. The MCP methods (`initialize`, `tools/list`, `tools/call`,
+same engine. The difference that matters is enforcement: `serve` runs on a code
+path the host controls, so the gate always runs; `mcp` is a tool the model may
+decline to call, so on its own it is advisory. See
+[INTEGRATIONS.md](INTEGRATIONS.md#making-the-gate-mandatory). The MCP methods (`initialize`, `tools/list`, `tools/call`,
 notifications) and the per-client configuration are documented in
 [MCP.md](MCP.md); `serve` does not implement them.
 

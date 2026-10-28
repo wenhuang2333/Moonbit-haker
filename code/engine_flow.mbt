@@ -1083,18 +1083,37 @@ fn Engine::emit_literal(
 ///|
 /// Structural equality of two parsed values, used to decide whether merging a
 /// duplicate key actually dropped information.
+///
+/// The comparison is depth-bounded. A value deeper than `MAX_VALUE_DEPTH` is
+/// treated as "not equal", because the only use of this function is to decide
+/// whether a merge lost information, and "not equal" is the safe answer: the
+/// merge is then recorded as a loss (`Warning`) rather than as a no-op
+/// (`Info`). The same bound keeps the recursion from exhausting the stack on a
+/// deeply nested input, which would turn a refusal into a crash.
 fn json_equal(a : Json, b : Json) -> Bool {
+  json_equal_at(a, b, 0)
+}
+
+///|
+/// The recursive half of `json_equal`, carrying the current depth.
+fn json_equal_at(a : Json, b : Json, depth : Int32) -> Bool {
+  if depth > MAX_VALUE_DEPTH {
+    // Too deep to compare safely: assume the values differ, so the caller
+    // records the merge as a loss instead of pretending nothing was dropped.
+    return false
+  }
   match (a, b) {
     (Json::Null, Json::Null) => true
     (Json::True, Json::True) => true
     (Json::False, Json::False) => true
-    (Json::Number(x, ..), Json::Number(y, ..)) => x == y
+    (Json::Number(x, repr=rx), Json::Number(y, repr=ry)) =>
+      number_equal(x, rx, y, ry)
     (Json::String(x), Json::String(y)) => x == y
     (Json::Array(x), Json::Array(y)) => {
       let mut ok = x.length() == y.length()
       let mut i = 0
       while ok && i < x.length() {
-        if !json_equal(x[i], y[i]) {
+        if !json_equal_at(x[i], y[i], depth + 1) {
           ok = false
         }
         i = i + 1
@@ -1106,7 +1125,7 @@ fn json_equal(a : Json, b : Json) -> Bool {
       if ok {
         for k, v in x {
           match y.get(k) {
-            Some(w) => if !json_equal(v, w) { ok = false }
+            Some(w) => if !json_equal_at(v, w, depth + 1) { ok = false }
             None => ok = false
           }
         }
@@ -1115,6 +1134,157 @@ fn json_equal(a : Json, b : Json) -> Bool {
     }
     _ => false
   }
+}
+
+///|
+/// Whether two JSON numbers denote the same value.
+///
+/// The source text is kept as the number's `repr` (see `build_number`), and
+/// that text is the authority. `9007199254740993` and `9007199254740992` are
+/// *different* integers that collapse onto the same `Double`, so comparing the
+/// doubles alone calls them equal — and the merge of a duplicate key is then
+/// recorded as harmless (`Info`) instead of as a loss (`Warning`), which lets
+/// the gate through a value it silently changed. That is the wrong direction
+/// for an execution gate, so the texts decide.
+///
+/// The comparison is on the exact decimal value, not on the spelling: `1`,
+/// `1.0` and `1e0` are one number, and so are `100` and `1e2`. Refusing a
+/// document because two spellings of the same number were merged would be a
+/// false loss, which is a defect in the other direction.
+///
+/// A number with no `repr` at all was synthesised by the library rather than
+/// parsed from input, so its double is all there is to compare.
+fn number_equal(x : Double, rx : String?, y : Double, ry : String?) -> Bool {
+  match (rx, ry) {
+    (Some(a), Some(b)) =>
+      match (decimal_key(a), decimal_key(b)) {
+        // Both texts are decimal numbers: the exact values decide.
+        (Some(ka), Some(kb)) => ka == kb
+        // A text the parser could not read as a decimal number (a repaired
+        // form, or an exponent too large to normalise): fall back to the
+        // double, and require the texts to be identical as well so that two
+        // different unreadable texts are never called equal by accident.
+        _ => a == b || (x == y && a == b)
+      }
+    _ => x == y
+  }
+}
+
+///|
+/// Whether a UTF-16 code unit is an ASCII decimal digit.
+fn is_ascii_digit(u : UInt16) -> Bool {
+  let n = u.to_int()
+  n >= 0x30 && n <= 0x39
+}
+
+///|
+/// The exact decimal value of a JSON number text, as `(negative, digits,
+/// exponent)`, where the value is `(-1)^negative * digits * 10^exponent` and
+/// `digits` carries no leading or trailing zero.
+///
+/// `None` means the text is not a decimal number this function can normalise.
+fn decimal_key(text : String) -> (Bool, String, Int32)? {
+  let n = text.length()
+  if n == 0 {
+    return None
+  }
+  let mut i = 0
+  let mut negative = false
+  if text.at(i) == 0x2D {
+    negative = true
+    i = i + 1
+  } else if text.at(i) == 0x2B {
+    i = i + 1
+  }
+  let digits = StringBuilder()
+  let mut seen_digit = false
+  let mut exp : Int32 = 0
+  while i < n {
+    let c = text.at(i)
+    if is_ascii_digit(c) {
+      digits.write_char(Int32::unsafe_to_char(c.to_int()))
+      seen_digit = true
+      i = i + 1
+    } else {
+      break
+    }
+  }
+  if i < n && text.at(i) == 0x2E {
+    i = i + 1
+    while i < n {
+      let c = text.at(i)
+      if is_ascii_digit(c) {
+        digits.write_char(Int32::unsafe_to_char(c.to_int()))
+        // A fractional digit lowers the exponent by one.
+        exp = exp - 1
+        seen_digit = true
+        i = i + 1
+      } else {
+        break
+      }
+    }
+  }
+  if !seen_digit {
+    return None
+  }
+  if i < n && (text.at(i) == 0x65 || text.at(i) == 0x45) {
+    i = i + 1
+    let mut exp_negative = false
+    if i < n && (text.at(i) == 0x2D || text.at(i) == 0x2B) {
+      exp_negative = text.at(i) == 0x2D
+      i = i + 1
+    }
+    let mut magnitude : Int64 = 0
+    let mut exp_digits = 0
+    while i < n {
+      let c = text.at(i)
+      if !is_ascii_digit(c) {
+        return None
+      }
+      magnitude = magnitude * 10L + (c.to_int() - 0x30).to_int64()
+      exp_digits = exp_digits + 1
+      // An exponent this large cannot be normalised into an `Int32`, and no
+      // two such texts are meaningfully comparable: refuse to normalise.
+      if exp_digits > 9 {
+        return None
+      }
+      i = i + 1
+    }
+    if exp_digits == 0 {
+      return None
+    }
+    let signed = if exp_negative { -magnitude } else { magnitude }
+    let adjusted = exp.to_int64() + signed
+    if adjusted > 2147483647L || adjusted < -2147483648L {
+      return None
+    }
+    exp = adjusted.to_int()
+  }
+  if i != n {
+    return None
+  }
+  // Normalise: strip leading zeros (they do not change the exponent) and
+  // trailing zeros (each one raises the exponent by one).
+  let raw = digits.to_string()
+  let len = raw.length()
+  let mut start = 0
+  while start < len && raw.at(start) == 0x30 {
+    start = start + 1
+  }
+  if start == len {
+    // Every digit was a zero: the value is zero, whatever the exponent says.
+    return Some((false, "0", 0))
+  }
+  let mut stop = len
+  while stop > start + 1 && raw.at(stop - 1) == 0x30 {
+    stop = stop - 1
+    exp = exp + 1
+  }
+  let significant = StringBuilder()
+  for j = start; j < stop; j = j + 1 {
+    significant.write_char(Int32::unsafe_to_char(raw.at(j).to_int()))
+  }
+  Some((negative, significant.to_string(), exp))
 }
 
 ///|

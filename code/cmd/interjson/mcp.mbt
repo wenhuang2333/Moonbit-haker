@@ -19,9 +19,15 @@
 const MCP_PROTOCOL_VERSION : String = "2025-06-18"
 
 ///|
-/// The older revision this server still accepts verbatim. Clients that asked
-/// for it keep working without being upgraded behind their back.
+/// The older revisions this server still accepts verbatim. Clients that asked
+/// for one of them keep working without being upgraded behind their back.
 const MCP_PROTOCOL_LEGACY : String = "2024-11-05"
+
+///|
+/// The revision between the two above. It changed the tool *result* shape
+/// (`structuredContent` alongside `content`), which this server already does,
+/// so a client that asks for it is answered in the revision it asked for.
+const MCP_PROTOCOL_MID : String = "2025-03-26"
 
 ///|
 /// A JSON Schema for the shared tool arguments.
@@ -108,14 +114,176 @@ fn mcp_object(
 }
 
 ///|
-/// The output schema of every tool. The payload is the same object the text
-/// content carries; clients that understand MCP 2025-06-18 can read it as
-/// `structuredContent` instead of parsing the text channel.
-fn mcp_output_schema() -> Json {
+/// A JSON Schema fragment for a string.
+fn mcp_string() -> Json {
+  jobj([("type", Json::string("string"))])
+}
+
+///|
+/// A JSON Schema fragment for a boolean.
+fn mcp_boolean() -> Json {
+  jobj([("type", Json::string("boolean"))])
+}
+
+///|
+/// A JSON Schema fragment for a number.
+fn mcp_number() -> Json {
+  jobj([("type", Json::string("number"))])
+}
+
+///|
+/// A JSON Schema fragment for an array of strings.
+fn mcp_string_array() -> Json {
+  jobj([("type", Json::string("array")), ("items", mcp_string())])
+}
+
+///|
+/// A JSON Schema fragment for a value of any JSON type.
+fn mcp_any_value() -> Json {
   jobj([
-    ("type", Json::string("object")),
-    ("additionalProperties", Json::boolean(true)),
+    (
+      "type",
+      Json::array([
+        Json::string("object"),
+        Json::string("array"),
+        Json::string("string"),
+        Json::string("number"),
+        Json::string("boolean"),
+        Json::string("null"),
+      ]),
+    ),
   ])
+}
+
+///|
+/// A JSON Schema fragment for an object or `null`.
+fn mcp_object_or_null() -> Json {
+  jobj([("type", Json::array([Json::string("object"), Json::string("null")]))])
+}
+
+///|
+/// A JSON Schema fragment for one repair record.
+fn mcp_repair_schema() -> Json {
+  mcp_object(
+    [
+      ("rule", mcp_string()),
+      ("name", mcp_string()),
+      ("action", mcp_string()),
+      ("offset", mcp_number()),
+      ("line", mcp_number()),
+      ("column", mcp_number()),
+      ("severity", mcp_string()),
+      ("ambiguity", mcp_string()),
+      ("confidence_class", mcp_string()),
+      ("confidence", mcp_number()),
+      ("information_loss", mcp_boolean()),
+    ],
+    [
+      "rule", "name", "action", "offset", "line", "column", "severity", "ambiguity",
+      "confidence_class", "confidence", "information_loss",
+    ],
+  )
+}
+
+///|
+/// The output schema of the gate.
+///
+/// It used to be `{type: object, additionalProperties: true}`, which says
+/// nothing: a client that validates the structured channel against it learns
+/// no more than it would from the absence of a schema, and a client that
+/// generates code from it gets `object`. The schema now names every field the
+/// gate actually returns, so a host can read `executable` and `retry.prompt`
+/// as typed members.
+fn mcp_gate_output_schema() -> Json {
+  mcp_object(
+    [
+      ("decision", mcp_string()),
+      ("label", mcp_string()),
+      ("exactness", mcp_string()),
+      ("ambiguous", mcp_boolean()),
+      ("information_loss", mcp_boolean()),
+      ("valid_json", mcp_boolean()),
+      ("normalized", mcp_boolean()),
+      ("ambiguity", mcp_string()),
+      ("execution", mcp_string()),
+      ("executable", mcp_boolean()),
+      ("syntax_ready_permille", mcp_number()),
+      ("schema_total", mcp_number()),
+      ("schema_satisfied", mcp_number()),
+      ("schema_missing", mcp_string_array()),
+      ("error", mcp_object_or_null()),
+      (
+        "repairs",
+        jobj([("type", Json::string("array")), ("items", mcp_repair_schema())]),
+      ),
+      ("retry", mcp_object_or_null()),
+      ("repairs_truncated", mcp_boolean()),
+      ("value", mcp_any_value()),
+      ("text", mcp_string()),
+    ],
+    [
+      "decision", "label", "exactness", "ambiguous", "information_loss", "valid_json",
+      "normalized", "ambiguity", "execution", "executable", "syntax_ready_permille",
+      "schema_total", "schema_satisfied", "schema_missing", "error", "repairs", "retry",
+      "repairs_truncated", "value", "text",
+    ],
+  )
+}
+
+///|
+/// The output schema of the repair tool.
+fn mcp_repair_output_schema() -> Json {
+  mcp_object(
+    [
+      ("text", mcp_string()),
+      ("exactness", mcp_string()),
+      ("ambiguous", mcp_boolean()),
+      ("completeness", mcp_string()),
+      (
+        "repairs",
+        jobj([("type", Json::string("array")), ("items", mcp_repair_schema())]),
+      ),
+      ("repairs_truncated", mcp_boolean()),
+    ],
+    [
+      "text", "exactness", "ambiguous", "completeness", "repairs", "repairs_truncated",
+    ],
+  )
+}
+
+///|
+/// The output schema of the validation tool.
+fn mcp_validate_output_schema() -> Json {
+  mcp_object(
+    [
+      ("valid", mcp_boolean()),
+      ("schema", mcp_object_or_null()),
+      ("error", mcp_object_or_null()),
+      ("repaired", mcp_string()),
+      ("exactness", mcp_string()),
+      ("ambiguous", mcp_boolean()),
+      (
+        "repairs",
+        jobj([("type", Json::string("array")), ("items", mcp_repair_schema())]),
+      ),
+    ],
+    ["valid"],
+  )
+}
+
+///|
+/// The output schema of the readiness tool.
+fn mcp_readiness_output_schema() -> Json {
+  mcp_object(
+    [
+      ("syntax_permille", mcp_number()),
+      ("schema_permille", mcp_number()),
+      ("settled_permille", mcp_number()),
+      ("step", mcp_number()),
+      ("verdict", mcp_object_or_null()),
+    ],
+    ["syntax_permille", "schema_permille", "settled_permille", "step"],
+  )
 }
 
 ///|
@@ -140,6 +308,7 @@ fn mcp_tool(
   description : String,
   members : Array[(String, Json)],
   required : Array[String],
+  output : Json,
 ) -> Json {
   let annotations = match mcp_annotations() {
     Json::Object(m) => {
@@ -153,7 +322,7 @@ fn mcp_tool(
     ("title", Json::string(title)),
     ("description", Json::string(description)),
     ("inputSchema", mcp_object(members, required)),
-    ("outputSchema", mcp_output_schema()),
+    ("outputSchema", output),
     ("annotations", annotations),
   ])
 }
@@ -173,6 +342,7 @@ fn mcp_tools() -> Json {
         ("schema_json", mcp_schema_json_schema()),
       ],
       ["text"],
+      mcp_gate_output_schema(),
     ),
     mcp_tool(
       "interjson_repair",
@@ -185,6 +355,7 @@ fn mcp_tools() -> Json {
         ("schema_json", mcp_schema_json_schema()),
       ],
       ["text"],
+      mcp_repair_output_schema(),
     ),
     mcp_tool(
       "interjson_validate",
@@ -196,6 +367,7 @@ fn mcp_tools() -> Json {
         ("schema_json", mcp_schema_json_schema()),
       ],
       ["text"],
+      mcp_validate_output_schema(),
     ),
     mcp_tool(
       "interjson_readiness",
@@ -207,6 +379,7 @@ fn mcp_tools() -> Json {
         ("schema_json", mcp_schema_json_schema()),
       ],
       ["text"],
+      mcp_readiness_output_schema(),
     ),
   ]
   jobj([("tools", Json::array(tools))])
@@ -241,7 +414,9 @@ fn mcp_instructions() -> String {
 fn mcp_negotiate(params : Map[String, Json]) -> String {
   match params.get("protocolVersion") {
     Some(Json::String(v)) =>
-      if v == MCP_PROTOCOL_VERSION || v == MCP_PROTOCOL_LEGACY {
+      if v == MCP_PROTOCOL_VERSION ||
+        v == MCP_PROTOCOL_MID ||
+        v == MCP_PROTOCOL_LEGACY {
         v
       } else {
         MCP_PROTOCOL_VERSION
@@ -291,15 +466,121 @@ fn tool_result(text : String, is_error : Bool, structured? : Json) -> Json {
 }
 
 ///|
+/// The text channel of a tool result: a summary a model can act on, not a
+/// second copy of the payload.
+///
+/// The two channels used to carry the same object, so a gate response was two
+/// complete copies of the same JSON on the wire — the payload twice, plus the
+/// repaired document inside each copy. A host pays for every byte of it, and
+/// the model reads the text channel, so the text channel now says what the
+/// model needs: the decision, whether it may execute, and the sentence to
+/// send back when it may not. The machine-readable payload stays in
+/// `structuredContent`, once.
+fn mcp_summary(meth : String, result : Json) -> String {
+  let sb = StringBuilder()
+  match result {
+    Json::Object(m) =>
+      if meth == "analyze" {
+        sb.write_string("decision=")
+        sb.write_string(json_field(m, "decision"))
+        sb.write_string(" executable=")
+        sb.write_string(json_field(m, "executable"))
+        sb.write_string(" exactness=")
+        sb.write_string(json_field(m, "exactness"))
+        match m.get("error") {
+          Some(Json::Object(e)) => {
+            sb.write_string("\nerror=")
+            sb.write_string(json_field(e, "code"))
+            sb.write_string(" ")
+            sb.write_string(json_field(e, "message"))
+          }
+          _ => ()
+        }
+        match m.get("retry") {
+          Some(Json::Object(r)) => {
+            sb.write_string("\nretry (send this back to the model): ")
+            sb.write_string(json_field(r, "prompt"))
+          }
+          _ => ()
+        }
+      } else if meth == "repair" {
+        sb.write_string("exactness=")
+        sb.write_string(json_field(m, "exactness"))
+        sb.write_string(" ambiguous=")
+        sb.write_string(json_field(m, "ambiguous"))
+        sb.write_string("\n")
+        sb.write_string(json_field(m, "text"))
+      } else if meth == "validate" {
+        sb.write_string("valid=")
+        sb.write_string(json_field(m, "valid"))
+        match m.get("error") {
+          Some(Json::Object(e)) => {
+            sb.write_string("\nerror=")
+            sb.write_string(json_field(e, "code"))
+            sb.write_string(" ")
+            sb.write_string(json_field(e, "message"))
+          }
+          _ => ()
+        }
+        match m.get("repaired") {
+          Some(Json::String(t)) => {
+            sb.write_string("\nrepaired: ")
+            sb.write_string(t)
+          }
+          _ => ()
+        }
+      } else if meth == "readiness" {
+        sb.write_string("syntax=")
+        sb.write_string(json_field(m, "syntax_permille"))
+        sb.write_string(" schema=")
+        sb.write_string(json_field(m, "schema_permille"))
+        sb.write_string(" settled=")
+        sb.write_string(json_field(m, "settled_permille"))
+        // The per-field answer is the reason the tool exists, so the summary
+        // names the fields and when each became final.
+        match m.get("events") {
+          Some(Json::Array(events)) =>
+            for e in events {
+              match e {
+                Json::Object(ev) =>
+                  if json_field(ev, "event") == "field_ready" {
+                    sb.write_string("\n  ")
+                    sb.write_string(json_field(ev, "path"))
+                    sb.write_string(" ready at ")
+                    sb.write_string(json_field(ev, "permille"))
+                    sb.write_string("/1000")
+                  }
+                _ => ()
+              }
+            }
+          _ => ()
+        }
+      } else {
+        sb.write_string(result.stringify())
+      }
+    _ => sb.write_string(result.stringify())
+  }
+  sb.to_string()
+}
+
+///|
+/// One field of an object as text, or `""` when the field is absent.
+fn json_field(m : Map[String, Json], key : String) -> String {
+  match m.get(key) {
+    Some(Json::String(s)) => s
+    Some(Json::Number(d, ..)) => d.to_string()
+    Some(Json::True) => "true"
+    Some(Json::False) => "false"
+    Some(Json::Null) => "null"
+    _ => ""
+  }
+}
+
+///|
 /// Run one tool. The mapping is one-to-one with `serve` methods, so the two
 /// entry points cannot drift.
-fn mcp_call_tool(
-  state : ServeState,
-  base : @ij.Options,
-  name : String,
-  args : Map[String, Json],
-) -> Json {
-  let meth = if name == "interjson_gate" {
+fn mcp_tool_method(name : String) -> String {
+  if name == "interjson_gate" {
     "analyze"
   } else if name == "interjson_repair" {
     "repair"
@@ -310,6 +591,18 @@ fn mcp_call_tool(
   } else {
     ""
   }
+}
+
+///|
+/// Run one tool. The mapping is one-to-one with `serve` methods, so the two
+/// entry points cannot drift.
+fn mcp_call_tool(
+  state : ServeState,
+  base : @ij.Options,
+  name : String,
+  args : Map[String, Json],
+) -> Json {
+  let meth = mcp_tool_method(name)
   if meth == "" {
     return tool_result("unknown tool `" + name + "`", true)
   }
@@ -325,7 +618,7 @@ fn mcp_call_tool(
   }
   try {
     let result = handle_request(state, base, meth, args)
-    tool_result(result.stringify(), false, structured=result)
+    tool_result(mcp_summary(meth, result), false, structured=result)
   } catch {
     e => tool_result(e.to_string(), true)
   }
@@ -351,7 +644,24 @@ fn mcp_handle(
   if !has_id && meth != "" && !meth.has_prefix("notifications/") {
     return None
   }
+  // The handshake comes first. `initialize` and `ping` are the only requests
+  // answered before it (notifications are never answered at all); anything
+  // else is `-32002`, the code MCP reserves for "not initialized". Answering
+  // `tools/list` before the handshake used to succeed, which meant a client
+  // that had skipped `initialize` got a tool list and then found that its
+  // captured `instructions` and negotiated revision were missing -- a failure
+  // several steps away from its cause.
+  if meth != "initialize" &&
+    meth != "ping" &&
+    meth != "notifications/initialized" &&
+    meth != "notifications/cancelled" &&
+    !state.initialized {
+    return Some(
+      rpc_err(id, -32002, "server not initialized; send `initialize` first"),
+    )
+  }
   let result : String? = if meth == "initialize" {
+    state.initialized = true
     Some(
       rpc_ok(
         id,
@@ -387,10 +697,28 @@ fn mcp_handle(
     }
     if name == "" {
       Some(rpc_err(id, -32602, "`tools/call` requires `name`"))
+    } else if mcp_tool_method(name) == "" {
+      // An unknown tool is a bad request, not a tool that failed: the
+      // JSON-RPC answer is `-32602`. It used to come back as a tool result
+      // with `isError: true`, which told the host "the tool ran and
+      // refused" — a distinction the host could not make, and which hid a
+      // typo in the tool name behind a tool-level failure.
+      Some(rpc_err(id, -32602, "unknown tool `" + name + "`"))
     } else {
       let args = match params.get("arguments") {
         Some(Json::Object(a)) => a
-        _ => Map([])
+        // A non-object `arguments` used to be read as "no arguments", so a
+        // malformed call became a call with no text and a confusing error
+        // about a missing parameter.
+        Some(other) =>
+          return Some(
+            rpc_err(
+              id,
+              -32602,
+              "`arguments` must be an object, not " + other.stringify(),
+            ),
+          )
+        None => Map([])
       }
       Some(rpc_ok(id, mcp_call_tool(state, base, name, args)))
     }
@@ -430,21 +758,31 @@ fn mcp_help_text() -> String {
 ///|
 /// The client configuration `--print-config` prints. Pure JSON for the clients
 /// that read a JSON file, a command line for Claude Code, TOML for Codex.
-fn mcp_config_text(client : String) -> String {
+fn mcp_config_text(client : String) -> String? {
+  let generic = "{\"mcpServers\":{\"interjson\":{\"command\":\"interjson\",\"args\":[\"mcp\"]}}}"
   if client == "claude" {
-    "claude mcp add interjson -- interjson mcp"
+    Some("claude mcp add interjson -- interjson mcp")
   } else if client == "cursor" {
-    "{\"mcpServers\":{\"interjson\":{\"command\":\"interjson\",\"args\":[\"mcp\"]}}}"
+    Some(generic)
   } else if client == "vscode" {
-    "{\"servers\":{\"interjson\":{\"type\":\"stdio\",\"command\":\"interjson\",\"args\":[\"mcp\"]}}}"
+    Some(
+      "{\"servers\":{\"interjson\":{\"type\":\"stdio\",\"command\":\"interjson\",\"args\":[\"mcp\"]}}}",
+    )
   } else if client == "codex" {
-    "[mcp_servers.interjson]\ncommand = \"interjson\"\nargs = [\"mcp\"]"
+    Some("[mcp_servers.interjson]\ncommand = \"interjson\"\nargs = [\"mcp\"]")
   } else if client == "windsurf" {
-    "{\"mcpServers\":{\"interjson\":{\"command\":\"interjson\",\"args\":[\"mcp\"]}}}"
+    Some(generic)
   } else if client == "zed" {
-    "{\"context_servers\":{\"interjson\":{\"command\":{\"path\":\"interjson\",\"args\":[\"mcp\"]}}}}"
+    Some(
+      "{\"context_servers\":{\"interjson\":{\"command\":{\"path\":\"interjson\",\"args\":[\"mcp\"]}}}}",
+    )
+  } else if client == "json" {
+    Some(generic)
   } else {
-    "{\"mcpServers\":{\"interjson\":{\"command\":\"interjson\",\"args\":[\"mcp\"]}}}"
+    // An unknown client name used to fall back to the generic JSON silently,
+    // so a typo (`--print-config claud`) printed a config for a client the
+    // user had not asked about and said nothing.
+    None
   }
 }
 
@@ -452,8 +790,20 @@ fn mcp_config_text(client : String) -> String {
 /// Run the MCP server until EOF.
 fn run_mcp(o : CliOpts) -> Unit {
   if o.mcp_config != "" {
-    println(mcp_config_text(o.mcp_config))
-    return quit(0)
+    match mcp_config_text(o.mcp_config) {
+      Some(text) => {
+        println(text)
+        return quit(0)
+      }
+      None => {
+        eprintln(
+          "interjson: 未知客户端 `" +
+          o.mcp_config +
+          "`；可用：claude、cursor、vscode、codex、windsurf、zed、json",
+        )
+        return quit(2)
+      }
+    }
   }
   if o.mcp_help {
     println(mcp_help_text())

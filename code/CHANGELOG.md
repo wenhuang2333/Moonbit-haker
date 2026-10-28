@@ -5,6 +5,137 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.5.0] - 2026-10-28
+
+修**两处「错误放行」**、一处**拒绝契约**、一处**档位定义漂移**，以及 CLI / MCP 协议 /
+编码边界上的一组缺陷。这些缺陷都不是靠跑测试发现的，是读代码读出来的——它们全都在
+「测试绿」的状态下发布过，这本身就是这一节要记下来的事实。
+
+版本对应 **1.5.0**（GitHub）↔ **0.12.0**（mooncakes）。**两者都尚未发布**：标签、Release
+与 registry 上传都还没做（`0.12.0` 未上传 mooncakes，npm / PyPI 上也还没有
+`interjson-moonbit`）。本节只描述代码状态。
+
+### 两处「错误放行」（P0）
+
+- **`json_equal` 按 `Double` 比较数字**：`9007199254740993` 与 `9007199254740992` 是
+  2^53 之后相邻的两个整数，作为 `Double` 是同一个数。重复键合并因此被判定为「无损」、
+  记为 `Info`，门对**一个已经被悄悄改过的值**回答 `executable: true`。现在按数字的
+  精确十进制值比较：这一例记为 `R018` + `Warning`（有损、拒绝）。另一个方向也钉住了：
+  `1` 与 `1.0`、`100` 与 `1e2`、`0.5` 与 `5e-1`、`-0` 与 `0` 仍是同一个数，合并仍为
+  `Info` / `Cosmetic`，不会因为收紧比较而误报。
+- **`RuleSet` 写死 22 个槽位**：`RepairCode::number()` 从 1 开始，所以 22 个槽只覆盖
+  `R001` … `R021`，把同一轮新增的 `R022 NormalizeLiteral` 落在表外；`is_enabled` 的
+  越界分支返回 `true`，于是 `R022` 看起来是开的，`disable(R022)` 却是**静默 no-op**——
+  调用方以为自己关掉了一条规则，其实没有。现在表由 `RepairCode::count()` 定尺寸，
+  越界一律 **fail-closed**（返回 `false`），`disable` / `enable` 对表外的码直接 abort
+  而不是假装成功。这一条修的是**一类**缺陷（表与枚举可能不同步），不是那一个实例。
+
+### 拒绝契约
+
+- **不可执行的结果必带 `retry.prompt`，且 `value` 为 `null`**。1.4.x 里
+  `plan_of_final` 对「被接受的结果」设 `retry_hint: None`，于是**被接受但不可执行**的
+  计划（`permissive` 下的有损修复；骨架不符的值）序列化成 `"retry": null`，而工具描述
+  却让调用方去读 `retry.prompt`——拒绝没有句子，同时对象里还带着一个活的 `value`。
+  这正是宿主最不该看到的一种组合。现在：`executable == false` ⇒ `value: null`、
+  `text: ""`、`retry.prompt` 非空；`executable == true` ⇒ `value` 存在、`retry: null`。
+  两种拒绝路径（`plan_of_error` 与 `plan_of_final`）都覆盖到了。
+
+### 档位定义漂移
+
+- **MCP `agent` 档现在等于 `Options::for_agent()`**。按名字选档（MCP 工具、`--policy`、
+  `serve`）此前只应用了 `SafetyPolicy` 的**安全字段**，丢掉了该档的**协议字段**——
+  对 `agent` 就是 `skip_prose`。结果是旗舰工具 `interjson_gate` 拒绝最常见的模型输出
+  形状 `Here are the args:\n{"a":1}`（`E002`）。现在新增 `Options::with_profile(policy)`
+  与 `Options::for_profile(name)`，「一个档是什么意思」只有一处定义，库预设与按名选档
+  走同一条路径。`execution` / `strict` / `interactive` / `permissive` 行为不变，仍然
+  不跳前言（TC-R-12 钉住这一点）。
+
+### 递归深度加界
+
+- **`Options::max_depth` 有了上限**：新增公开常量 `MAX_VALUE_DEPTH = 512`（值）与
+  `MAX_SCHEMA_DEPTH = 256`（声明）。`max_depth` 超过 512 报 `E050`；声明超过 256 报
+  `E070`；值超过 `max_depth` 报 `E020`。上限不是策略选择：`copy_json`、`json_equal`、
+  `walk_schema` 三个递归遍历与引擎自身的栈帧都以它为界，wasm 后端在 896–1024 帧之间
+  会爆栈——上限高于此就把 `E020` 变回它本要防的崩溃。因为 512 也是默认值，实际效果是
+  「只能收紧，不能放宽」。
+- 新增公开 API：`Options::with_profile(policy)`、`Options::for_profile(name)`、
+  `RepairCode::count()`。
+
+### CLI
+
+- **`--max-repairs 10000` 不再报错**：解析复用了上限为 64 的 `parse_uint`，于是
+  `--help` 推荐的 10000 是个错误值。现在用 `parse_uint_up_to`，上限 1000000。
+- **`--max-prose-buffer=65536` 现在真的是 65536**：等号形式少切了一位，`=65536` 静默
+  变成 `5536`——在「缓冲区多大」这个开关上小十二倍。
+- **`--print-config claude`（空格形式）可用**，未知客户端名**报错**（退出码 2）而不是
+  静默回落成 JSON 配置。此前空格形式下客户端名根本没被读，typo 会打印一份看起来
+  正常的配置。
+- 版本字符串统一到 `code/version.mbt` 的 `VERSION` / `REGISTRY_VERSION`，`--version`
+  与 `serve` 的 `engine` / `registry` 字段都从那里读，不再各写一份字面量。
+
+### 编码与健壮性
+
+- **stdin 只解码一次**：`--batch` / `explain` / `readiness` / `llm` 此前按 64 KiB 分块
+  各自 `decode_lossy`，跨块边界的一个多字节字符在**两块里都是非法序列**，于是被解码成
+  两个 U+FFFD。中文与 emoji 会静默变成错误结果——命令报告成功，读到的文档却不是写下的
+  文档。现在先读字节、最后解码一次，边界不复存在。
+- 新增字节级模糊测试套件（`code/fuzz_wbtest.mbt`，TC-F-01…05），把「任何字节序列不得
+  panic」从一句文档断言变成被测的断言。
+
+### MCP 协议
+
+- **新增接受 `2025-03-26`**（此前只接受 `2025-06-18` 与 `2024-11-05`）。未知的
+  `protocolVersion` 一律回 `2025-06-18`，**绝不回显**客户端给的字符串——回显一个不存在
+  的版本会让客户端以为自己谈成了。
+- **握手前先报错**：`initialize` 之外的请求在握手前返回 `-32002`。此前 `tools/list`
+  在握手前会成功，客户端跳过 `initialize` 后拿到工具列表，却在几步之后才发现
+  `instructions` 与协商版本是空的——故障离原因很远。
+- **未知工具与非法 `arguments` 返回 `-32602`**：此前未知工具返回工具级 `isError: true`，
+  宿主无法区分「工具跑了并拒绝」与「工具名打错了」；非对象的 `arguments` 被当成
+  「没有参数」，于是一个格式错误的调用变成「缺少 text」的费解错误。
+- **`outputSchema` 改成真正的逐工具 schema**（封闭、列出必需字段），不再是
+  `{type: object, additionalProperties: true}`。
+- **`content[0].text` 改成摘要**：决策、`executable`、`exactness`、错误与 `retry` 提示；
+  载荷只在 `structuredContent` 里出现一次。此前两条通道携带同一份完整对象，一次门调用
+  在线路上是两个完整副本（每个副本里还各含一份修复后文本）。
+
+### 打包与安装
+
+- **`code/install.sh`**：一条命令的安装脚本，判断平台 → 下载 Release 产物 → 用 Release
+  自带的 `SHA256SUMS` 核对 SHA-256 → 装到 `~/.local/bin` 并打印 `PATH` 提示。校验失败
+  是硬失败：删除文件，什么都不装。覆盖三个操作系统上的五个二进制
+  （linux-x86_64、linux-arm64、macos-arm64、macos-x86_64、windows-x86_64）。
+- `code/npm/package.json` 与 `code/python/pyproject.toml` 补齐发布元数据
+  （`repository` / `homepage` / `bugs` / `author` / `engines.node >= 20`、`[project.urls]`、
+  `py.typed`），版本改为 `1.5.0`。两个包在 registry 上仍是**待发布**状态。
+
+### 测试
+
+- **243 个测试 × 4 个后端**（wasm-gc / native / JS / wasm；1.4.0 为 217）。新增
+  `code/regression_1_5_wbtest.mbt`（TC-R-01…21，本节每一处缺陷都有一条断言）与
+  `code/fuzz_wbtest.mbt`（TC-F-01…05，字节级模糊）。
+- **122 条 CLI 断言**（1.4.0 为 106）：新增 `--chunk N` 走一次性路径（此前只影响 `--batch`，于是这个用来压流式路径的开关从没碰过它），以及冲突选项报错（`--strict --policy permissive` 此前静默丢弃 `--strict`；`--max-depth` 与 `--policy` 同理），退出码 2。
+- **19 组一致性用例**（数量不变，用例变多：MCP 半侧新增 `2025-03-26` 回显、`-32002`、
+  `-32602` 与摘要通道检查）。
+- 库代码行覆盖率 **4113/4431 = 92.8%**（`tests/coverage.sh` 的 `library` 行口径；
+  根包 3851/4115、`llm` 包 337/391）。
+
+### 未做的事（如实记录）
+
+- npm、PyPI 与 mooncakes 上**没有任何** 1.5.0 / 0.12.0 产物；`interjson-moonbit` 只能
+  按仓库路径安装。
+- `max_depth` 仍只能收紧不能放宽；「不建树、只出文本」的模式仍未实现，内存仍未达
+  「≤ 4 × 输入」的预算。
+- `PreToolUse` hook 配方是手工验证的草图，不是本仓库测试套件覆盖的配置。
+- **文档体量仍然是最大的欠账**：随仓库发布的 markdown 合计约 **464 KB**
+  （`git ls-files -co --exclude-standard` 里未被忽略的 `.md` 求和），远高于评审给出的
+  ≤ 120 KB 目标；最大的一块是 `code/CHANGELOG.md`（81 KB，历史档案，本轮新增 9 KB），
+  其次是根 `README.md`（62 KB）与 `code/README.zh.md`（54 KB）、`code/README.md`（52 KB）
+  ——**根 README 与 `code/README.md` 近乎重复**，两边都覆盖了同样的 API、选项、CLI 与
+  限制。本轮**刻意没有做大规模裁剪**——在发布前做一次半吊子的删减，比留一份诚实的说明
+  更糟。裁剪应当作为独立的一轮来做：先合并那两份 README，再把重复的接入配方收到
+  `INTEGRATIONS.md` 一处。
+
 ## [1.4.0] - 2026-10-27
 
 更名 **InterJSON**，把「LLM 输出的执行门」作为产品定位，对外主入口改为**本地部署的

@@ -5,11 +5,11 @@ LLM 输出的执行门：本地 MCP server（`interjson mcp`）+ 纯 MoonBit 的
 | | |
 | --- | --- |
 | 模块 | `zhanshishan/interjson` |
-| 版本 | 1.4.0 |
+| 版本 | 1.5.0 |
 | 许可证 | Apache-2.0 |
 | 首选后端 | `wasm`（同时支持 `native` 与 `js`） |
-| 预编译产物 | [Release `v1.4.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.4.0)——三个平台的 `interjson` CLI、wasm 探针、浏览器包与 `SHA256SUMS`；更早的 Release 在旧名下发布，资产文件名沿用旧前缀 |
-| 发行渠道 | [`mooncakes.io zhanshishan/interjson`](https://mooncakes.io/docs/zhanshishan/interjson) **0.11.0 已发布**（对应 1.4.0）；更早版本在旧包名 [`zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) 下 |
+| 预编译产物 | GitHub Release——linux-x86_64、macos-arm64、windows-x86_64 三个平台的 `interjson` CLI、wasm 探针、浏览器包与 `SHA256SUMS`，另有一条命令的安装脚本 `interjson-install.sh`；更早的 Release 在旧名下发布，资产文件名沿用旧前缀 |
+| 发行渠道 | [`mooncakes.io zhanshishan/interjson`](https://mooncakes.io/docs/zhanshishan/interjson) **0.12.0 尚未发布**（对应 1.5.0）；**0.11.0 已发布**（对应 1.4.0）；更早版本在旧包名 [`zhanshishan/jsonmend`](https://mooncakes.io/docs/zhanshishan/jsonmend) 下 |
 
 **InterJSON 是 LLM 输出的执行门**：模型给出的工具参数与结构化结果，先过它，再决定能不能执行。
 它以 `interjson mcp` 在 stdio 上作为 MCP server 运行——一个本地原生二进制，不联网、
@@ -23,9 +23,20 @@ claude mcp add interjson -- interjson mcp
 
 `interjson_gate`（首选，默认 `agent` 档）返回 `executable` / `decision` / `exactness` /
 `value` / `retry.prompt`；`executable == false` 时把 `retry.prompt` 原样回灌模型。
+这个默认档**等于** `Options::for_agent()`（含协议字段）：参数前的一句前言
+（`Here are the args:\n{"a":1}`）被跳过而不是被拒。
 另外三个工具是 `interjson_repair`、`interjson_validate`、`interjson_readiness`；四个工具
-都是只读的（`readOnlyHint`），结果同时走文本通道与 `structuredContent`，协议版本
-`2025-06-18`，同时接受 `2024-11-05`。完整部署说明见 [`MCP.md`](docs/MCP.md)。
+都是只读的（`readOnlyHint`），结果分两条通道：`content[0].text` 是给模型读的摘要，
+`structuredContent` 是载荷（只出现一次）。协议版本 `2025-06-18`，同时接受 `2025-03-26` 与
+`2024-11-05`。完整部署说明见 [`MCP.md`](docs/MCP.md)。
+
+**拒绝契约**：`executable == false` 的结果一定带非空的 `retry.prompt` 且 `value` 为
+`null`；可执行的结果一定带活的 `value` 且 `retry` 为 `null`。
+
+**MCP 是建议性的**：`interjson_gate` 是模型*可以*调用的工具，模型不调用，协议里也没有
+任何机制让宿主去检查这个答案。真正把它变成强制闸门的是宿主侧：Claude Code 的
+`PreToolUse` hook、宿主 SDK 里的一行 `gate(args)`，或 `interjson serve` / npm / pip /
+HTTP。配方见 [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md#making-the-gate-mandatory)。
 
 ## 60 秒接入（MCP）
 
@@ -73,7 +84,7 @@ interjson mcp --print-config=json      # 默认
 - **`interjson_gate` 的返回**：`executable` / `decision` / `exactness` / `ambiguity` / `value` /
   `retry.prompt`。`executable == false` 时不要执行，把 `retry.prompt` 原样回灌模型。
 - **协议**：`initialize` 返回 `serverInfo.name = interjson`、标题 `InterJSON — the execution gate`
-  与给模型的 instructions（先调 `interjson_gate`）；协议版本 `2025-06-18`，同时接受 `2024-11-05`。
+  与给模型的 instructions（先调 `interjson_gate`）；协议版本 `2025-06-18`，同时接受 `2025-03-26` 与 `2024-11-05`。
 - **接进客户端**：`claude mcp add interjson -- interjson mcp`；其他客户端用
   `interjson mcp --print-config=claude|cursor|vscode|codex|windsurf|zed|json` 打印现成配置。
   部署与安全边界见 [`docs/MCP.md`](docs/MCP.md)。
@@ -145,7 +156,7 @@ import {
 }
 ```
 
-`moon add` 会把依赖写入模块清单（本仓库对应 `code/moon.mod`）。`zhanshishan/interjson` 的 **0.11.0** 已发布到 mooncakes（对应 1.4.0）；更早版本在旧包名 `zhanshishan/jsonmend` 下。
+`moon add` 会把依赖写入模块清单（本仓库对应 `code/moon.mod`）。`zhanshishan/interjson` 的 **0.11.0** 已发布到 mooncakes（对应 1.4.0）；**0.12.0（对应 1.5.0）尚未上传**；更早版本在旧包名 `zhanshishan/jsonmend` 下。
 
 ## 三行上手
 
@@ -267,7 +278,7 @@ execute : {"city":["Paris","London"]}
 | 字段 | 类型 | 默认值 | 含义 |
 | --- | --- | --- | --- |
 | `mode` | `Mode` | `Lenient` | `Lenient` 记录修复；`Strict` 在第一条修复记录处抛出 `E010`。 |
-| `max_depth` | `Int32` | `512` | 容器最大嵌套深度，超出抛 `E020`。 |
+| `max_depth` | `Int32` | `512` | 容器最大嵌套深度，超出抛 `E020`。上限是 `MAX_VALUE_DEPTH = 512`，而 512 也是默认值，所以只能收紧不能放宽：更大的值报 `E050`（见[已知限制](#已知限制)）。 |
 | `max_input_len` | `Int32` | `67108864` | 输入最大长度（UTF-16 码元），超出抛 `E021`。 |
 | `max_token_len` | `Int32` | `16777216` | 单个 token 最大长度（码元），超出抛 `E022`。 |
 | `duplicate_keys` | `DuplicateKeys` | `KeepLast` | 重复对象键的策略：`KeepLast`、`KeepFirst` 或 `AsError`（`R018`）。 |
@@ -287,7 +298,7 @@ execute : {"city":["Paris","London"]}
 | `max_loss` | `Exactness` | `Lossy` | 可接受的最大信息损失；记录到更严重的修复时抛 `E010`（默认值等于不设限）。 |
 | `collect_deltas` | `Bool` | `false` | 是否记录增量补丁；打开后 `drain_deltas()` 可用，与 `KeepFirst`、`TrimToValid` 不兼容。 |
 
-非法取值（`max_depth <= 0`、`max_input_len <= 0`、`max_token_len <= 0`、`max_repairs <= 0`、`indent < 0`）由 `Options::validate` 抛出 `E050`；`repair`、`parse` 和 `PartialParser::new` 都会替你调用校验。
+非法取值（`max_depth <= 0` 或 `> MAX_VALUE_DEPTH`、`max_input_len <= 0`、`max_token_len <= 0`、`max_repairs <= 0`、`indent < 0`）由 `Options::validate` 抛出 `E050`；`repair`、`parse` 和 `PartialParser::new` 都会替你调用校验。声明（JSON Schema 或骨架语言）深度超过 `MAX_SCHEMA_DEPTH = 256` 报 `E070`。
 
 ## 修复规则一览
 
@@ -333,7 +344,7 @@ execute : {"city":["Paris","London"]}
 | `E001` | `EmptyInput` | 输入为空或只有空白。 |
 | `E002` | `NoJsonFound` | 找不到 JSON 值（载荷为偏移量）。 |
 | `E010` | `StrictViolation` | 严格模式或已关闭的规则拒绝某次修复（载荷为编号、位置与消息）。 |
-| `E020` | `DepthLimit` | 嵌套深度超过 `max_depth`。 |
+| `E020` | `DepthLimit` | 嵌套深度超过 `max_depth`。这个上界存在的原因：三个递归遍历（`copy_json`、`json_equal`、`walk_schema`）与引擎栈帧都以 `MAX_VALUE_DEPTH = 512` 为界，而 wasm 后端的栈在 896–1024 帧之间就会溢出。 |
 | `E021` | `SizeLimit` | 输入超过 `max_input_len`。 |
 | `E022` | `TokenLimit` | 单个 token 超过 `max_token_len`。 |
 | `E030` | `InvalidState` | 在 `finish` 之后继续 `feed`，或重复 `finish`、在致命错误后 `finish`。 |
@@ -460,7 +471,7 @@ interjson mcp [选项]
 | `--batch` | 逐行读 `{"id","input"}`，逐行输出 `{"id","rc","exactness","codes","value","text"}`。 |
 | `llm` 子命令 | `interjson llm [--provider anthropic\|openai] [--sse] [--follow] [文件]`：把事件流喂给 provider 适配器。 |
 | `-h`、`--help` | 显示帮助。 |
-| `--version` | 显示版本（`interjson 1.4.0`）。 |
+| `--version` | 显示版本（`interjson 1.5.0`）。 |
 | `--policy NAME` | 安全档位：`permissive`、`interactive`、`execution`、`agent` 或 `strict`（见 `SafetyPolicy`）。 |
 | `--schema DECL` | 骨架声明，如 `{!query:string,!limit:integer}`；`explain` 会额外打印语法就绪与骨架就绪两层数字。 |
 | `--json` | 与 `explain` 同用：输出机器可读的 JSON 计划，而不是文本块。 |
@@ -490,7 +501,7 @@ cd code
 moon test                      # 默认后端（wasm-gc）
 moon test --target native      # 本机后端
 moon test --target js          # JavaScript 后端
-bash tests/cli_smoke.sh        # 106 项命令行断言
+bash tests/cli_smoke.sh        # 120 项命令行断言
 bash tests/examples.sh         # 示例输入与 code/examples/cases/*.expected 对照
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
 python3 tests/eval/run_eval.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
@@ -523,11 +534,11 @@ moon run examples/agent_loop --target native --release   # 自愈闭环
 | 骨架就绪表 | 10 个场景 | 6 个存在落差（713‰–908‰），4 个两层同时到达末尾（[docs/READINESS.md](docs/READINESS.md)） |
 | 公共面（逐个 R 码与 E 码） | 22 + 12 个码的断言 | 通过 |
 | 选项策略与字节输入 | 10 例 | 通过 |
-| 命令行冒烟（退出码 0/1/2/3/4/5/70） | 106 项断言，含 `explain` 14 条与 MCP 配置/握手 4 条 | 通过 |
+| 命令行冒烟（退出码 0/1/2/3/4/5/70） | 120 项断言，含 `explain` 14 条与 MCP 配置/握手 4 条 | 通过 |
 | 差分语料（对照 `jsonrepair` / `json-repair`） | 402 条 | 202 处差异全部有文档解释，未解释 0 |
-| 库代码行覆盖率 | 根包 3748/3983 行、`llm` 包 337/391 行 | 94.1% / 86.2% |
+| 库代码行覆盖率 | 根包 3851/4115 行、`llm` 包 337/391 行 | 93.6% / 86.2% |
 
-四个后端结果一致：wasm-gc、native、JavaScript 与 wasm 均为 217 个测试全通过。`.github/workflows/ci.yml`
+四个后端结果一致：wasm-gc、native、JavaScript 与 wasm 均为 243 个测试全通过。`.github/workflows/ci.yml`
 在每次推送时执行同一组命令（含差分、真值评测与产物体积），因此上表是重新推导出来的结果，
 而不是一次性记录。0.4.0 的 `ci.yml` 与 `release.yml` 运行记录见仓库 Actions 页，
 `release.yml` 在 `v0.5.0` 标签上产出 [Release `v0.5.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v0.5.0)
@@ -601,18 +612,23 @@ moon run bench --target js --release
 - **修复记录受 `max_repairs` 限制（默认 10000 条）。** 超出后仍会继续修复但不再记录，结果把 `repairs_truncated` 置为 `true`，CLI 另向标准错误打印提示。
 - **增量补丁流正确但不便宜。** 每次变更都要分配一个 `Delta` 与一份路径数组，1 MB 文档产生约 19.5 万条记录，耗时是基线的 1.40–1.46 倍。文本尾巴现在用游标推进，长字符串按小块 drain 不再重扫前缀（1 MiB / 64 码元：374 ms → 201 ms）；每条 `Delta` 的分配未变。在 agent 场景（4 KB、3 码元分块）整条流是 0.115 ms，开销不在关键路径上，因此紧凑缓冲不再是下一步要做的。
 - **`--skip-prose` 能恢复裸标量根，但不能恢复「前言 + 标量」。** `'ok'`、`True`、`+1`、`42 // done` 与围栏 `42` 都能恢复；`Sure!\n42` 仍抛 `E002`，带尾巴的 `42 is the answer` 也仍拒绝。
-- **`repair()` 的内存是输入的 13.7 倍（12.95 MB 输入实测 177.9 MB）。** 同一份输入上 Node `JSON.parse` 是 10.6 倍、Python `json.loads` 是 14.3 倍：**「≤ 4 倍」对任何建树实现都不现实**，包括 Node 自己。`--check` 不渲染输出，峰值 7.6 倍；CLI 的字节快路径把 10 MB 单字符串从 38 倍降到 9.4 倍。要达到 4 倍仍需「只直出文本、不建树」的模式（`docs/MEMORY.md`）。
+- **`repair()` 的内存是输入的 13.7 倍（12.95 MB 输入实测 177.9 MB）。** 同一份输入上 Node `JSON.parse` 是 10.6 倍、Python `json.loads` 是 14.3 倍：**「≤ 4 倍」对任何建树实现都不现实**，包括 Node 自己。`--check` 不渲染输出，峰值 8.0 倍（103.6 MB，同一台机器上对同一份输入的一次观测）；CLI 的字节快路径把 10 MB 单字符串从 38 倍降到 9.4 倍。要达到 4 倍仍需「只直出文本、不建树」的模式（`docs/MEMORY.md`）。
 - **单次 feed 的 p99 只能给上界。** 运行时 `@env.now()` 是毫秒分辨率、也没有分配计数，所以场景基准报告的是摊还 µs/feed 与「没有一次 feed 达到毫秒分辨率」的计数（`docs/BENCHMARK.md`）。
 - **字段就绪曲线只覆盖顶层成员。** 嵌套成员（`{"arguments":{…}}`）要等容器闭合才就绪；曲线成本约 1.8 ms/KiB，且全字段早停的节省在扁平记录上构造性地≈0。
 - **文本模式默认不跳前言。** `--skip-prose` 从 `{` 或 `[` 开始取值，标量根由 `finish` 回放恢复；前言加标量根（`Sure!\n42`）仍会抛 `E002`，因为前言在哪里结束不可判定。
 - **JS 后端仍会为每个码元分配一个 `Position`。** n/2n/4n 比值因此会到 2.3–2.8（阈值 2.3）；绝对吞吐远高于 5 MB/s 下限，因此记录为决策而不是立即修。
 - **解析器实例非线程安全。** 每个输入流应使用独立实例。
+- **`max_depth` 只能收紧、不能放宽。** `Options::max_depth` 的上限是 `MAX_VALUE_DEPTH = 512`，而 512 恰好也是文档里的默认值，所以调用方可以要求更浅的嵌套，但更大的值会被 `E050` 拒绝而不是被接受。这个上限不是策略选择：三个递归遍历（`copy_json`、`json_equal`、`walk_schema`）与引擎自身的栈帧都以它为界，而 wasm 后端的栈在 896–1024 帧之间就会溢出——上限更高就把文档化的 `E020` 变回它本要防的崩溃。声明另有一条更紧的界：`MAX_SCHEMA_DEPTH = 256`，超过报 `E070`。
+- **拒绝契约在 1.5.0 变了。** 1.4.x 里「被接受但不可执行」的计划（`permissive` 下的有损修复，或骨架不符的值）序列化成 `"retry": null`，同时还带着一个活的 `value`——这是宿主最不该看到的一种组合，也是一个没有句子可回灌的拒绝。现在 `executable == false` 在任何档位下都意味着 `value: null`、`text: ""` 与非空的 `retry.prompt`。1.4.x 用 `retry == null` 当放行条件的调用方必须改为看 `executable`；用 `value != null` 的调用方结论不变。
+- **1.4.x 的 `json_equal` 按 `Double` 比较数字**：`9007199254740993` 与 `9007199254740992`（2^53 之后相邻的两个整数）被当成同一个值，重复键合并悄悄改了值却被记为无损（`Info`）。现在按精确十进制值比较：这一例是 `Warning` 并被拒绝。`1` 与 `1.0` 的合并仍是 `Cosmetic`。
+- **1.4.x 的规则表少一格**：`RuleSet::all()` 写死 22 个槽位，而 `RepairCode::number()` 从 1 开始，于是 `R022 NormalizeLiteral` 落在表外；`is_enabled` 对越界码返回 `true`，使 `disable(R022)` 成为静默 no-op。现在表由 `RepairCode::count()` 定尺寸，越界 fail-closed。
+- **MCP 是建议性的。** `interjson_gate` 是模型可以调用的工具，模型可以不调用，协议也没有给宿主任何强制手段。真正把它变成强制闸门的是 Claude Code 的 `PreToolUse` hook 或宿主 SDK 的 `gate()`——见 `docs/INTEGRATIONS.md`。
 - **MCP 只有本地 stdio 一种传输。** 没有 HTTP/SSE 传输、没有鉴权层，也没有把 `serve` 的 `watch` / `llm` 流式方法带进 MCP；`mcp` 每条连接只服务请求—响应式的工具调用。
 - **MCP 的请求行上限是 8 MiB。** 超过的行按 JSON-RPC `-32700` 拒绝并丢弃到下一个换行，不会扩容进程；需要检查更大的文档时用 `serve` 或库。
 
 ## 路线图
 
-- ~~发布到 mooncakes.io~~：已发布的历史 0.3.0 … **0.8.1** 都在**旧包名** `zhanshishan/jsonmend` 下；更名后的 `zhanshishan/interjson` 从 **0.11.0** 开始（1.4.0 的 registry 对应号），已于 **2026-10-27** 上传。`1.x` **无法**发布——mooncakes 现阶段只接受 `0.x.y`；patch / minor 位按发布序顺延（`1.1.x` ↔ `0.8.x`、`1.2.x` ↔ `0.9.x`、`1.3.x` ↔ `0.10.x`、`1.4.x` ↔ `0.11.x`），除版本字符串与 registry 包名外逐字节相同。
+- ~~发布到 mooncakes.io~~：已发布的历史 0.3.0 … **0.8.1** 都在**旧包名** `zhanshishan/jsonmend` 下；更名后的 `zhanshishan/interjson` 从 **0.11.0** 开始（1.4.0 的 registry 对应号），已于 **2026-10-27** 上传。**1.5.0 / 0.12.0 尚未发布**：没有标签、没有 Release、也没有上传 registry（`1.5.x` ↔ `0.12.x`）。`1.x` **无法**发布——mooncakes 现阶段只接受 `0.x.y`；patch / minor 位按发布序顺延（`1.1.x` ↔ `0.8.x`、`1.2.x` ↔ `0.9.x`、`1.3.x` ↔ `0.10.x`、`1.4.x` ↔ `0.11.x`），除版本字符串与 registry 包名外逐字节相同。
 - ~~给浏览器演示页加一个播放「模型流」的标签页~~：`static/demo/live.html` 已落地（四个真实场景逐帧重放，含重试面板），线上地址 <https://wenhuang2333.github.io/Moonbit-haker/live.html>。
 - ~~把就绪曲线扩展到「调用方真正需要的字段」~~：`Schema` + `semantic_readiness` 已落地（语法/骨架两层分数）。
 - ~~给骨架加约束~~：`minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern`（字符类子集，不是正则）已在 0.7.0 落地。

@@ -1,8 +1,20 @@
 {
   "name": "interjson-moonbit",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "The local execution gate for LLM output, as a Model Context Protocol server and a library, powered by the MoonBit engine.",
   "license": "Apache-2.0",
+  "author": {
+    "name": "InterJSON contributors"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wenhuang2333/Moonbit-haker.git",
+    "directory": "code/npm"
+  },
+  "homepage": "https://github.com/wenhuang2333/Moonbit-haker#readme",
+  "bugs": {
+    "url": "https://github.com/wenhuang2333/Moonbit-haker/issues"
+  },
   "type": "commonjs",
   "main": "./index.cjs",
   "module": "./index.mjs",
@@ -27,7 +39,7 @@
     "test": "node --test"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "keywords": [
     "json",

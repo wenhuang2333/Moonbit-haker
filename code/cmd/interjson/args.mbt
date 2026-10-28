@@ -176,6 +176,12 @@ fn parse_policy_name(s : String) -> @ij.SafetyPolicy? {
 }
 
 ///|
+/// The documented default for `--max-depth`, which is what
+/// `Options::default()` uses. Named so the conflict check below does not
+/// compare against a literal that could drift from the library.
+const DEFAULT_MAX_DEPTH : Int32 = 512
+
+///|
 /// `--max-loss` payload.
 fn parse_max_loss(s : String) -> @ij.Exactness? {
   match s {
@@ -283,7 +289,20 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
         _ => err = "`--stdio` 只对 `interjson serve` 有意义"
       }
     } else if a == "--print-config" || a.has_prefix("--print-config=") {
-      let value = if a == "--print-config" { "json" } else { slice_tail(a, 15) }
+      let value = if a == "--print-config" {
+        // The space form (`--print-config claude`) is the way the flag is
+        // usually written, and it used to be read as a *file name*: the
+        // client name was never looked at, so `--print-config claude` printed
+        // the default JSON and then tried to read a file called `claude`.
+        consumed = 1
+        if i + 1 < args.length() && !args[i + 1].has_prefix("-") {
+          args[i + 1]
+        } else {
+          "json"
+        }
+      } else {
+        slice_tail(a, 15)
+      }
       o.mcp_config = if value == "" { "json" } else { value }
       o.action = Mcp
     } else if a == "-h" || a == "--help" {
@@ -460,7 +479,10 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
       if value == "" && a == "--max-repairs" {
         err = "--max-repairs 缺少参数"
       } else {
-        match parse_uint(value) {
+        // The help text has always said the default is 10000, so the bound
+        // has to accept it: `parse_uint` caps at 64, which made
+        // `--max-repairs 10000` an error while `--help` recommended it.
+        match parse_uint_up_to(value, 1000000) {
           Some(n) =>
             if n <= 0 {
               err = "--max-repairs 需要正整数，收到 `" + value + "`"
@@ -479,7 +501,11 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
           ""
         }
       } else {
-        slice_tail(a, 20)
+        // `--max-prose-buffer=` is 19 characters, not 20. Slicing from 20
+        // dropped the first digit of the value, so `=65536` silently became
+        // `5536` -- a twelve-fold smaller buffer, on the flag whose whole
+        // purpose is to bound how much prose is buffered.
+        slice_tail(a, 19)
       }
       if value == "" && a == "--max-prose-buffer" {
         err = "--max-prose-buffer 缺少参数"
@@ -588,6 +614,20 @@ fn parse_args(args : Array[String]) -> (CliOpts, String) {
       break
     }
     i = i + 1 + consumed
+  }
+  if err == "" && o.policy != "" {
+    // Conflicting flags are refused instead of silently resolved.
+    //
+    // `--policy` replaces the safety knobs, so `--strict --policy permissive`
+    // used to drop the `--strict` without a word: the caller asked for two
+    // different risk contracts and got whichever one the flag order happened
+    // to leave in place. `--max-depth` is the same: a profile fixes a depth,
+    // so the two cannot both win.
+    if o.strict {
+      err = "--strict 与 --policy 冲突：--policy 会覆盖 --strict，请二选一"
+    } else if o.max_depth != DEFAULT_MAX_DEPTH {
+      err = "--max-depth 与 --policy 冲突：--policy 会覆盖 --max-depth，请二选一"
+    }
   }
   (o, err)
 }

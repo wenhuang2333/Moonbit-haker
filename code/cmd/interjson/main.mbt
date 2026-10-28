@@ -159,7 +159,10 @@ fn options_of(o : CliOpts, agent_protocol? : Bool) -> @ij.Options {
     base
   } else {
     match parse_policy_name(o.policy) {
-      Some(p) => base.with_policy(p)
+      // A profile carries protocol as well as safety: `--policy agent` skips
+      // the sentence a chat model puts in front of its arguments, because
+      // that is what the agent profile means everywhere else.
+      Some(p) => base.with_profile(p)
       None => base
     }
   }
@@ -231,8 +234,10 @@ fn run() -> Unit {
       quit(0)
     }
     Version => {
-      // Keep in sync with `version` in moon.mod; cli_smoke.sh checks it.
-      println("interjson 1.4.0")
+      // The library's `VERSION`. `tests/cli_smoke.sh` asserts it matches
+      // `version` in moon.mod, and `tests/claims.sh` that the documents quote
+      // the same number.
+      println("interjson " + @ij.VERSION)
       quit(0)
     }
     Llm => {
@@ -276,7 +281,11 @@ fn run() -> Unit {
   // the error snippet.
   let prefix_max = 1048576
   let prefix : Array[Byte] = []
-  let chunk_cap = 65536
+  // `--chunk N` sets the read size for this path too. It used to affect only
+  // `--batch`, so `--chunk 1 interjson big.json` silently read 64 KiB at a
+  // time: the flag that exists to exercise the streaming path did not touch
+  // the streaming path.
+  let chunk_cap = if o.chunk > 0 { o.chunk } else { 65536 }
   try {
     let parser = @ij.PartialParser::new(options~)
     let mut piece = read_chunk(stream, chunk_cap)

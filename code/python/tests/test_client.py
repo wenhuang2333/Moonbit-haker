@@ -119,3 +119,51 @@ class ClientTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DiagnosticsTests(unittest.TestCase):
+    """The error path has to explain itself."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.binary = find_binary()
+
+    def test_stderr_is_captured_by_default(self) -> None:
+        # It defaulted to DEVNULL, so every "the engine died" message ended
+        # with an empty stderr and no way to find out why.
+        import subprocess
+
+        client = Client(binary=self.binary, timeout=10)
+        try:
+            self.assertIs(
+                client.proc.stderr is not None,
+                True,
+                msg="stderr must be a pipe by default",
+            )
+        finally:
+            client.close()
+
+    def test_a_timeout_does_not_desynchronise_the_client(self) -> None:
+        # A late answer used to stay in the queue, so the *next* request read
+        # it and either reported an id mismatch or, worse, accepted it.
+        client = Client(binary=self.binary, timeout=30)
+        try:
+            # A zero timeout makes the first request fail immediately.
+            client.timeout = 0.0
+            with self.assertRaises(TimeoutError):
+                client.hello()
+            # The stream is resynchronised, so a normal request still works.
+            client.timeout = 10.0
+            hello = client.hello()
+            self.assertEqual(hello["name"], "interjson")
+        finally:
+            client.close()
+
+    def test_a_refusal_carries_its_code(self) -> None:
+        client = Client(binary=self.binary, timeout=10)
+        try:
+            with self.assertRaises(InterJSONError) as caught:
+                client.repair('{"a":1,}', profile="strict")
+            self.assertEqual(caught.exception.code, "E010")
+        finally:
+            client.close()

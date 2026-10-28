@@ -288,13 +288,35 @@ pub fn PartialParser::snapshot_copy(self : PartialParser) -> Snapshot {
 
 ///|
 /// Deep copy of a `Json` value.
+///
+/// The copy is depth-bounded. A subtree deeper than `MAX_VALUE_DEPTH` is
+/// returned as it is rather than copied, so a pathological value cannot
+/// exhaust the stack. That branch is unreachable for a value the engine
+/// produced: `Options::validate` refuses a `max_depth` above the same bound,
+/// so nothing the engine parses is ever that deep. The bound exists for a
+/// caller that hands this function a value built elsewhere.
 pub fn copy_json(v : Json) -> Json {
+  copy_json_at(v, 0)
+}
+
+///|
+/// The recursive half of `copy_json`, carrying the current depth.
+fn copy_json_at(v : Json, depth : Int32) -> Json {
+  if depth > MAX_VALUE_DEPTH {
+    return v
+  }
   match v {
-    Json::Array(items) => Json::array(items.map(copy_json))
+    Json::Array(items) => {
+      let out : Array[Json] = []
+      for item in items {
+        out.push(copy_json_at(item, depth + 1))
+      }
+      Json::array(out)
+    }
     Json::Object(map) => {
       let out : Map[String, Json] = Map([])
       for k, item in map {
-        out[k] = copy_json(item)
+        out[k] = copy_json_at(item, depth + 1)
       }
       Json::object(out)
     }

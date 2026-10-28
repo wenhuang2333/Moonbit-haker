@@ -50,25 +50,227 @@ second source of truth to keep in sync.
 model or the client calls `interjson_gate` with the raw argument text, reads
 `executable`, and sends `retry.prompt` back when it is false.
 
+## Making the gate mandatory
+
+This is the distinction that decides whether you have a gate or a suggestion:
+
+| You wired up | The gate runs when | Is it a gate? |
+| --- | --- | --- |
+| `interjson mcp` only | the model chooses to call `interjson_gate` | **no — advisory** |
+| a `PreToolUse` hook, or `gate()` in the host SDK | every matching tool call, before execution | **yes** |
+
+Plain MCP is **advisory**: `interjson_gate` is one tool among many, the model can
+skip it, and nothing in the protocol makes the host check the answer. A model
+that never calls the gate is not violating anything — it is doing what an
+optional tool allows. Every MCP client has this property; it is not specific to
+InterJSON.
+
+If the requirement is "no tool call executes without passing the gate", the check
+has to live on the **host** side, at a point the model cannot route around.
+Below are the two shapes that work.
+
+### Claude Code `PreToolUse` hook
+
+Claude Code fires `PreToolUse` after it has built a tool call and before it
+executes it. The hook receives the call as JSON on stdin and can return
+`permissionDecision: "deny"` to block it, with a reason the model reads. That is
+exactly the shape of an execution gate.
+
+The exchange, end to end:
+
+```text
+Claude builds a tool call
+      │
+      ▼
+PreToolUse hook ──► interjson explain --policy agent --json
+      │                       │
+      │                       └─ exit 0 → executable, exit 5 → refused
+      ▼
+{"permissionDecision":"deny",      ┌── no decision (exit 0, no JSON):
+ "permissionDecisionReason": …}    │   the tool call proceeds normally
+      │                            ▼
+      ▼                       tool executes
+tool call blocked; Claude reads
+retry.prompt as the tool result
+```
+
+Configuration, in `.claude/settings.json` (project scope; use
+`~/.claude/settings.json` for every project):
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__orders__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/interjson-gate.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`matcher` is a tool-name filter. `mcp__orders__.*` matches every tool from an MCP
+server named `orders`; `Bash|Edit|Write` matches built-in tools by exact name.
+Omitting `matcher` runs the hook on every tool call.
+
+The script reads the call from stdin, looks the tool's declaration up in a file
+you keep next to it, and asks the gate:
+
+```bash
+#!/bin/bash
+# .claude/hooks/interjson-gate.sh — route a tool call through the execution gate.
+set -u
+input=$(cat)
+tool=$(printf '%s' "$input" | jq -r '.tool_name // empty')
+# `tool_input` is the arguments object in the hook payload. It is unwrapped
+# when it arrives as a JSON *string* instead, because a quoted string fed to
+# the gate is a document whose root is a string, and it would be refused for
+# the wrong reason -- a mismatch that looks like a gate decision but is a
+# shape mismatch in the hook.
+tool_input=$(printf '%s' "$input" |
+  jq -c '.tool_input // empty | if type == "string" then (fromjson? // .) else . end')
+
+# The declarations this project gates, keyed by the tool name the hook sees.
+# A tool that is not listed is not gated: start narrow, widen deliberately.
+declarations="${CLAUDE_PROJECT_DIR:-.}/.claude/interjson-schemas.json"
+[ -f "$declarations" ] || exit 0
+decl=$(jq -r --arg t "$tool" '.[$t] // empty' "$declarations")
+[ -n "$decl" ] || exit 0
+
+gate="${INTERJSON_BIN:-interjson}"
+plan=$(printf '%s' "$tool_input" | "$gate" explain \
+  --policy agent --schema "$decl" --json 2>/dev/null)
+status=$?
+
+# 5 is the CLI's documented "refused": E010 over budget, E011 ambiguity, or
+# E070 declaration mismatch. 0 means executable. Anything else is the gate
+# itself failing -- exit 1 there and let Claude Code surface a broken hook
+# rather than silently allowing the call.
+case "$status" in
+  0) exit 0 ;;                       # no decision: normal permission flow
+  5) ;;
+  *)
+    echo "interjson gate failed (exit $status); refusing to execute" >&2
+    exit 1
+    ;;
+esac
+
+prompt=$(printf '%s' "$plan" | jq -r '.retry.prompt // "arguments refused"')
+jq -n --arg p "$prompt" '{
+  hookSpecificOutput: {
+    hookEventName: "PreToolUse",
+    permissionDecision: "deny",
+    permissionDecisionReason: $p
+  }
+}'
+exit 0
+```
+
+And `.claude/interjson-schemas.json`, mapping tool name → declaration. The
+declaration is the library's skeleton language; a JSON Schema subset also works
+via `schema_json` in the SDK path, but the CLI flag `--schema` takes the DSL:
+
+```json
+{
+  "mcp__orders__create": "{!amount:integer,!currency:string}"
+}
+```
+
+Make the script executable (`chmod +x .claude/hooks/interjson-gate.sh`) and
+install `jq`. Three behaviours worth knowing:
+
+- **Denial carries the retry prompt.** `permissionDecisionReason` is shown to
+  Claude, so the refusal reaches the model in the same wording the MCP tool
+  would have used. The model can re-emit and the call passes the next time.
+- **A tool with no declaration is not gated.** `interjson explain` without
+  `--schema` still checks syntax and exactness, but it cannot check a schema it
+  was not given. Listing a tool is a deliberate act.
+- **Fail closed on a broken hook.** A non-zero exit that is not `5` prints to
+  stderr and exits `1`; Claude Code reports the hook as failed rather than
+  treating the call as allowed. This is the opposite of the `exit 0` default an
+  unconfigured hook has, and it is the point: a gate that fails open is not a
+  gate.
+
+> **Status of this recipe: verified by hand, not by CI.** The configuration
+> schema above (event name, `matcher`, `hooks[].type: "command"`, `timeout`,
+> `hookSpecificOutput.permissionDecision` / `permissionDecisionReason`) is taken
+> from Claude Code's hooks reference. The script was run by hand against the
+> JSON input shape that reference documents, and all three branches were
+> confirmed — allow, deny, and an ungated tool — with `tool_input` given both
+> as an object (the real shape) and as a JSON string: a mismatched argument
+> produced
+> `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"…"}}`,
+> and a matching one produced no output and exit 0. What is **not** tested here
+> is a real Claude Code session running the hook — that needs the client, and it
+> is not in this repository's test suite. Treat the wiring as a sketch to adapt,
+> not as a configuration this project ships and supports.
+
+### Host SDK: `gate(args) -> execute | retry`
+
+Whatever the SDK, the insertion point is the same — the function that turns a
+model's tool call into an execution:
+
+```python
+from interjson import Client
+
+GATE = Client()   # one long-lived engine process for the session
+
+def gate(tool_name: str, args_text: str, tool_spec: dict) -> dict:
+    """Return the call to execute, or raise with the sentence for the model."""
+    plan = GATE.analyze(args_text, profile="agent",
+                        schema_json=tool_spec["inputSchema"])
+    if not plan["executable"]:
+        # The refusal is the program: hand it back verbatim.
+        raise ToolArgumentsRefused(plan["retry"]["prompt"])
+    return json.loads(plan["text"])
+
+# In the tool-call handler, before anything runs:
+args = gate(call.name, call.arguments_text, TOOLS[call.name])
+execute(call.name, args)
+```
+
+The same shape in Node:
+
+```js
+import { analyze } from "interjson-moonbit";
+
+function gate(argsText, toolSpec) {
+  const plan = analyze(argsText, {
+    profile: "agent",
+    schemaJson: toolSpec.inputSchema,
+  });
+  if (!plan.executable) throw new ToolArgumentsRefused(plan.retry.prompt);
+  return JSON.parse(plan.text);
+}
+```
+
+Three properties this has that the MCP surface does not:
+
+- it runs **before** execution, on a code path the model does not control;
+- it sees the **raw argument text**, so a repair or a truncation is visible
+  instead of already normalised by the SDK's typed parser;
+- `executable: false` becomes an exception in your own code, so there is one
+  place to log, count, and alert on refusals.
+
 ## MCP
 
 `interjson mcp` is a local MCP server over stdio (JSON-RPC 2.0): no socket, no
 network, no API key. The binary under the alias `interjson-mcp` starts the same
-server with no arguments. The server implements `initialize`, `tools/list`,
-`tools/call` and `ping`, and exposes four read-only tools:
-
-| Tool | Use |
-| --- | --- |
-| `interjson_gate` | **the gate**: decision, exactness, ambiguity, schema, retry hint. Defaults to the `agent` profile |
-| `interjson_repair` | repair text and return the repaired document |
-| `interjson_validate` | check without repairing |
-| `interjson_readiness` | when each declared field becomes final |
-
-A successful result carries `content[0].text` (the JSON as a string) and
-`structuredContent` (the same object); a tool failure carries `isError: true`
-and no `structuredContent`. Tools are annotated
-`readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`,
-`openWorldHint: false`.
+server with no arguments. It implements `initialize`, `tools/list`, `tools/call`
+and `ping`, and exposes four read-only tools — `interjson_gate` (**the gate**;
+`decision`, `exactness`, ambiguity, schema, retry hint, defaults to the `agent`
+profile), `interjson_repair`, `interjson_validate` and `interjson_readiness`.
+`content[0].text` is a summary and `structuredContent` is the payload; a tool
+failure carries `isError: true` and no `structuredContent`. The tools, their
+`outputSchema` fields, the protocol revisions and the JSON-RPC error codes are
+in [MCP.md](MCP.md) — this section only covers wiring.
 
 With the binary on `PATH`:
 

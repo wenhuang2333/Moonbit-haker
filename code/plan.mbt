@@ -358,6 +358,12 @@ pub fn RepairPlan::summary(self : RepairPlan) -> String {
 
 ///|
 /// The plan for an accepted result.
+///
+/// "Accepted" means the engine produced a value; it does not mean the caller
+/// may execute it. A value that fails the declaration it was checked against
+/// is a refusal with a `decision` of `invalid`, and the plan then carries no
+/// value: `value` is documented as `None` on a refusal, and a caller that
+/// reads the value anyway would be executing something the gate just refused.
 fn plan_of_final(
   fin : FinalResult,
   input : String,
@@ -374,17 +380,25 @@ fn plan_of_final(
     -1
   }
   let verdict = check_schema(schema, fin.value)
-  let decision = decide(ops.length(), fin.exactness, fin.ambiguous)
+  let decision = verdict.decision(
+    decide(ops.length(), fin.exactness, fin.ambiguous),
+  )
   {
     text: fin.text,
-    value: Some(fin.value),
+    // A value that does not satisfy the declaration is not the caller's to
+    // use: the plan is a refusal, and a refusal has no value.
+    value: if decision is Invalid {
+      None
+    } else {
+      Some(fin.value)
+    },
     repairs: ops,
     repairs_truncated: fin.repairs_truncated,
     exactness: fin.exactness,
     valid_json: input_was_valid_json(ops),
     ambiguous: fin.ambiguous,
     completeness: fin.completeness,
-    decision: verdict.decision(decision),
+    decision,
     retry_hint: None,
     error_code: if verdict.ok {
       ""
@@ -945,21 +959,46 @@ pub fn RepairPlan::to_json(self : RepairPlan) -> String {
     sb.write_string("}")
   }
   sb.write_string("],\"retry\":")
-  match self.retry_hint {
-    Some(h) =>
-      sb.write_string(
-        "{" +
-        kv("code", h.error_code) +
-        "," +
-        kv("prompt", json_escape(h.to_prompt())) +
-        "}",
-      )
-    None => sb.write_string("null")
+  // Every non-executable plan carries a retry prompt, not only the ones a
+  // `RetryHint` was built for.
+  //
+  // A refusal that goes through `plan_of_error` has a hint, and the hint is
+  // the best feedback available: it names the position and quotes the window.
+  // A plan that was *accepted* but is not executable -- a lossy repair under
+  // `permissive`, or a value that does not satisfy its declaration -- has no
+  // hint, and used to serialise as `"retry": null`. That broke the contract
+  // the gate documents: a caller told to "send `retry.prompt` back to the
+  // model when `executable` is false" was handed a refusal with no prompt, so
+  // the only thing it could do was guess. `RepairPlan::prompt` already
+  // produces the sentence for exactly this case; the JSON now carries it.
+  //
+  // An executable plan has no retry: there is nothing to retry.
+  if self.is_executable() {
+    sb.write_string("null")
+  } else {
+    let (code, prompt) = match self.retry_hint {
+      Some(h) => (h.error_code, h.to_prompt())
+      None =>
+        (
+          if self.error_code != "" {
+            self.error_code
+          } else {
+            "E010"
+          },
+          self.prompt(),
+        )
+    }
+    sb.write_string(
+      "{" + kv("code", code) + "," + kv("prompt", json_escape(prompt)) + "}",
+    )
   }
   sb.write_string(",\"repairs_truncated\":")
   sb.write_string(self.repairs_truncated.to_string())
   // The value itself, so a caller that has the right to execute does not have to
-  // parse the text again to get it.
+  // parse the text again to get it. A plan that is not executable has no
+  // value: `plan_of_final` already drops it for a value that fails its
+  // declaration, and a refusal carries none. Leaving the value in place for a
+  // refusal would hand the caller the very thing the gate refused.
   sb.write_string(",\"value\":")
   match self.value {
     Some(v) => sb.write_string(v.stringify())

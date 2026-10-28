@@ -340,11 +340,26 @@ CODE_REASON = {
 _EXPECTED_CODES = ["R%03d" % n for n in range(1, 23)]
 if sorted(CODE_REASON) != _EXPECTED_CODES:
     raise SystemExit(
-        "CODE_REASON must cover R001..R021 exactly; got %s" % sorted(CODE_REASON)
+        "CODE_REASON must cover R001..R022 exactly; got %s" % sorted(CODE_REASON)
     )
+
+# Exit codes the binary documents. Anything else is a crash: 128+N is a
+# signal, a negative return code is a signal on POSIX, and the documented
+# codes are the only ones a case may produce. The classifier used to fold a
+# crash into "interjson rejects", which meant the gate could not fail on a
+# panic -- the one failure the project promises never happens.
+DOCUMENTED_EXIT_CODES = {0, 1, 2, 3, 4, 5, 70}
+
+def is_crash(rc):
+    """True when `rc` is not one of the documented exit codes."""
+    return rc < 0 or rc not in DOCUMENTED_EXIT_CODES
 
 def cause(codes, mine, theirs, probes, rc):
     """Classify a divergence: behavioural evidence first, then rule codes."""
+    # A crash is never explained: it is the one outcome the project forbids,
+    # and folding it into "interjson rejects" made the gate unable to notice.
+    if is_crash(rc):
+        return "CRASH (exit %d, not a documented code)" % rc
     if probes.get("multi-root"):
         return "multi-root (BR-15 policy)"
     if probes.get("skip-prose"):
@@ -454,11 +469,17 @@ def main():
         rc, out, err, codes = run_interjson(args.cli, text)
         mine = None
         mine_ok = rc == 0
+        bad_output = False
         if mine_ok:
             try:
                 mine = json.loads(out)
             except Exception:
+                # The process reported success and did not print JSON. That is
+                # not "interjson rejects": it is the product's first invariant
+                # (the output is always valid JSON) being violated, and it must
+                # be reported as a defect rather than folded into a rejection.
                 mine_ok = False
+                bad_output = True
         theirs = py_oracle(text)
         theirs_ok = not isinstance(theirs, tuple)
         node_value = node_oracle(text, node_script, node_env)
@@ -471,7 +492,13 @@ def main():
         elif node_ok != mine_ok:
             node_diverge += 1
 
-        if mine_ok and theirs_ok and mine == theirs:
+        if is_crash(rc):
+            # A crash short-circuits every comparison: nothing else about this
+            # case is meaningful, and the project promises it cannot happen.
+            status = cause(codes, mine, theirs, {}, rc)
+        elif bad_output:
+            status = "INVALID OUTPUT (exit 0 without valid JSON)"
+        elif mine_ok and theirs_ok and mine == theirs:
             status = "agree"
         elif not mine_ok and not theirs_ok:
             status = "both-reject"
@@ -498,8 +525,18 @@ def main():
     agree = sum(1 for r in rows if r["status"] == "agree")
     both_bad = sum(1 for r in rows if r["status"] == "both-reject")
     divergent = [r for r in rows if r["status"] not in ("agree", "both-reject")]
-    explained = [r for r in divergent if r["status"] != "UNEXPLAINED"]
+    # A status is "explained" only when it names a documented cause. UNEXPLAINED
+    # is the absence of one; CRASH and INVALID OUTPUT are the two invariants
+    # the project promises never break, so they are never explained either --
+    # reporting a panic as "a documented divergence" is how a gate stops being
+    # a gate.
+    def explained_status(status):
+        return status not in ("UNEXPLAINED",) and not status.startswith("CRASH") and not status.startswith("INVALID OUTPUT")
+
+    explained = [r for r in divergent if explained_status(r["status"])]
     unexplained = [r for r in divergent if r["status"] == "UNEXPLAINED"]
+    crashes = [r for r in rows if r["status"].startswith("CRASH")]
+    invalid_output = [r for r in rows if r["status"].startswith("INVALID OUTPUT")]
     in_scope_rate = 100.0 * (agree + both_bad + len(explained)) / max(total, 1)
 
     def rate(subset):
@@ -693,7 +730,30 @@ def main():
         fh.write(report)
     print("\n".join(report.split("## Divergence classes")[0]))
     print("report written to", args.out)
-    return 0 if (in_scope_rate >= 90.0 and len(unexplained) == 0) else 1
+    if crashes:
+        print(
+            "\n%d case(s) crashed the binary. The project's first invariant is "
+            "that no byte sequence panics, so this is a failure whatever the "
+            "agreement rate says." % len(crashes),
+            file=sys.stderr,
+        )
+    if invalid_output:
+        print(
+            "\n%d case(s) exited 0 without printing valid JSON. The output of a "
+            "successful run is always valid JSON, so this is a failure."
+            % len(invalid_output),
+            file=sys.stderr,
+        )
+    return (
+        0
+        if (
+            in_scope_rate >= 90.0
+            and len(unexplained) == 0
+            and len(crashes) == 0
+            and len(invalid_output) == 0
+        )
+        else 1
+    )
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -14,9 +14,11 @@ pip install ./code/python          # from the repository root
 export INTERJSON_BIN=/path/to/interjson   # or put it on PATH
 ```
 
-> The distribution is `interjson-moonbit` (the suffix identifies the MoonBit
-> engine); the import name is `interjson`. Install from the repository until
-> the registry publication.
+> The distribution name is **`interjson-moonbit`** on PyPI (the suffix identifies
+> the MoonBit engine); the import name is `interjson`. **Publication is
+> pending**: version 1.5.0 is not on PyPI yet, so install from the repository
+> path above. Nothing on this page claims the package is installable with
+> `pip install interjson-moonbit`.
 
 ```python
 import json
@@ -52,7 +54,7 @@ Python in the middle. Resolution order is `INTERJSON_BIN`, then `interjson` on
 this repository. If none exists it raises `FileNotFoundError` naming the fixes.
 
 ```bash
-interjson --version                  # interjson 1.4.0: the engine the launchers need
+interjson --version                  # interjson 1.5.0: the engine the launchers need
 interjson-mcp                        # MCP stdio server
 interjson-mcp --print-config=claude  # the client configuration snippet
 interjson-http --port 8080           # POST /repair /analyze /validate /readiness, GET /healthz
@@ -75,7 +77,13 @@ With the engine resolvable, the client configuration is one line:
 
 The server exposes four read-only tools: `interjson_gate` (the gate:
 `executable`, `decision`, `exactness`, `value`, `retry.prompt`),
-`interjson_repair`, `interjson_validate`, and `interjson_readiness`.
+`interjson_repair`, `interjson_validate`, and `interjson_readiness`. The gate
+defaults to the `agent` profile, which equals `Options::for_agent()` — prose
+before the arguments is skipped rather than refused. A refused result always
+carries a non-empty `retry.prompt` and `value: null`. **MCP is advisory**: the
+model can decline to call the gate, so the host must gate the call itself (a
+Claude Code `PreToolUse` hook or a host-SDK `gate()` — see
+[`docs/INTEGRATIONS.md`](../docs/INTEGRATIONS.md#making-the-gate-mandatory)).
 
 Deployment, per-client configuration, the privacy model and troubleshooting are
 in [`docs/MCP.md`](../docs/MCP.md); host-side recipes (LangChain, LlamaIndex,
@@ -109,8 +117,11 @@ than being silently dropped.
 
 ## Version
 
-The Python package is `1.4.0`, the engine version. The MoonBit package on
-mooncakes is `0.11.0` because the registry currently accepts only `0.x.y`; the
-bytes are the same. `Client.hello()` reports both.
+The Python package is `1.5.0`, the engine version. The MoonBit package on
+mooncakes is `0.12.0` because the registry currently accepts only `0.x.y`; the
+bytes are the same. `Client.hello()` reports both. **Neither is published
+yet**: the PyPI upload and the 0.12.0 mooncakes upload are both pending, and
+the published mooncakes history stops at `0.11.0` (the 1.4.0
+correspondence).
 
 License: Apache-2.0.

@@ -21,16 +21,16 @@
 const PROTOCOL_VERSION : Int32 = 1
 
 ///|
-/// The engine version this build reports. Kept in one place so the protocol,
-/// `--version` and the tests cannot drift.
-const ENGINE_VERSION : String = "1.4.0"
+/// The engine version this build reports. It is the library's `VERSION`, not
+/// a literal: the CLI, the MCP handshake and the library all have to name the
+/// same release, and there is exactly one place that says which release this
+/// is.
+const ENGINE_VERSION : String = @ij.VERSION
 
 ///|
-/// The mooncakes registry version that corresponds to `ENGINE_VERSION`
-/// (mooncakes currently only accepts `0.x.y`). The two numbers are different
-/// channels of the same bytes; `hello` reports both so a client never has to
-/// guess which one it is looking at.
-const REGISTRY_VERSION : String = "0.11.0"
+/// The mooncakes registry version that corresponds to `ENGINE_VERSION`. Also
+/// the library's, for the same reason.
+const REGISTRY_VERSION : String = @ij.REGISTRY_VERSION
 
 ///|
 /// Largest request line accepted. A request larger than this is answered with
@@ -390,7 +390,10 @@ fn options_from_params(
   match params.get("profile") {
     Some(Json::String(name)) =>
       match parse_policy_name(name) {
-        Some(p) => opts = opts.with_policy(p)
+        // `with_profile`, not `with_policy`: a profile carries protocol as
+        // well as safety, and `agent` implies prose skipping. See
+        // `Options::with_profile`.
+        Some(p) => opts = opts.with_profile(p)
         None =>
           raise @ij.InvalidOption(
             "unknown profile `" +
@@ -428,12 +431,23 @@ struct ServeState {
   mut watch_parser : @ij.PartialParser?
   mut watch_watcher : @ij.SemanticWatcher?
   mut llm_stream : @llm.ToolStream?
+  /// Whether `initialize` has been answered. MCP is a session protocol: a
+  /// request that arrives before the handshake is a bug in the client, and
+  /// answering it anyway hides the bug behind a response the client cannot
+  /// place. Only `initialize`, `ping` and notifications are answered before
+  /// it; anything else gets `-32002`.
+  mut initialized : Bool
 }
 
 ///|
 /// A fresh state.
 fn ServeState::new() -> ServeState {
-  { watch_parser: None, watch_watcher: None, llm_stream: None, }
+  {
+    watch_parser: None,
+    watch_watcher: None,
+    llm_stream: None,
+    initialized: false,
+  }
 }
 
 ///|
@@ -532,18 +546,33 @@ fn handle_readiness(
   let step = int_param(params, "step", 0)
   match schema_param(params) {
     Some(s) => {
-      let r = @ij.semantic_readiness(
-        text,
-        s,
-        step~,
-        options=options_from_params(base, params),
-      )
+      let opts = options_from_params(base, params)
+      let r = @ij.semantic_readiness(text, s, step~, options=opts)
+      // The three aggregate fractions say *when the document as a whole* was
+      // ready. The tool's description promises "when each required field
+      // becomes final", which is a different question, and until now the
+      // answer was not in the response: a caller that wanted to stop a
+      // generation as soon as the arguments were settled had to re-derive it.
+      // `watch_readiness` already computes exactly that, so the events are
+      // returned, each with the input fraction it fired at.
+      let events = @ij.watch_readiness(text, s, options=opts)
+      let fields : Array[Json] = []
+      for e in events {
+        fields.push(
+          jobj([
+            ("event", Json::string(e.event.kind())),
+            ("path", Json::string(e.event.path())),
+            ("permille", jnum(e.permille)),
+          ]),
+        )
+      }
       jobj([
         ("syntax_permille", jnum(r.syntax_permille)),
         ("schema_permille", jnum(r.schema_permille)),
         ("settled_permille", jnum(r.settled_permille)),
         ("step", jnum(r.step)),
         ("verdict", verdict_json(r.verdict)),
+        ("events", Json::array(fields)),
       ])
     }
     None => {
@@ -553,6 +582,7 @@ fn handle_readiness(
         ("schema_permille", jnum(-1)),
         ("settled_permille", jnum(-1)),
         ("step", jnum(if step > 0 { step } else { 0 })),
+        ("events", Json::array([])),
       ])
     }
   }

@@ -95,6 +95,22 @@ pub fn RepairCode::number(self : RepairCode) -> Int32 {
 }
 
 ///|
+/// How many repair codes exist.
+///
+/// This is the number of variants of `RepairCode`, and it is what sizes the
+/// rule table (`RuleSet::all`). It is written here, next to the enum, rather
+/// than derived by counting at runtime: the count has to change in the same
+/// commit as the enum, and a single place that a contributor editing the enum
+/// will read is the one that works.
+///
+/// When a repair code is added, three things must change together (see
+/// `CONTRIBUTING.md`): the enum gains a variant, `number()` assigns it the
+/// next index, and this count grows by one.
+pub fn RepairCode::count() -> Int32 {
+  22
+}
+
+///|
 /// Stable string form of a repair code, e.g. `R005`.
 pub fn RepairCode::code(self : RepairCode) -> String {
   let n = self.number()

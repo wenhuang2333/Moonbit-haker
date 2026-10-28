@@ -15,6 +15,10 @@ on:
         description: Cases per property
         default: "1000000"
         required: false
+      fuzz:
+        description: Byte-level fuzz cases
+        default: "100000"
+        required: false
 
 concurrency:
   group: nightly
@@ -27,6 +31,10 @@ jobs:
     timeout-minutes: 120
     env:
       INTERJSON_LONGRUN: ${{ github.event.inputs.cases || '1000000' }}
+      # The byte-level fuzz gets its own, much smaller budget: each fuzz case
+      # is fifteen parses, so the property budget would be fifteen million of
+      # them. A hundred thousand cases is ~1.5M parses, which is minutes.
+      INTERJSON_FUZZ: ${{ github.event.inputs.fuzz || '100000' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,6 +50,7 @@ jobs:
         working-directory: code
         run: |
           echo "cases per property: $INTERJSON_LONGRUN"
+          echo "fuzz cases: $INTERJSON_FUZZ"
           time moon test --target native
 
       - name: Long run (wasm-gc)

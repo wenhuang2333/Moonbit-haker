@@ -22,6 +22,17 @@ permissions:
   contents: write
 
 jobs:
+  # The release must not be able to ship a build that CI would reject.
+  #
+  # `publish` used to depend on `web` and `cli` only -- two jobs that build
+  # artifacts and check that they run, not that they are correct. A tag could
+  # therefore publish a binary whose test suite was red, and the checksum gate
+  # would pass, because a checksum says nothing about correctness. Calling the
+  # CI workflow here makes "release" mean "the same gates CI runs passed".
+  test:
+    name: CI gates before the release
+    uses: ./.github/workflows/ci.yml
+
   web:
     name: wasm probe and browser bundle
     runs-on: ubuntu-latest
@@ -53,6 +64,11 @@ jobs:
           mkdir -p "$RUNNER_TEMP/web-assets"
           cp code/_build/wasm-gc/release/build/bench/probe/probe.wasm "$RUNNER_TEMP/web-assets/probe.wasm"
           cp static/demo/interjson.js "$RUNNER_TEMP/web-assets/interjson-demo.js"
+          # The installer is a release asset so that the one-command install in
+          # the README is `curl .../releases/latest/download/interjson-install.sh
+          # | sh`, which needs no clone and no toolchain.
+          cp code/install.sh "$RUNNER_TEMP/web-assets/interjson-install.sh"
+          chmod +x "$RUNNER_TEMP/web-assets/interjson-install.sh"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -69,8 +85,12 @@ jobs:
         include:
           - os: ubuntu-latest
             asset: interjson-linux-x86_64
+          - os: ubuntu-24.04-arm
+            asset: interjson-linux-arm64
           - os: macos-latest
             asset: interjson-macos-arm64
+          - os: macos-15-intel
+            asset: interjson-macos-x86_64
           - os: windows-latest
             asset: interjson-windows-x86_64.exe
     steps:
@@ -128,7 +148,7 @@ jobs:
 
   publish:
     name: Publish the release
-    needs: [web, cli]
+    needs: [web, cli, test]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -143,12 +163,16 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           cp artifacts/interjson-linux-x86_64/interjson-linux-x86_64 dist/interjson-linux-x86_64
+          cp artifacts/interjson-linux-arm64/interjson-linux-arm64 dist/interjson-linux-arm64
           cp artifacts/interjson-macos-arm64/interjson-macos-arm64 dist/interjson-macos-arm64
+          cp artifacts/interjson-macos-x86_64/interjson-macos-x86_64 dist/interjson-macos-x86_64
           cp artifacts/interjson-windows-x86_64.exe/interjson-windows-x86_64.exe dist/interjson-windows-x86_64.exe
           cp artifacts/web-assets/probe.wasm dist/interjson-probe.wasm
           cp artifacts/web-assets/interjson-demo.js dist/interjson-demo.js
-          chmod +x dist/interjson-linux-x86_64 dist/interjson-macos-arm64
-          (cd dist && sha256sum interjson-linux-x86_64 interjson-macos-arm64 interjson-windows-x86_64.exe interjson-probe.wasm interjson-demo.js > SHA256SUMS)
+          cp artifacts/web-assets/interjson-install.sh dist/interjson-install.sh
+          chmod +x dist/interjson-install.sh
+          chmod +x dist/interjson-linux-x86_64 dist/interjson-linux-arm64 dist/interjson-macos-arm64 dist/interjson-macos-x86_64
+          (cd dist && sha256sum interjson-linux-x86_64 interjson-linux-arm64 interjson-macos-arm64 interjson-macos-x86_64 interjson-windows-x86_64.exe interjson-probe.wasm interjson-demo.js interjson-install.sh > SHA256SUMS)
           cat dist/SHA256SUMS
 
       # The release body is the section of CHANGELOG.md for this tag, not the
@@ -181,7 +205,7 @@ jobs:
       - name: Check the release contents before publishing
         run: |
           set -euo pipefail
-          want="SHA256SUMS interjson-demo.js interjson-linux-x86_64 interjson-macos-arm64 interjson-probe.wasm interjson-windows-x86_64.exe"
+          want="SHA256SUMS interjson-demo.js interjson-install.sh interjson-linux-arm64 interjson-linux-x86_64 interjson-macos-arm64 interjson-macos-x86_64 interjson-probe.wasm interjson-windows-x86_64.exe"
           actual="$(cd dist && ls -1 | sort | tr '\n' ' ' | sed 's/ $//')"
           sorted="$(printf '%s\n' $want | sort | tr '\n' ' ' | sed 's/ $//')"
           if [ "$actual" != "$sorted" ]; then

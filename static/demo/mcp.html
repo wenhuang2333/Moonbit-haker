@@ -148,7 +148,10 @@
         需要本机原生可执行文件。四个工具：<code>interjson_gate</code>（主入口，默认
         <code>agent</code> 档） / <code>interjson_repair</code> /
         <code>interjson_validate</code> / <code>interjson_readiness</code>，
-        每个都只读，并同时返回文本与 <code>structuredContent</code>。
+        每个都只读。结果分两条通道：<code>content[0].text</code> 是给模型的摘要（判定、
+        <code>executable</code>、以及拒绝时要回灌的句子），<code>structuredContent</code>
+        是完整载荷。不可执行时一定带非空的 <code>retry.prompt</code>，且 <code>value</code> 为
+        <code>null</code> —— 门拒绝的值不会同时递给调用方。
       </p>
       <p class="muted">
         不想记命令：<code>interjson mcp --print-config=claude</code> 直接打印上面那行，

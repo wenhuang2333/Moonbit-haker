@@ -12,14 +12,11 @@
 plan.mbt	450	syntactic = true
 plan.mbt	518	sb.write_string(", ")
 plan.mbt	532	sb.write_string(", ")
-plan.mbt	637	if opts.skip_prose && refused_no_json(e) && is_valid_json(input) {
 plan.mbt	646	let again : Options = { ..opts, skip_prose: false, }
 plan.mbt	648	retried = Some(analyze_once(input, again, step, schema))
 plan.mbt	650	e2 => retried = Some(plan_of_error(e2, input))
 plan.mbt	654	Some(p) => p
-plan.mbt	665	match e {
 plan.mbt	666	NoJsonFound(_) => true
-plan.mbt	667	_ => false
 plan.mbt	758	sb.write_string("  schema = ")
 plan.mbt	759	sb.write_string(self.schema_satisfied.to_string())
 plan.mbt	760	sb.write_string("/")

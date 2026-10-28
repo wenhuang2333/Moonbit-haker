@@ -168,6 +168,33 @@ pub fn Options::with_policy(self : Options, policy : SafetyPolicy) -> Options {
 }
 
 ///|
+/// The same profile applied to `self`: the safety knobs of the policy, plus
+/// the protocol the profile implies.
+///
+/// `with_policy` keeps the caller's protocol fields and replaces the safety
+/// ones, which is right for a *policy* — a risk contract on its own. A
+/// *profile* is more than that. The `agent` profile is the one a chat channel
+/// uses, and it implies `skip_prose`, because a model in a chat channel
+/// routinely answers with a sentence before the arguments and that sentence
+/// is not part of the arguments.
+///
+/// Applying only the safety half is not a small difference. The MCP gate
+/// selects its profile by name, so the gate's `agent` profile was the agent
+/// profile's safety knobs without its protocol, and the most common shape of
+/// model output — `Here are the args:\n{"a":1}` — was refused with `E002` by
+/// the tool whose entire job is to accept it. There is now one place that
+/// says what a profile means, and both the library preset and the
+/// name-selecting callers go through it.
+pub fn Options::with_profile(self : Options, policy : SafetyPolicy) -> Options {
+  let out = self.with_policy(policy)
+  if policy.name() == "agent" {
+    { ..out, skip_prose: true, }
+  } else {
+    out
+  }
+}
+
+///|
 /// The policy a set of options corresponds to, or `None` when the options are
 /// not one of the five documented profiles.
 ///

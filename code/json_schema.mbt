@@ -336,6 +336,23 @@ fn json_schema_constraints(
 ///|
 /// Translate one JSON Schema node into a skeleton.
 fn json_schema_node(v : Json) -> Schema raise InterJSONError {
+  json_schema_node_at(v, 0)
+}
+
+///|
+/// The recursive half of `json_schema_node`, carrying the current depth.
+///
+/// A declaration is external input -- it is the tool's `inputSchema`, supplied
+/// by a host -- so it must not be able to exhaust the stack. The limit is
+/// `MAX_SCHEMA_DEPTH` and the failure is a documented `E070`, not a crash.
+fn json_schema_node_at(v : Json, depth : Int32) -> Schema raise InterJSONError {
+  if depth > MAX_SCHEMA_DEPTH {
+    raise SchemaError(
+      "json schema: declaration nests deeper than " +
+      MAX_SCHEMA_DEPTH.to_string() +
+      " levels",
+    )
+  }
   match v {
     Json::Object(obj) => {
       // Walk every keyword first so an unsupported one is named even if another
@@ -409,7 +426,7 @@ fn json_schema_node(v : Json) -> Schema raise InterJSONError {
         Str
       } else if kind_name == "array" {
         let item = match obj.get("items") {
-          Some(s) => json_schema_node(s)
+          Some(s) => json_schema_node_at(s, depth + 1)
           None => Any
         }
         Arr(item)
@@ -426,7 +443,7 @@ fn json_schema_node(v : Json) -> Schema raise InterJSONError {
               members.push({
                 key,
                 required: required.get(key).unwrap_or(false),
-                schema: json_schema_node(sub),
+                schema: json_schema_node_at(sub, depth + 1),
               })
               seen[key] = true
             }

@@ -250,6 +250,7 @@ def run_mcp(binary: str) -> list[str]:
         # A notification must produce no response: the next line must be the
         # ping's answer, not an empty notification answer. A request without an
         # `id` is a notification too, so `tools/list` sent that way is silent.
+        # (The handshake has been answered above, so the session is open.)
         connection.send({"jsonrpc": "2.0", "method": "tools/list"})
         connection.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
         connection.send({"jsonrpc": "2.0", "id": 2, "method": "ping"})
@@ -290,18 +291,30 @@ def run_mcp(binary: str) -> list[str]:
             }
         )
         call = connection.read()
+        # The machine-readable payload is `structuredContent`. The text channel
+        # is a summary for the model, not a second copy of the payload, so the
+        # two are deliberately different objects now.
+        plan = call.get("result", {}).get("structuredContent")
         content = call.get("result", {}).get("content", [{}])[0].get("text", "")
-        try:
-            plan = json.loads(content)
-        except json.JSONDecodeError:
-            failures.append(f"tools/call content is not JSON: {content[:120]!r}")
+        if not isinstance(plan, dict):
+            failures.append("gate result carries no structuredContent object")
             plan = {}
         if plan.get("executable") is not False:
             failures.append(f"gate default profile executed a truncated value: {plan}")
         if "E010" not in (plan.get("retry") or {}).get("prompt", ""):
             failures.append("gate refusal did not carry an E010 retry prompt")
-        if call.get("result", {}).get("structuredContent") != plan:
-            failures.append("gate structuredContent is not the same object as the text channel")
+        # A refusal is a refusal on every channel: no value, and a prompt the
+        # caller can send straight back to the model.
+        if plan.get("executable") is False:
+            if plan.get("value") is not None:
+                failures.append("a non-executable plan still carried a value")
+            if not (plan.get("retry") or {}).get("prompt"):
+                failures.append("a non-executable plan carried no retry prompt")
+        # The text channel must still be actionable and must not be the payload.
+        if "decision=" not in content or "executable=" not in content:
+            failures.append(f"gate text channel is not a summary: {content[:120]!r}")
+        if "retry (send this back to the model)" not in content:
+            failures.append("gate text channel did not repeat the retry prompt")
 
         # A two-reading repair is reported, not executed.
         connection.send(
@@ -319,9 +332,7 @@ def run_mcp(binary: str) -> list[str]:
             }
         )
         ambiguous = connection.read()
-        ambiguous_plan = json.loads(
-            ambiguous.get("result", {}).get("content", [{}])[0].get("text", "{}")
-        )
+        ambiguous_plan = ambiguous.get("result", {}).get("structuredContent") or {}
         if ambiguous_plan.get("decision") != "ambiguous" or ambiguous.get(
             "result", {}
         ).get("isError"):
@@ -357,8 +368,114 @@ def run_mcp(binary: str) -> list[str]:
             }
         )
         unknown_tool = connection.read()
-        if unknown_tool.get("result", {}).get("isError") is not True:
-            failures.append("unknown tool did not produce an isError tool result")
+        if unknown_tool.get("error", {}).get("code") != -32602:
+            failures.append(
+                f"unknown tool: expected -32602, got {unknown_tool.get('error')}"
+            )
+
+        # A non-object `arguments` is a bad request, not an empty argument set.
+        connection.send(
+            {
+                "jsonrpc": "2.0",
+                "id": 11,
+                "method": "tools/call",
+                "params": {"name": "interjson_gate", "arguments": "not an object"},
+            }
+        )
+        bad_args = connection.read()
+        if bad_args.get("error", {}).get("code") != -32602:
+            failures.append(
+                f"non-object arguments: expected -32602, got {bad_args.get('error')}"
+            )
+
+        # The agent profile is the profile the library documents, protocol
+        # included: a model in a chat channel writes a sentence before the
+        # arguments, and the gate exists to accept that. This is the shape the
+        # tool description promises and the one that used to be refused.
+        connection.send(
+            {
+                "jsonrpc": "2.0",
+                "id": 12,
+                "method": "tools/call",
+                "params": {
+                    "name": "interjson_gate",
+                    "arguments": {"text": 'Here are the args:\n{"a":1}'},
+                },
+            }
+        )
+        prose = connection.read()
+        prose_plan = prose.get("result", {}).get("structuredContent") or {}
+        if prose_plan.get("executable") is not True:
+            failures.append(
+                f"gate default profile refused a prose-prefixed argument: {prose_plan.get('error')}"
+            )
+        if prose_plan.get("value") != {"a": 1}:
+            failures.append(f"gate did not return the parsed value: {prose_plan.get('value')}")
+
+        # ...while `execution` is not the agent profile and must still refuse it.
+        connection.send(
+            {
+                "jsonrpc": "2.0",
+                "id": 13,
+                "method": "tools/call",
+                "params": {
+                    "name": "interjson_gate",
+                    "arguments": {"text": 'Here are the args:\n{"a":1}', "profile": "execution"},
+                },
+            }
+        )
+        strict_plan = connection.read().get("result", {}).get("structuredContent") or {}
+        if strict_plan.get("executable") is not False:
+            failures.append("the execution profile accepted prose-prefixed arguments")
+
+        # A declaration the value does not satisfy is a refusal with a prompt,
+        # not a refusal with a value and a null retry.
+        connection.send(
+            {
+                "jsonrpc": "2.0",
+                "id": 14,
+                "method": "tools/call",
+                "params": {
+                    "name": "interjson_gate",
+                    "arguments": {
+                        "text": '{"a":1}',
+                        "schema_json": {
+                            "type": "object",
+                            "properties": {"a": {"type": "string"}},
+                            "required": ["a"],
+                        },
+                    },
+                },
+            }
+        )
+        schema_plan = connection.read().get("result", {}).get("structuredContent") or {}
+        if schema_plan.get("executable") is not False:
+            failures.append("a value that fails its declaration was executable")
+        if schema_plan.get("value") is not None:
+            failures.append("a value that fails its declaration was still returned")
+        if not (schema_plan.get("retry") or {}).get("prompt"):
+            failures.append("a declaration failure carried no retry prompt")
+
+        # The outputSchema of every tool must describe what the tool returns.
+        # A schema that does not validate its own payload is worse than none:
+        # a host that trusts it rejects valid responses.
+        for tool in declared:
+            schema = tool.get("outputSchema") or {}
+            if schema.get("type") != "object":
+                failures.append(f"{tool.get('name')}: outputSchema is not an object")
+                continue
+            if not schema.get("properties"):
+                failures.append(f"{tool.get('name')}: outputSchema declares no properties")
+            if schema.get("additionalProperties") is not False:
+                failures.append(f"{tool.get('name')}: outputSchema is not closed")
+            required = set(schema.get("required") or [])
+            declared_props = set((schema.get("properties") or {}).keys())
+            if not required <= declared_props:
+                failures.append(f"{tool.get('name')}: outputSchema requires undeclared members")
+            if tool.get("name") == "interjson_gate":
+                for field in ("decision", "executable", "exactness", "value", "retry"):
+                    if field not in declared_props:
+                        failures.append(f"gate outputSchema omits `{field}`")
 
         connection.send({"jsonrpc": "2.0", "id": 8, "method": "nope"})
         unknown = connection.read()
@@ -416,7 +533,20 @@ def run_mcp(binary: str) -> list[str]:
         try:
             assert alias_proc.stdin is not None and alias_proc.stdout is not None
             alias_proc.stdin.write(
-                json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}) + "\n"
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {"protocolVersion": "2025-06-18"},
+                    }
+                )
+                + "\n"
+            )
+            alias_proc.stdin.flush()
+            alias_proc.stdout.readline()
+            alias_proc.stdin.write(
+                json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}) + "\n"
             )
             alias_proc.stdin.flush()
             alias_tools = json.loads(alias_proc.stdout.readline())
@@ -450,6 +580,47 @@ def run_mcp(binary: str) -> list[str]:
             failures.append(f"unsupported protocol version: expected 2025-06-18, got {unsupported}")
     finally:
         probe.close()
+
+    # `2025-03-26` is a revision this server implements and must echo.
+    mid = Connection(binary, "mcp")
+    try:
+        mid.send(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"protocolVersion": "2025-03-26"},
+            }
+        )
+        echoed = mid.read().get("result", {}).get("protocolVersion")
+        if echoed != "2025-03-26":
+            failures.append(f"2025-03-26: expected it echoed, got {echoed}")
+    finally:
+        mid.close()
+
+    # MCP is a session protocol: a request before `initialize` is `-32002`,
+    # and `initialize` is answered even though nothing came before it.
+    fresh = Connection(binary, "mcp")
+    try:
+        fresh.send({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        early = fresh.read()
+        if early.get("error", {}).get("code") != -32002:
+            failures.append(
+                f"tools/list before initialize: expected -32002, got {early.get('error')}"
+            )
+        fresh.send({"jsonrpc": "2.0", "id": 2, "method": "ping"})
+        if fresh.read().get("id") != 2:
+            failures.append("ping before initialize was not answered")
+        fresh.send(
+            {"jsonrpc": "2.0", "id": 3, "method": "initialize", "params": {}}
+        )
+        if "result" not in fresh.read():
+            failures.append("initialize was not answered on a fresh session")
+        fresh.send({"jsonrpc": "2.0", "id": 4, "method": "tools/list"})
+        if "result" not in fresh.read():
+            failures.append("tools/list after initialize was not answered")
+    finally:
+        fresh.close()
     return failures
 
 

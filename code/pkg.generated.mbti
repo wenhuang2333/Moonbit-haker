@@ -2,6 +2,14 @@
 package "zhanshishan/interjson"
 
 // Values
+pub const MAX_SCHEMA_DEPTH : Int32 = 256
+
+pub const MAX_VALUE_DEPTH : Int32 = 512
+
+pub const REGISTRY_VERSION : String = "0.12.0"
+
+pub const VERSION : String = "1.5.0"
+
 pub fn advice_for(PlanOp) -> String
 
 pub fn analyze(String, options? : Options, readiness? : Int32, schema? : Schema) -> RepairPlan
@@ -258,11 +266,13 @@ pub fn Options::default() -> Self
 pub fn Options::for_agent() -> Self
 pub fn Options::for_execution() -> Self
 pub fn Options::for_llm() -> Self
+pub fn Options::for_profile(Self, String) -> Self?
 pub fn Options::for_text() -> Self
 pub fn Options::lenient() -> Self
 pub fn Options::strict() -> Self
 pub fn Options::validate(Self) -> Unit raise InterJSONError
 pub fn Options::with_policy(Self, SafetyPolicy) -> Self
+pub fn Options::with_profile(Self, SafetyPolicy) -> Self
 
 pub(all) struct ParseResult {
   value : Json
@@ -397,6 +407,7 @@ pub(all) enum RepairCode {
   NormalizeLiteral
 }
 pub fn RepairCode::code(Self) -> String
+pub fn RepairCode::count() -> Int32
 pub fn RepairCode::equal(Self, Self) -> Bool
 pub fn RepairCode::message(Self) -> String
 pub fn RepairCode::name(Self) -> String

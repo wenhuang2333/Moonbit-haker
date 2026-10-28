@@ -90,24 +90,64 @@ export function repairResult(input: string, options?: AnalyzeOptions): RepairOut
 /** The never-throwing decision call: returns the full plan object. */
 export function analyze(input: string, options?: AnalyzeOptions): Plan;
 
+/**
+ * The gate, with the profile the MCP tools use (`agent`).
+ *
+ * Use this rather than `analyze` when the question is "may I execute this?":
+ * it is the same call the `interjson_gate` MCP tool makes, so the npm package
+ * and the MCP server cannot disagree about the same input.
+ */
+export function gate(input: string, options?: AnalyzeOptions): Plan;
+
 /** One line per repair, or `-`. */
 export function report(input: string): string;
 
-/** Partial value of the first `upto` code units: `value | state | path`. */
-export function snapshot(input: string, upto: number): string;
+/** The partial value of the first `upto` code units, as fields. */
+export interface Snapshot {
+  /** The partial value, or `null` when nothing has been parsed yet. */
+  value: unknown;
+  /** `Empty`, `Partial` or `Complete`. */
+  completeness: string;
+  /** The path of the container still open, or `""`. */
+  openPath: string;
+}
+export function snapshot(input: string, upto: number): Snapshot;
+
+/** The engine's own `value | completeness | openPath` string. */
+export function snapshotText(input: string, upto: number): string;
 
 /** One frame of the streaming view (a JSON object). */
 export function live(input: string, upto: number, schema?: string): unknown;
 
+/** The readiness curve for `input` against a skeleton declaration. */
+export function readiness(input: string, schema?: string): unknown;
+
+/** The delta stream for the first `upto` code units. */
+export function deltas(input: string, upto: number): unknown;
+
+/**
+ * A structured refusal: `code` is the `E` code (`E010`, `E011`, `E070`, …)
+ * and `detail` is the message without the code.
+ */
+export class InterJSONError extends Error {
+  code: string;
+  detail: string;
+}
+
 export const version: string;
 
 declare const api: {
+  InterJSONError: typeof InterJSONError;
   repair: typeof repair;
   repairResult: typeof repairResult;
   analyze: typeof analyze;
+  gate: typeof gate;
   report: typeof report;
   snapshot: typeof snapshot;
+  snapshotText: typeof snapshotText;
   live: typeof live;
+  readiness: typeof readiness;
+  deltas: typeof deltas;
   version: string;
 };
 export default api;

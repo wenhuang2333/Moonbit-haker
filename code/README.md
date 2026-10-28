@@ -12,12 +12,12 @@ question for host-side callers (`serve`, npm, pip, HTTP).
 | | |
 | --- | --- |
 | Module | `zhanshishan/interjson` |
-| Version | 1.4.0 |
+| Version | 1.5.0 |
 | License | Apache-2.0 |
-| MCP server | `interjson mcp`, also `interjson-mcp`; JSON-RPC 2.0 over stdio, protocol `2025-06-18` (`2024-11-05` accepted) |
+| MCP server | `interjson mcp`, also `interjson-mcp`; JSON-RPC 2.0 over stdio, protocol `2025-06-18` (`2025-03-26` and `2024-11-05` accepted) |
 | Backends | wasm-gc, native, JS, wasm — one test suite, all four |
-| Prebuilt binaries | [Release `v1.4.0`](https://github.com/wenhuang2333/Moonbit-haker/releases/tag/v1.4.0) — Linux, macOS arm64 and Windows `interjson` CLIs, wasm probe, browser bundle, `SHA256SUMS`. Older releases were published under the former name and keep the old asset prefix |
-| Registry | [`mooncakes.io zhanshishan/interjson`](https://mooncakes.io/docs/zhanshishan/interjson) — 0.11.0 (the 1.4.0 correspondence) is published; older releases are under the former name `zhanshishan/jsonmend` |
+| Prebuilt binaries | The GitHub release — Linux x86_64, macOS arm64 and Windows x86_64 `interjson` CLIs, wasm probe, browser bundle, `SHA256SUMS`, plus the `interjson-install.sh` one-command installer. Older releases were published under the former name and keep the old asset prefix |
+| Registry | [`mooncakes.io zhanshishan/interjson`](https://mooncakes.io/docs/zhanshishan/interjson) — 0.12.0 is the 1.5.0 correspondence and is **not published yet**; 0.11.0 (the 1.4.0 correspondence) is published; older releases are under the former name `zhanshishan/jsonmend` |
 | Deployment guide | [`docs/MCP.md`](docs/MCP.md) for the MCP server; [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) for host-side recipes |
 
 ## The gate
@@ -35,9 +35,23 @@ the server locally and can then ask:
 
 `interjson_gate` defaults to the `agent` profile when the caller omits one:
 a lossy or ambiguous repair is refused instead of guessed, and the refusal
-carries a prompt that can be sent straight back to the model. Every tool is
+carries a prompt that can be sent straight back to the model. That default is
+exactly `Options::for_agent()`, protocol included: prose before the arguments
+(`Here are the args:\n{"a":1}`) is skipped, not refused. Every tool is
 annotated read-only, idempotent, non-destructive and closed-world; the server
 never executes the JSON it inspects.
+
+**The refusal contract:** a result with `executable == false` always carries a
+non-empty `retry.prompt` and `value: null`; an executable result always
+carries a live `value` and `retry: null`. `content[0].text` is a summary the
+model can act on; `structuredContent` is the payload, once.
+
+**MCP is advisory.** `interjson_gate` is a tool the model *may* call, and
+nothing in MCP makes the host check the answer — a model can decline to call
+it. What makes the gate mandatory is a host-side insertion point: a Claude Code
+`PreToolUse` hook, a `gate(args)` call in the host SDK, or `interjson serve` /
+npm / pip / HTTP. Recipes:
+[`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md#making-the-gate-mandatory).
 
 ### 60-second setup
 
@@ -300,7 +314,7 @@ Every field of `Options`. `@interjson.Options::default()` is the documented defa
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `mode` | `Mode` | `Lenient` | `Lenient` records repairs; `Strict` raises `E010` at the first one. |
-| `max_depth` | `Int32` | `512` | Maximum container nesting; exceeding it raises `E020`. |
+| `max_depth` | `Int32` | `512` | Maximum container nesting; exceeding it raises `E020`. The ceiling is `MAX_VALUE_DEPTH = 512`, which is also the default, so a caller can tighten it but not loosen it: a larger value is refused with `E050` (see [Known limitations](#known-limitations)). |
 | `max_input_len` | `Int32` | `67108864` | Maximum input length in UTF-16 code units; exceeding it raises `E021`. |
 | `max_token_len` | `Int32` | `16777216` | Maximum length of one token in code units; exceeding it raises `E022`. |
 | `duplicate_keys` | `DuplicateKeys` | `KeepLast` | `KeepLast`, `KeepFirst`, or `AsError` for duplicate object keys (`R018`). |
@@ -320,7 +334,7 @@ Every field of `Options`. `@interjson.Options::default()` is the documented defa
 | `max_loss` | `Exactness` | `Lossy` | Highest acceptable exactness. The first record that exceeds it raises `E010` with that code and position. `Options::for_execution()` sets `Cosmetic`. |
 | `collect_deltas` | `Bool` | `false` | Collect incremental deltas; read them with `PartialParser::drain_deltas()`. Cannot be combined with `duplicate_keys: KeepFirst` or `incomplete_number: TrimToValid`. |
 
-Invalid values (`max_depth <= 0`, `max_input_len <= 0`, `max_token_len <= 0`, `max_repairs <= 0`, `indent < 0`) raise `E050` from `Options::validate`, which `repair`, `parse`, and `PartialParser::new` call for you.
+Invalid values (`max_depth <= 0` or `> MAX_VALUE_DEPTH`, `max_input_len <= 0`, `max_token_len <= 0`, `max_repairs <= 0`, `indent < 0`) raise `E050` from `Options::validate`, which `repair`, `parse`, and `PartialParser::new` call for you. A declaration (JSON Schema or the skeleton language) deeper than `MAX_SCHEMA_DEPTH = 256` raises `E070`.
 
 ## Repair rules overview
 
@@ -362,7 +376,7 @@ A `Repair` carries `code : RepairCode`, `position : Position`, `severity : Sever
 | `E001` | `EmptyInput` | The input is empty or whitespace only. |
 | `E002` | `NoJsonFound` | No JSON value can be found (payload is the offset). |
 | `E010` | `StrictViolation` | Strict mode, or a disabled rule, rejects a repair (payload is the code, position, and message). |
-| `E020` | `DepthLimit` | Nesting exceeds `max_depth`. |
+| `E020` | `DepthLimit` | Nesting exceeds `max_depth`. The bound exists because three recursive walks (`copy_json`, `json_equal`, `walk_schema`) and the engine's frame stack are bounded by `MAX_VALUE_DEPTH = 512`; the wasm backend's stack overflows in a recursive walk between 896 and 1024 frames. |
 | `E021` | `SizeLimit` | Input exceeds `max_input_len`. |
 | `E022` | `TokenLimit` | A token exceeds `max_token_len`. |
 | `E030` | `InvalidState` | `feed` after `finish`, or `finish` called twice or after a fatal error. |
@@ -432,7 +446,7 @@ Flags and their meanings:
 | `--json` | With `explain`: the machine-readable plan instead of the text block. |
 | `--with-text` | With `explain --json`: include the repaired text, which the plan otherwise omits. |
 | `--max-input-len N` | Maximum input length in UTF-16 code units (default 67108864; `E021`). |
-| `--max-depth N` | Maximum container nesting (default 512; `E020`). |
+| `--max-depth N` | Maximum container nesting (default 512; `E020`). Above `MAX_VALUE_DEPTH = 512` the option itself is refused with `E050` — the ceiling is the default, so the flag can only tighten. |
 | `--max-token-len N` | Maximum length of one token (default 16777216; `E022`). |
 | `--max-prose-buffer N` | With `--skip-prose`, how many code units of prelude may be buffered for the end replay (default 65536). |
 | `--chunk N` | Feed the input in N-code-unit chunks (≤1048576) to exercise the streaming path. |
@@ -441,7 +455,7 @@ Flags and their meanings:
 | `serve` (subcommand) | The versioned JSONL protocol; `--stdio` is accepted and selects nothing, because stdio is the only transport. |
 | `mcp` (subcommand) | The MCP server. `interjson mcp --help` documents it; `--print-config[=CLIENT]` prints a client configuration (`claude`, `cursor`, `vscode`, `codex`, `windsurf`, `zed`, `json`). |
 | `-h`, `--help` | Show help. |
-| `--version` | Show the version (`interjson 1.4.0`). |
+| `--version` | Show the version (`interjson 1.5.0`). |
 | file, or `-` | Read a file; `-` or an omitted argument reads standard input. |
 
 `--indent=N`, `--multi-root=MODE`, and `--max-repairs=N` are accepted as equivalent to the space-separated forms.
@@ -468,7 +482,7 @@ moon test                      # default backend (wasm-gc)
 moon test --target native      # host backend
 moon test --target js          # JavaScript backend
 moon test --target wasm        # wasm backend
-bash tests/cli_smoke.sh        # 106 command line assertions, including the MCP checks
+bash tests/cli_smoke.sh        # 120 command line assertions, including the MCP checks
 bash tests/examples.sh         # example inputs vs code/examples/cases/*.expected
 node ../code/tests/demo_smoke.mjs   # the committed browser bundle still answers
 python3 tests/diff/run_diff.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe
@@ -485,7 +499,7 @@ python3 tests/conformance/run_conformance.py --cli ./_build/native/release/build
 moon run examples/agent_loop --target native --release
 ```
 
-| Suite | Size | Result (1.4.0) |
+| Suite | Size | Result (1.5.0) |
 | --- | --- | --- |
 | Golden cases (spec appendices A and B) | 126 | pass |
 | Documented streaming cases (S-001…S-021) + chunk invariance | 21 + invariance checks | pass |
@@ -502,11 +516,11 @@ moon run examples/agent_loop --target native --release
 | Schema readiness table | 10 scenarios | 6 with a gap (713‰–908‰), 4 where both fractions arrive at the end ([docs/READINESS.md](docs/READINESS.md)) |
 | Public surface (every `R` code and `E` code) | 22 + 12 codes checked field by field | pass |
 | Ground-truth evaluation (protocol frozen first) | 1200 cases (19 mutation families + 1 control × 60) | recovery **100.00%**, 0 mislabelled, 4/4 pre-registered criteria PASS |
-| Command line smoke (exit codes 0/1/2/3/4/5/70) | 106 assertions, including the `explain` surface and the MCP config/initialize checks | pass |
+| Command line smoke (exit codes 0/1/2/3/4/5/70) | 120 assertions, including the `explain` surface and the MCP config/initialize checks | pass |
 | Differential corpus against `jsonrepair` / `json-repair` | 402 cases | 202 divergences, all documented, 0 unexplained |
-| Line coverage of the library | 3748/3983 lines (root), 337/391 (`llm`) | 94.1% / 86.2% (`moon coverage` cannot instrument the `cmd` package, which calls `quit()`; within the root package the weakest file is `llm/text.mbt` at 72.5% across the library and `hint.mbt` at 90.7% inside the root package) |
+| Line coverage of the library | 3851/4115 lines (root), 337/391 (`llm`) | 93.6% / 86.2% (`moon coverage` cannot instrument the `cmd` package, which calls `quit()`; within the root package the weakest file is `llm/text.mbt` at 72.5% across the library and `hint.mbt` at 90.7% inside the root package) |
 
-Cross-backend results are identical: 217/217 tests pass on each of wasm-gc,
+Cross-backend results are identical: 243/243 tests pass on each of wasm-gc,
 native, JS and wasm (868 runs). `.github/workflows/ci.yml` runs the same commands on every push, so
 the numbers above are re-derived rather than trusted. Reproduction steps,
 thresholds and the known shortfalls are in
@@ -594,16 +608,21 @@ separately from the process. The full method, tables and decision records are in
 - **Repair records are capped by `max_repairs` (default 10000).** Further repairs are applied but not recorded, and the result sets `repairs_truncated`; the CLI prints a note to standard error.
 - **Incremental deltas are correct but not cheap.** Each change allocates one `Delta` plus a path array, so a 1 MB document produces ~195 000 records and takes 1.40–1.46 × the baseline. The text tail now uses a cursor, so draining a long string in small chunks no longer rescans the prefix (1 MiB / 64-code-unit chunks: 374 ms → 201 ms); the per-delta allocation is unchanged. In the agent scenario (4 KB, 3-code-unit chunks) the whole stream is 0.115 ms, so the overhead is not on the critical path and the compact buffer is no longer the next thing to build.
 - **`--skip-prose` recovers a bare scalar root, not prose followed by one.** `'ok'`, `True`, `+1`, `42 // done` and a fenced `42` are recovered; prose followed by a scalar (`Sure!\n42`) still raises `E002`, and so does a scalar with a tail (`42 is the answer`).
-- **Memory is 13.7 × the input for `repair()`** (177.9 MB for a 12.95 MB document). On the same input Node's `JSON.parse` is 10.6 × and Python's `json.loads` is 14.3 ×, so **a 4 × budget is not realistic for any tree-building parser**, Node included. `--check` skips rendering and peaks at 7.6 ×; the byte fast path cuts a 10 MB single string from 38 × to 9.4 ×. Reaching 4 × still requires a "render text without building a tree" mode ([docs/MEMORY.md](docs/MEMORY.md)).
+- **Memory is 13.7 × the input for `repair()`** (177.9 MB for a 12.95 MB document). On the same input Node's `JSON.parse` is 10.6 × and Python's `json.loads` is 14.3 ×, so **a 4 × budget is not realistic for any tree-building parser**, Node included. `--check` skips rendering and peaks at 8.0 × (103.6 MB, a single-machine observation on the same input); the byte fast path cuts a 10 MB single string from 38 × to 9.4 ×. Reaching 4 × still requires a "render text without building a tree" mode ([docs/MEMORY.md](docs/MEMORY.md)).
 - **The per-feed p99 is only an upper bound.** The runtime clock is millisecond-resolution and exposes no allocation counter, so the scenario benchmark reports an amortised µs/feed plus the count of feeds that reached the clock resolution (`docs/BENCHMARK.md`).
 - **The readiness curve covers top-level members only.** A nested member (`{"arguments":{…}}`) is ready only when its container closes; the curve costs ~1.8 ms/KiB, and early stopping saves ~0 on flat records by construction.
 - **Text mode does not skip prose by default.** `--skip-prose` starts a value at `{` or `[`, and a scalar root is recovered by the `finish` replay; prose followed by a scalar root still raises `E002` because where the prose ends is undecidable.
 - **The JS backend still allocates one `Position` per code unit.** The n/2n/4n ratio therefore reaches 2.3–2.8 against a 2.3 target. Absolute throughput is well above the 5 MB/s floor, so this is recorded as a decision rather than fixed.
 - **Parser instances are not thread-safe.** Use one instance per input stream.
+- **`max_depth` can only be tightened, not loosened.** `Options::max_depth` is capped at `MAX_VALUE_DEPTH = 512`, which is also the documented default, so a caller can ask for less nesting but a larger value is refused with `E050` instead of being honoured. The ceiling is not a policy choice: three recursive walks (`copy_json`, `json_equal`, `walk_schema`) and the engine's own frame stack are bounded by it, and the wasm backend's stack overflows in a recursive walk between 896 and 1024 frames — a higher ceiling would turn the documented `E020` back into the crash it exists to prevent. Declarations have a tighter, separate bound: `MAX_SCHEMA_DEPTH = 256`, refused with `E070`.
+- **The refusal contract changed in 1.5.0.** In 1.4.x a plan that was *accepted* but not executable (a lossy repair under `permissive`, or a value that fails its declaration) serialised as `"retry": null` while still carrying a live `value` — the one shape a host must never see, and a refusal with no prompt to send back. Now `executable == false` implies `value: null`, `text: ""` and a non-empty `retry.prompt`, under every profile. A 1.4.x caller that branched on `retry == null` must branch on `executable` instead; one that branched on `value != null` gets the same answer as before.
+- **`json_equal` compared numbers as `Double` in 1.4.x**, so `9007199254740993` and `9007199254740992` (adjacent integers past 2^53) were treated as the same value and a duplicate-key merge that silently changed one was recorded as harmless (`Info`). It now compares exact decimal values: that case is `Warning` and refused. Merging `1` with `1.0` is still cosmetic.
+- **The rule table was one slot short in 1.4.x.** `RuleSet::all()` used a literal 22 while `RepairCode::number()` is 1-based, so `R022 NormalizeLiteral` fell outside the table; `is_enabled` returned `true` for an out-of-range code, which made `disable(R022)` a silent no-op. The table is now sized from `RepairCode::count()` and out-of-range is fail-closed.
+- **MCP is advisory.** `interjson_gate` is a tool the model may call; a model can skip it and the protocol gives the host no way to require it. A Claude Code `PreToolUse` hook or a host-SDK `gate()` is what makes the gate mandatory — see `docs/INTEGRATIONS.md`.
 
 ## Roadmap
 
-- ~~Publish on mooncakes.io~~: the published history (0.3.0 … **0.8.1**) is under the former package name `zhanshishan/jsonmend`; the renamed `zhanshishan/interjson` starts at **0.11.0** (the registry counterpart of 1.4.0), published on 2026-10-27. `1.x` cannot be published because mooncakes currently only accepts `0.x.y`; patch and minor digits follow the release order (`1.1.x` ↔ `0.8.x`, `1.2.x` ↔ `0.9.x`, `1.3.x` ↔ `0.10.x`, `1.4.x` ↔ `0.11.x`). The bytes are identical except for the version string and the registry package name.
+- ~~Publish on mooncakes.io~~: the published history (0.3.0 … **0.8.1**) is under the former package name `zhanshishan/jsonmend`; the renamed `zhanshishan/interjson` starts at **0.11.0** (the registry counterpart of 1.4.0), published on 2026-10-27. **1.5.0 / 0.12.0 is not published yet** — no tag, no release, no registry upload; `1.5.x` ↔ `0.12.x`. `1.x` cannot be published because mooncakes currently only accepts `0.x.y`; patch and minor digits follow the release order (`1.1.x` ↔ `0.8.x`, `1.2.x` ↔ `0.9.x`, `1.3.x` ↔ `0.10.x`, `1.4.x` ↔ `0.11.x`). The bytes are identical except for the version string and the registry package name.
 - ~~A browser tab that plays a model stream~~: `static/demo/live.html`, also published at <https://wenhuang2333.github.io/Moonbit-haker/live.html>.
 - ~~Readiness for the members the caller actually needs~~: `Schema` + `semantic_readiness`.
 - ~~Constraints in the declaration~~: `minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern` (a character-class subset, not a regex) landed in 0.7.0.

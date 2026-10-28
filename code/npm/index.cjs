@@ -49,9 +49,29 @@ function profileOf(options) {
   return profile;
 }
 
+/**
+ * A structured refusal from the engine.
+ *
+ * The engine's string channel reports a failure as `ERROR: E010 ...`, and the
+ * package used to detect that with a prefix test and throw a bare `Error`
+ * whose message was the rest of the line. A caller that wanted the code, or
+ * the position, had to parse the message back out of an exception. This class
+ * keeps them as fields, and it still subclasses `Error`, so `catch (e) { e.message }`
+ * keeps working.
+ */
+class InterJSONError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "InterJSONError";
+    const match = /^(E\d{3})\b\s*(.*)$/.exec(message);
+    this.code = match ? match[1] : "";
+    this.detail = match ? match[2] : message;
+  }
+}
+
 function unwrap(text) {
   if (text.startsWith("ERROR: ")) {
-    throw new Error(text.slice("ERROR: ".length));
+    throw new InterJSONError(text.slice("ERROR: ".length));
   }
   return text;
 }
@@ -116,8 +136,25 @@ function report(input) {
   return engine.report(input);
 }
 
-/** The partial value of the first `upto` code units, as `value | state | path`. */
+/**
+ * The partial value of the first `upto` code units.
+ *
+ * The engine's own snapshot is a `value | completeness | open path` string,
+ * which is what the browser demo draws. A programmatic caller wants the
+ * three fields separately, so they are returned as an object: the string
+ * form is still available through `snapshotText`.
+ */
 function snapshot(input, upto) {
+  const parts = snapshotText(input, upto).split(" | ");
+  return {
+    value: parts.length > 0 && parts[0] !== "-" ? JSON.parse(parts[0]) : null,
+    completeness: parts.length > 1 ? parts[1] : "",
+    openPath: parts.length > 2 ? parts[2] : "",
+  };
+}
+
+/** The partial value of the first `upto` code units, as `value | state | path`. */
+function snapshotText(input, upto) {
   requireString("snapshot", input);
   return engine.snapshot(input, upto | 0);
 }
@@ -128,13 +165,50 @@ function live(input, upto, schema = "") {
   return JSON.parse(engine.live(input, upto | 0, schema));
 }
 
+/**
+ * The readiness curve for `input` against a skeleton declaration: the three
+ * document-level numbers, every field-ready event, and the verdict.
+ */
+function readiness(input, schema = "") {
+  requireString("readiness", input);
+  return JSON.parse(engine.readiness(input, schema));
+}
+
+/**
+ * The delta stream for the first `upto` code units: the protocol a consumer
+ * subscribes to instead of re-reading the document on every frame.
+ */
+function deltas(input, upto) {
+  requireString("deltas", input);
+  return JSON.parse(engine.deltas(input, upto | 0));
+}
+
+/**
+ * The gate, with the profile the MCP tools use.
+ *
+ * `analyze` with no profile used to run the *permissive* profile -- the
+ * library's default -- while the MCP gate, which is the product, runs the
+ * `agent` profile. A caller who read the MCP documentation and then called
+ * the npm package got a different answer from the same input. The npm package
+ * is the same product, so it defaults to the same profile; `permissive` is
+ * one explicit argument away.
+ */
+function gate(input, options = {}) {
+  return analyze(input, { profile: "agent", ...options });
+}
+
 module.exports = {
+  InterJSONError,
   repair,
   repairResult,
   analyze,
+  gate,
   report,
   snapshot,
+  snapshotText,
   live,
+  readiness,
+  deltas,
   // The engine version is the package version: one declaration, one source.
   // A literal here went stale once already (it said 1.1.0 while the
   // package was 1.1.1), and nothing noticed, because the test pinned the

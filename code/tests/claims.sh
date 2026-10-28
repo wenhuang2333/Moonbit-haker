@@ -15,7 +15,11 @@
 # the machine. The coverage percentages are the only machine-dependent ones and
 # they move only when the code moves.
 
-set -uo pipefail
+# `-e` is on: the gate has to be able to fail on its own errors, not only on
+# the numbers it checks. Without it a command that dies half way through --
+# a test run that crashes, a build that does not finish -- leaves the gate
+# reporting success on the figures it managed to derive before the failure.
+set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CODE="$ROOT/code"
@@ -31,21 +35,42 @@ fail() {
 }
 
 # derive <key> <value> <command>...
+#
+# An empty value is a failure. The old version recorded it and moved on, so a
+# measurement that came back empty -- a test run that produced no count, a
+# build that failed -- left the gate reporting success on the figures it did
+# manage to read. A figure that cannot be derived cannot be checked, and a
+# figure that cannot be checked is exactly what this gate exists to catch.
 derive() {
   local key="$1" value="$2"; shift 2
+  if [ -z "$value" ]; then
+    fail "could not derive '$key' from: $*"
+    return 0
+  fi
   DERIVED+=("$key=$value")
   printf '%-28s %-16s  (%s)\n' "$key" "$value" "$*"
 }
 
 # The documents are searched for a literal string. `grep -F` is used so that
 # `.` in a version or a ratio is not a wildcard.
+# Every document that is published -- that is, every document the `.gitignore`
+# whitelist lets into GitHub -- is searched for the figures. The list used to
+# name five files, two of which are not published at all, so a wrong number
+# in `code/docs/MCP.md` or `code/docs/CONFORMANCE.md` was never checked: the
+# judge-facing documents were gated and the reader-facing ones were not.
 DOCS=(
   "$ROOT/README.md"
   "$ROOT/code/README.md"
   "$ROOT/code/README.zh.md"
+  "$ROOT/code/docs/MCP.md"
+  "$ROOT/code/docs/INTEGRATIONS.md"
+  "$ROOT/code/docs/PROTOCOL.md"
+  "$ROOT/code/docs/CONFORMANCE.md"
   "$ROOT/code/docs/ONEPAGE.md"
   "$ROOT/code/docs/PITCH.md"
-  "$ROOT/产品文档-精简版.md"
+  "$ROOT/code/docs/MEMORY.md"
+  "$ROOT/code/npm/README.md"
+  "$ROOT/code/python/README.md"
 )
 
 # require_in <literal> <doc-file>...
@@ -124,23 +149,39 @@ cli_out="$(bash tests/cli_smoke.sh 2>&1 | tail -3)"
 # published (see cli_smoke.sh); the quoted figure is the passed count, which
 # is what a judge running the script on a published checkout sees printed.
 CLI_N="$(printf '%s' "$cli_out" | sed -n 's/^\([0-9]*\) passed.*/\1/p' | head -1)"
-[ -n "$CLI_N" ] && derive "cli_assertions" "$CLI_N" "bash tests/cli_smoke.sh"
-[ -n "$CLI_N" ] && require_in "$CLI_N 项断言" "$ROOT/README.md"
+if [ -n "$CLI_N" ]; then
+  derive "cli_assertions" "$CLI_N" "bash tests/cli_smoke.sh"
+  require_in "$CLI_N 项断言" "$ROOT/README.md"
+else
+  fail "could not read the CLI assertion count from tests/cli_smoke.sh"
+fi
 
 conf_out="$(python3 tests/conformance/run_conformance.py --cli "$BIN" 2>&1 | tail -3)"
 CONF_N="$(printf '%s' "$conf_out" | sed -n 's#^\([0-9]*\)/\([0-9]*\) conformance.*#\1#p' | head -1)"
-[ -n "$CONF_N" ] && derive "conformance_groups" "$CONF_N" "python3 tests/conformance/run_conformance.py"
-[ -n "$CONF_N" ] && require_in "$CONF_N 组" "$ROOT/README.md"
+if [ -n "$CONF_N" ]; then
+  derive "conformance_groups" "$CONF_N" "python3 tests/conformance/run_conformance.py"
+  require_in "$CONF_N 组" "$ROOT/README.md"
+else
+  fail "could not read the conformance group count"
+fi
 
 npm_out="$(cd "$CODE/npm" && node --test 2>&1 | grep -E '^ℹ (tests|pass|fail)' | tr '\n' ' ')"
 NPM_N="$(printf '%s' "$npm_out" | sed -n 's/.*tests \([0-9]*\).*/\1/p' | head -1)"
-[ -n "$NPM_N" ] && derive "npm_tests" "$NPM_N" "cd code/npm && node --test"
-[ -n "$NPM_N" ] && require_in "$NPM_N 个 Node 测试" "$ROOT/README.md"
+if [ -n "$NPM_N" ]; then
+  derive "npm_tests" "$NPM_N" "cd code/npm && node --test"
+  require_in "$NPM_N 个 Node 测试" "$ROOT/README.md"
+else
+  fail "could not read the npm test count"
+fi
 
 py_out="$(cd "$CODE/python" && python3 -m unittest discover -s tests 2>&1 | sed -n 's/^Ran \([0-9]*\) test.*/\1/p')"
 PY_N="$(printf '%s' "$py_out" | head -1)"
-[ -n "$PY_N" ] && derive "python_tests" "$PY_N" "cd code/python && python3 -m unittest discover -s tests"
-[ -n "$PY_N" ] && require_in "$PY_N 个测试" "$ROOT/README.md"
+if [ -n "$PY_N" ]; then
+  derive "python_tests" "$PY_N" "cd code/python && python3 -m unittest discover -s tests"
+  require_in "$PY_N 个测试" "$ROOT/README.md"
+else
+  fail "could not read the Python test count"
+fi
 
 # --- coverage ----------------------------------------------------------------
 # `moon coverage report -f summary` omits files that are fully covered from
@@ -191,7 +232,21 @@ fi
 # converted with one decimal, which is the form the documents use.
 size_kib() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1024 }'; }
 
-WASM_B="$(find "$CODE/_build/wasm-gc/release/build" -name '*.wasm' -type f 2>/dev/null | head -1)"
+# The artifact the release ships is the *probe*, not any wasm under the build
+# tree: `release.yml` builds `bench/probe` and publishes `probe.wasm` as
+# `interjson-probe.wasm`. Searching the whole tree picked up
+# `bench/bench.wasm` -- the benchmark driver, a different and larger file --
+# so the figure this gate derived and the figure the documents quote were
+# about two different artifacts, and the size budget (NFR-SIZE-01, stated
+# against the probe) was being checked against something the release does not
+# ship. `tests/bench.sh size` measures the same file.
+WASM_B="$CODE/_build/wasm-gc/release/build/bench/probe/probe.wasm"
+if [ ! -f "$WASM_B" ]; then
+  (cd "$CODE" && moon build bench/probe --target wasm-gc --release) >/dev/null 2>&1 || true
+fi
+if [ ! -f "$WASM_B" ]; then
+  WASM_B="$(find "$CODE/_build/wasm-gc/release/build" -name '*.wasm' -type f 2>/dev/null | head -1)"
+fi
 if [ -n "$WASM_B" ]; then
   WASM_KIB="$(size_kib "$(wc -c <"$WASM_B" | tr -d ' ')")"
   derive "wasm_gc_kib" "$WASM_KIB" "wc -c < wasm-gc artifact"
@@ -241,9 +296,16 @@ DIFF_REPORT="$CODE/docs/DIVERGENCES.md"
 if [ -f "$DIFF_REPORT" ]; then
   D_CASES="$(grep -oE '^\| cases \| [0-9]+ \|' "$DIFF_REPORT" | head -1 | grep -oE '[0-9]+')"
   D_UNEX="$(grep -oE '^\| unexplained divergences \| [0-9]+ \|' "$DIFF_REPORT" | head -1 | grep -oE '[0-9]+')"
-  [ -n "$D_CASES" ] && derive "diff_cases" "$D_CASES" "code/docs/DIVERGENCES.md"
-  [ -n "$D_CASES" ] && require_in "$D_CASES" "$ROOT/README.md" "$CODE/docs/ONEPAGE.md" "$CODE/docs/PITCH.md" "$ROOT/产品文档-精简版.md"
-  [ -n "$D_UNEX" ] && require_in "未解释 0" "$ROOT/README.md"
+  if [ -n "$D_CASES" ]; then
+    derive "diff_cases" "$D_CASES" "code/docs/DIVERGENCES.md"
+    require_in "$D_CASES" "$ROOT/README.md" "$CODE/docs/ONEPAGE.md" "$CODE/docs/PITCH.md"
+  else
+    fail "could not read the differential corpus size from code/docs/DIVERGENCES.md"
+  fi
+  if [ -z "$D_UNEX" ]; then
+    fail "could not read the unexplained-divergence count from code/docs/DIVERGENCES.md"
+  fi
+  require_in "未解释 0" "$ROOT/README.md"
 fi
 
 # --- readiness table ---------------------------------------------------------

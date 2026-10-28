@@ -6,7 +6,7 @@ same thing:
 | Channel | How it is checked |
 | --- | --- |
 | `interjson serve` | every case in `cases.jsonl`, over one connection per case |
-| `interjson mcp` | the MCP half of the runner (four tools, safe gate default, structuredContent, protocol negotiation, notification and unknown-tool rules) |
+| `interjson mcp` | the MCP half of the runner (four tools, safe gate default, the closed per-tool `outputSchema`, the summary text channel vs `structuredContent`, three accepted protocol revisions, `-32002` before `initialize`, `-32602` for an unknown tool or non-object `arguments`, notification rules) |
 | Python package | `code/python/tests/` drives `Client`, which speaks the same protocol |
 | npm package | `code/npm/tests/node.test.mjs` drives the same engine through the JS entry points |
 
@@ -64,11 +64,13 @@ failure.
 
 The runner also starts `interjson mcp` and checks:
 
-1. a supported legacy `protocolVersion` (`2024-11-05`) is echoed, and
-   `serverInfo.name == "interjson"` with a title and instructions that name
-   `interjson_gate`;
+1. each supported legacy `protocolVersion` (`2024-11-05` and `2025-03-26`) is
+   echoed, and `serverInfo.name == "interjson"` with a title and instructions
+   that name `interjson_gate`;
 2. an unsupported `protocolVersion` is answered with `2025-06-18`, never echoed
    back;
+3. a request before `initialize` (for example `tools/list`) is JSON-RPC error
+   `-32002`;
 3. a notification (`notifications/initialized`, or any message without an
    `id`, including `tools/list`) produces **no line** — the next line must be
    the answer to the following `ping`;
@@ -76,18 +78,21 @@ The runner also starts `interjson mcp` and checks:
    `interjson_validate`, `interjson_readiness`, each with `outputSchema` and
    `annotations.readOnlyHint == true`;
 5. `tools/call interjson_gate` on a truncated document with **no** `profile`
-   refuses (`executable == false`, E010 in `retry.prompt`), and the result's
-   `structuredContent` is the same object as the text channel;
-6. `tools/call interjson_gate` on `{"words":["a" "b"]}` with
+   refuses (`executable == false`, E010 in `retry.prompt`) with `value: null`;
+6. a prose-prefixed document (`Here are the args:\n{"a":1}`) is **accepted** by
+   the default `agent` profile, because that profile is `Options::for_agent()`
+   including `skip_prose`, while `profile: "execution"` still refuses it;
+7. `tools/call interjson_gate` on `{"words":["a" "b"]}` with
    `profile: "execution"` returns `decision == "ambiguous"` and
    `isError == false`;
-7. `tools/call` with an unsupported JSON Schema keyword returns `isError: true`,
+8. `tools/call` with an unsupported JSON Schema keyword returns `isError: true`,
    names `E070`, and carries no `structuredContent`;
-8. an unknown tool returns an `isError` tool result, and an unknown method
-   returns JSON-RPC error `-32601`;
-9. `mcp --print-config=claude` prints the exact one-line command, and
-   `--print-config=cursor` prints a usable `mcpServers` object;
-10. an executable named `interjson-mcp` starts the server with no arguments
+9. an unknown tool returns JSON-RPC error `-32602`, a non-object `arguments`
+   returns `-32602`, and an unknown method returns `-32601`;
+10. `mcp --print-config=claude` prints the exact one-line command, and
+    `--print-config=cursor` prints a usable `mcpServers` object; an unknown
+    client name exits `2`;
+11. an executable named `interjson-mcp` starts the server with no arguments
     (the alias path a client config actually uses).
 
 ## Adding a case
