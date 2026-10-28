@@ -28,6 +28,8 @@ moon.lock
 #                                 研究者都需要它，缺了等于「不接收报告」
 #   code/CONTRIBUTING.md          贡献者入口；mooncakes 与 GitHub 都会指向它
 #   code/docs/SPEC.md             兼容性契约，接入方需要它
+#   code/docs/NOTREE.md           无树模式的设计与实测目标；README 的「已知限制」
+#                                 直接链接它，所以它必须与 README 一起发布
 #   LICENSE / NOTICE              许可证正文；根目录缺失时 GitHub 侧栏显示
 #                                 「无许可证」，而 README 的 badge 指向子目录
 #   .github/ISSUE_TEMPLATE/*.md   缺陷与规则提案模板；原先被 *.md 吞掉，
@@ -50,6 +52,7 @@ moon.lock
 !code/SECURITY.md
 !code/CONTRIBUTING.md
 !code/docs/SPEC.md
+!code/docs/NOTREE.md
 !code/docs/MCP.md
 !code/docs/INTEGRATIONS.md
 !code/docs/PROTOCOL.md

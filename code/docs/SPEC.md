@@ -5,9 +5,10 @@
 > 每条要求有编号（`SR-n`），测试与评审可以逐条引用。
 >
 > **不重复的内容**：22 条修复规则的触发条件、级别与消息模板见
-> [`RULES.md`](./RULES.md)；需求 → 用例 → 证据的追踪见
-> [`TRACEABILITY.md`](./TRACEABILITY.md)；12 个错误码与退出码的完整表见
-> [`ERRORS.md`](./ERRORS.md)。本文件只规定这些表之间**必须成立的契约**。
+> 规则表（22 条）与错误码表（12 个）。两张表由仓库内的 `docs/RULES.md` 与
+> `docs/ERRORS.md` 维护，不在发布范围内；规则的**权威列表**同时出现在
+> [`../README.md`](../README.md)，那是接入方读得到的版本。本文件只规定这些表之间
+> **必须成立的契约**。
 
 ## SR-0　兼容性承诺（1.0.0 起生效）
 
@@ -98,7 +99,8 @@ done
 也就是运行时可以据此取消剩余流、甚至提前拒绝的那个时刻。
 
 **SR-12**　三个数在同一个输入上**必须**可以不同，且差异是**信息而不是噪声**。下表**是契约而非示例** ——
-它就是 [`产品文档.md`](../../产品文档.md) §20.1 登记的那张表，本规范把它冻结在这里；任何一行被改动都算破坏契约：
+它就是产品文档 §20.1 登记的那张表（本文档不在发布范围内），本规范把它冻结在这里；
+任何一行被改动都算破坏契约：
 
 | 情形 | `syntax_ready` | `settled` | `schema_ready` | 谁定的 |
 | --- | ---: | ---: | ---: | --- |
@@ -265,7 +267,7 @@ printf '%s' '{"a":"x","b":1}' | $J explain --json --schema '{!a:string b:integer
 不支持 `$ref`、`oneOf`/`allOf`/`anyOf`、`format`、`if`/`then`、正则表达式。
 判定**已完成**的文档是成熟领域；本库的贡献在**流式**这一半。
 
-**SR-33**　恢复策略是启发式的，**不是**任何标准的合规实现；规则级的触发条件以 `RULES.md` 为准。
+**SR-33**　恢复策略是启发式的，**不是**任何标准的合规实现；规则级的触发条件以规则表为准。
 
 ---
 
@@ -280,5 +282,5 @@ python3 tests/eval/run_readiness.py --cli ./_build/native/release/build/cmd/inte
 python3 tests/eval/run_independent.py --cli ./_build/native/release/build/cmd/interjson/interjson.exe --node-dir <node_modules>
 ```
 
-需求编号与用例的对应关系维护在 [`TRACEABILITY.md`](./TRACEABILITY.md)；
-每条规则的详细语义维护在 [`RULES.md`](./RULES.md)。
+需求编号与用例的对应关系维护在仓库内的 `docs/TRACEABILITY.md`，每条规则的详细语义
+维护在 `docs/RULES.md`；两者不在发布范围内，规则的权威列表见 [`../README.md`](../README.md)。
