@@ -68,10 +68,16 @@ elif [ "$os_name" = "linux" ] && [ "$arch_name" = "arm64" ]; then
   asset="interjson-linux-arm64"
 elif [ "$os_name" = "linux" ]; then
   asset="interjson-linux-x86_64"
-elif [ "$os_name" = "macos" ] && [ "$arch_name" = "x86_64" ]; then
-  asset="interjson-macos-x86_64"
-else
+elif [ "$os_name" = "macos" ] && [ "$arch_name" = "arm64" ]; then
   asset="interjson-macos-arm64"
+elif [ "$os_name" = "macos" ]; then
+  # There is no Intel macOS build, and the reason is not a choice: the MoonBit
+  # toolchain publishes `darwin-aarch64`, `linux-x86_64` and `linux-aarch64`
+  # only, so an Intel Mac cannot build the binary at all. Say that, rather than
+  # failing later with a 404 on an asset that does not exist.
+  die "no InterJSON build for Intel macOS: the MoonBit toolchain has no darwin-x86_64 target (build from source on an Apple Silicon Mac, or use a Linux/Windows machine)"
+else
+  die "unsupported platform: $os/$arch"
 fi
 
 # -- version ---------------------------------------------------------------

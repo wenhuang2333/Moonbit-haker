@@ -17,7 +17,7 @@ question for host-side callers (`serve`, npm, pip, HTTP).
 | MCP server | `interjson mcp`, also `interjson-mcp`; JSON-RPC 2.0 over stdio, protocol `2025-06-18` (`2025-03-26` and `2024-11-05` accepted) |
 | Backends | wasm-gc, native, JS, wasm — one test suite, all four |
 | Prebuilt binaries | The GitHub release — Linux x86_64, macOS arm64 and Windows x86_64 `interjson` CLIs, wasm probe, browser bundle, `SHA256SUMS`, plus the `interjson-install.sh` one-command installer. Older releases were published under the former name and keep the old asset prefix |
-| Registry | [`mooncakes.io zhanshishan/interjson`](https://mooncakes.io/docs/zhanshishan/interjson) — 0.12.0 is the 1.5.0 correspondence and is **not published yet**; 0.11.0 (the 1.4.0 correspondence) is published; older releases are under the former name `zhanshishan/jsonmend` |
+| Registry | [`mooncakes.io zhanshishan/interjson`](https://mooncakes.io/docs/zhanshishan/interjson) — 0.12.0 is the 1.5.0 correspondence and **was published on 2026-10-28**; 0.11.0 (the 1.4.0 correspondence) was published on 2026-10-27; older releases are under the former name `zhanshishan/jsonmend` |
 | Deployment guide | [`docs/MCP.md`](docs/MCP.md) for the MCP server; [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) for host-side recipes |
 
 ## The gate
@@ -622,7 +622,7 @@ separately from the process. The full method, tables and decision records are in
 
 ## Roadmap
 
-- ~~Publish on mooncakes.io~~: the published history (0.3.0 … **0.8.1**) is under the former package name `zhanshishan/jsonmend`; the renamed `zhanshishan/interjson` starts at **0.11.0** (the registry counterpart of 1.4.0), published on 2026-10-27. **1.5.0 / 0.12.0 is not published yet** — no tag, no release, no registry upload; `1.5.x` ↔ `0.12.x`. `1.x` cannot be published because mooncakes currently only accepts `0.x.y`; patch and minor digits follow the release order (`1.1.x` ↔ `0.8.x`, `1.2.x` ↔ `0.9.x`, `1.3.x` ↔ `0.10.x`, `1.4.x` ↔ `0.11.x`). The bytes are identical except for the version string and the registry package name.
+- ~~Publish on mooncakes.io~~: the published history (0.3.0 … **0.8.1**) is under the former package name `zhanshishan/jsonmend`; the renamed `zhanshishan/interjson` starts at **0.11.0** (the registry counterpart of 1.4.0), published on 2026-10-27. **`0.12.0` (the 1.5.0 counterpart) was published to mooncakes on 2026-10-28**, so the library installs with `moon add zhanshishan/interjson`; npm and PyPI do not carry `interjson-moonbit` yet. `1.5.x` ↔ `0.12.x`. `1.x` cannot be published because mooncakes currently only accepts `0.x.y`; patch and minor digits follow the release order (`1.1.x` ↔ `0.8.x`, `1.2.x` ↔ `0.9.x`, `1.3.x` ↔ `0.10.x`, `1.4.x` ↔ `0.11.x`). The bytes are identical except for the version string and the registry package name.
 - ~~A browser tab that plays a model stream~~: `static/demo/live.html`, also published at <https://wenhuang2333.github.io/Moonbit-haker/live.html>.
 - ~~Readiness for the members the caller actually needs~~: `Schema` + `semantic_readiness`.
 - ~~Constraints in the declaration~~: `minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `minLength` / `maxLength` / `enum` / `pattern` (a character-class subset, not a regex) landed in 0.7.0.

@@ -156,7 +156,7 @@ import {
 }
 ```
 
-`moon add` 会把依赖写入模块清单（本仓库对应 `code/moon.mod`）。`zhanshishan/interjson` 的 **0.11.0** 已发布到 mooncakes（对应 1.4.0）；**0.12.0（对应 1.5.0）尚未上传**；更早版本在旧包名 `zhanshishan/jsonmend` 下。
+`moon add` 会把依赖写入模块清单（本仓库对应 `code/moon.mod`）。`zhanshishan/interjson` 的 **0.11.0** 已发布到 mooncakes（对应 1.4.0）；**0.12.0（对应 1.5.0）已于 2026-10-28 上传**；更早版本在旧包名 `zhanshishan/jsonmend` 下。
 
 ## 三行上手
 

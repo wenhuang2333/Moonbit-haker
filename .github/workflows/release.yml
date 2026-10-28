@@ -89,10 +89,15 @@ jobs:
             asset: interjson-linux-arm64
           - os: macos-latest
             asset: interjson-macos-arm64
-          - os: macos-15-intel
-            asset: interjson-macos-x86_64
           - os: windows-latest
             asset: interjson-windows-x86_64.exe
+        # There is no Intel macOS entry because there is no toolchain for it:
+        # `cli.moonbitlang.com/install/unix.sh` resolves only
+        # `Darwin arm64`, `Linux x86_64` and `Linux aarch64`, so a
+        # `macos-15-intel` runner cannot install MoonBit at all. The job was
+        # added on the assumption that the platform matrix was a choice; it is
+        # not, it is whatever the toolchain publishes. A release that fails on
+        # a platform it cannot build is worse than one that says so.
     steps:
       - uses: actions/checkout@v4
 
@@ -165,14 +170,13 @@ jobs:
           cp artifacts/interjson-linux-x86_64/interjson-linux-x86_64 dist/interjson-linux-x86_64
           cp artifacts/interjson-linux-arm64/interjson-linux-arm64 dist/interjson-linux-arm64
           cp artifacts/interjson-macos-arm64/interjson-macos-arm64 dist/interjson-macos-arm64
-          cp artifacts/interjson-macos-x86_64/interjson-macos-x86_64 dist/interjson-macos-x86_64
           cp artifacts/interjson-windows-x86_64.exe/interjson-windows-x86_64.exe dist/interjson-windows-x86_64.exe
           cp artifacts/web-assets/probe.wasm dist/interjson-probe.wasm
           cp artifacts/web-assets/interjson-demo.js dist/interjson-demo.js
           cp artifacts/web-assets/interjson-install.sh dist/interjson-install.sh
           chmod +x dist/interjson-install.sh
-          chmod +x dist/interjson-linux-x86_64 dist/interjson-linux-arm64 dist/interjson-macos-arm64 dist/interjson-macos-x86_64
-          (cd dist && sha256sum interjson-linux-x86_64 interjson-linux-arm64 interjson-macos-arm64 interjson-macos-x86_64 interjson-windows-x86_64.exe interjson-probe.wasm interjson-demo.js interjson-install.sh > SHA256SUMS)
+          chmod +x dist/interjson-linux-x86_64 dist/interjson-linux-arm64 dist/interjson-macos-arm64
+          (cd dist && sha256sum interjson-linux-x86_64 interjson-linux-arm64 interjson-macos-arm64 interjson-windows-x86_64.exe interjson-probe.wasm interjson-demo.js interjson-install.sh > SHA256SUMS)
           cat dist/SHA256SUMS
 
       # The release body is the section of CHANGELOG.md for this tag, not the
@@ -205,7 +209,7 @@ jobs:
       - name: Check the release contents before publishing
         run: |
           set -euo pipefail
-          want="SHA256SUMS interjson-demo.js interjson-install.sh interjson-linux-arm64 interjson-linux-x86_64 interjson-macos-arm64 interjson-macos-x86_64 interjson-probe.wasm interjson-windows-x86_64.exe"
+          want="SHA256SUMS interjson-demo.js interjson-install.sh interjson-linux-arm64 interjson-linux-x86_64 interjson-macos-arm64 interjson-probe.wasm interjson-windows-x86_64.exe"
           actual="$(cd dist && ls -1 | sort | tr '\n' ' ' | sed 's/ $//')"
           sorted="$(printf '%s\n' $want | sort | tr '\n' ' ' | sed 's/ $//')"
           if [ "$actual" != "$sorted" ]; then

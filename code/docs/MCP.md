@@ -65,12 +65,12 @@ interjson --version          # interjson 1.5.0
 ```
 
 > **Technical preview.** The prebuilt binary comes from the GitHub release, which
-> builds five binaries across three operating systems: `linux-x86_64`,
-> `linux-arm64`, `macos-arm64`, `macos-x86_64` and `windows-x86_64`. Building
-> from source needs the MoonBit toolchain `moon 0.1.20261016`. **Nothing is published yet**: 1.5.0 has no tag and no
-> release, and npm / PyPI / mooncakes have no 1.5.0 (the registry counterpart,
-> 0.12.0, is pending). Until then, install from a checkout with the build
-> commands below.
+> builds four binaries across three operating systems: `linux-x86_64`,
+> `linux-arm64`, `macos-arm64` and `windows-x86_64`. Building
+> from source needs the MoonBit toolchain `moon 0.1.20261016`. The mooncakes
+> counterpart **0.12.0 was published on 2026-10-28**; npm and PyPI do not carry
+> `interjson-moonbit` yet, so the two language packages install from a checkout with
+> the build commands below.
 
 ### One command: `install.sh`
 
@@ -125,7 +125,8 @@ v1.4.0 were published as JSONMend and keep the `jsonmend-*` asset prefix and
 the `jsonmend_*` tool names; use v1.4.0 or later for the `interjson` CLI and
 `interjson_gate`.
 
-The 1.5.0 release is **not cut yet** — there is no tag and no asset set for it
+The 1.5.0 release is tagged `v1.5.0`; the asset set is built by the release workflow
+for that tag, and the mooncakes counterpart `0.12.0` was published on 2026-10-28
 in this repository's state, so the installer above installs the latest
 *published* release until it is.
 

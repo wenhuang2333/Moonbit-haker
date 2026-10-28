@@ -11,9 +11,16 @@
 编码边界上的一组缺陷。这些缺陷都不是靠跑测试发现的，是读代码读出来的——它们全都在
 「测试绿」的状态下发布过，这本身就是这一节要记下来的事实。
 
-版本对应 **1.5.0**（GitHub）↔ **0.12.0**（mooncakes）。**两者都尚未发布**：标签、Release
-与 registry 上传都还没做（`0.12.0` 未上传 mooncakes，npm / PyPI 上也还没有
-`interjson-moonbit`）。本节只描述代码状态。
+版本对应 **1.5.0**（GitHub）↔ **0.12.0**（mooncakes）。发布状态：
+**`0.12.0` 已于 2026-10-28 上传 mooncakes**（`moon search interjson` 可见，
+重复上传返回 409）；GitHub 侧 tag `v1.5.0` 已推送，Release 随该 tag 构建。
+**npm 与 PyPI 上仍然没有 `interjson-moonbit`**，两个语言包目前只能按仓库路径安装。
+
+第一次打 tag 时 Release 失败了：`macos-15-intel` 这个矩阵项装不上 MoonBit 工具链
+（`cli.moonbitlang.com/install/unix.sh` 只认 `Darwin arm64`、`Linux x86_64`、
+`Linux aarch64`）。**平台矩阵不是选择题，是工具链给什么就是什么**；该矩阵项已删除，
+安装脚本在 Intel Mac 上直接说明原因。失败发生在任何产物发布之前，因此 tag 重新指向
+修复后的提交——项目自己的 `release.yml` 注释里就写着 tag 可以被重新指向。
 
 ### 两处「错误放行」（P0）
 
@@ -103,8 +110,12 @@
 
 - **`code/install.sh`**：一条命令的安装脚本，判断平台 → 下载 Release 产物 → 用 Release
   自带的 `SHA256SUMS` 核对 SHA-256 → 装到 `~/.local/bin` 并打印 `PATH` 提示。校验失败
-  是硬失败：删除文件，什么都不装。覆盖三个操作系统上的五个二进制
-  （linux-x86_64、linux-arm64、macos-arm64、macos-x86_64、windows-x86_64）。
+  是硬失败：删除文件，什么都不装。覆盖三个操作系统上的四个二进制
+  （linux-x86_64、linux-arm64、macos-arm64、windows-x86_64）。
+  **没有 Intel macOS 产物**：MoonBit 工具链只发布 `darwin-aarch64`、
+  `linux-x86_64`、`linux-aarch64`，那个平台连工具链都装不上（2026-10-28 的发布
+  尝试就是因此失败的）。安装脚本在 Intel Mac 上直接报错说明原因，而不是下载一个
+  不存在的产物。
 - `code/npm/package.json` 与 `code/python/pyproject.toml` 补齐发布元数据
   （`repository` / `homepage` / `bugs` / `author` / `engines.node >= 20`、`[project.urls]`、
   `py.typed`），版本改为 `1.5.0`。两个包在 registry 上仍是**待发布**状态。

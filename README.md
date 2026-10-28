@@ -2,7 +2,8 @@
 
 **版本**：1.5.0
 
-**技术预览（technical preview）**：尚未发布到任何 registry（边界见本节末尾）。
+**技术预览（technical preview）**：mooncakes 上 `0.12.0` 已发布；npm / PyPI 上还没有
+`interjson-moonbit`（边界见本节末尾）。
 
 [![CI](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml/badge.svg)](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -20,9 +21,9 @@ curl -fsSL https://github.com/wenhuang2333/Moonbit-haker/releases/latest/downloa
 
 安装脚本只做四件事：判断平台、下载对应产物、拿 Release 自带的 `SHA256SUMS` 核对
 SHA-256、把二进制放上 `PATH` 并打印该加的 `export PATH=...`。校验不通过就删除文件、
-什么都不装。Release 工作流构建 **三个操作系统上的五个二进制**，安装脚本五个都覆盖：
+什么都不装。Release 工作流构建 **三个操作系统上的四个二进制**，安装脚本四个都覆盖：
 `interjson-linux-x86_64`、`interjson-linux-arm64`、`interjson-macos-arm64`、
-`interjson-macos-x86_64`、`interjson-windows-x86_64.exe`（另有 `interjson-probe.wasm`、
+`interjson-windows-x86_64.exe`（另有 `interjson-probe.wasm`、
 `interjson-demo.js`、`interjson-install.sh` 与 `SHA256SUMS`）。
 
 **② 过门。** 模型被 `max_tokens` 截断，参数少了一个右花括号。把这段原文交给门：
@@ -60,12 +61,14 @@ claude mcp add interjson -- interjson mcp
 `{"a":"b","a":"c"}` 是合法 JSON 却没有唯一含义，执行档下它被拒绝，而不是先执行再后悔。
 
 > **技术预览的边界（如实说明）**
-> - **原生二进制来自 GitHub Release**（上面那条安装命令）：三个操作系统、五个平台组合
->   （linux-x86_64 / linux-arm64 / macos-arm64 / macos-x86_64 / windows-x86_64）；
->   其他平台需要从源码构建。
+> - **原生二进制来自 GitHub Release**（上面那条安装命令）：三个操作系统、四个二进制
+>   （linux-x86_64 / linux-arm64 / macos-arm64 / windows-x86_64）；
+>   其他平台需要从源码构建。**没有 Intel macOS 产物**：MoonBit 工具链只发布
+>   `darwin-aarch64`、`linux-x86_64`、`linux-aarch64`，那个平台连工具链都装不上。
 > - **从源码构建需要 MoonBit 工具链 `moon 0.1.20261016`**（版本锁在仓库里，其他版本未验证）。
-> - **npm / PyPI / mooncakes 上还没有 1.5.0 / 0.12.0**：`interjson-moonbit` 目前只能按仓库
->   路径安装；0.12.0 尚未上传 mooncakes。本页凡涉及发布状态处一律写「未发布 / 待发布」。
+> - **mooncakes 上的 `0.12.0` 已于 2026-10-28 发布**（`moon add
+>   zhanshishan/interjson`）；**npm 与 PyPI 上还没有 `interjson-moonbit`**，
+>   两个语言包目前只能按仓库路径安装。
 > - 引擎与全部不变量已由测试锁定（见[质量与证据](#质量与证据)），但对外包与 registry 渠道
 >   尚未开放。
 
@@ -124,7 +127,7 @@ InterJSON 与它的分工不同，一句话概括：
 ## 接入 MCP（MCP 客户端）
 
 安装脚本已经给出二进制；也可以从源码构建，或按仓库路径装语言包
-（**尚未发布到 registry**，包名 `interjson-moonbit`）：
+（**尚未发布到 registry**，包名 `interjson-moonbit`；mooncakes 侧的 `0.12.0` 已发布）：
 
 ```bash
 cd code && moon build cmd/interjson --target native --release   # 源码构建
@@ -223,7 +226,8 @@ for v in s.push_event("{\"type\":\"content_block_delta\",...}") {
 | **HTTP** | `interjson-http --port 8080` | n8n、Dify、Coze、网关 | 宿主应用 |
 
 > npm / PyPI 上的发行名是 **`interjson-moonbit`**（后缀标识 MoonBit 引擎）。
-> **1.5.0 / 0.12.0 尚未发布到 npm、PyPI 或 mooncakes**，目前只能按仓库路径安装（上表两条命令），
+> **npm 与 PyPI 上还没有 `interjson-moonbit`**；mooncakes 上的 `0.12.0` 已发布，
+> 二进制从 GitHub Release 装（上面那条 `curl`）。语言包目前只能按仓库路径安装（上表两条命令），
 > Python 的 import 名仍是 `interjson`。
 
 MCP 的四个工具：
@@ -641,7 +645,7 @@ InterJSON 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_lo
 
 | GitHub tag | mooncakes.io | 关系 |
 | --- | --- | --- |
-| `v1.5.0` | `0.12.0` | **当前开发版（未发布）**：修两处「错误放行」——`json_equal` 改为按数字的精确十进制值比较（`9007199254740993` 与 `9007199254740992` 不再被当成同一个值），`RuleSet` 由 `RepairCode::count()` 定尺寸并改为 fail-closed（`R022` 此前无法被关闭）；修拒绝契约（不可执行的结果必带非空 `retry.prompt` 且 `value` 为 `null`）；MCP `agent` 档改为等于 `Options::for_agent()`（含 `skip_prose`）；CLI 修 `--max-repairs` 上限、`--max-prose-buffer=` 少切一位、`--print-config` 空格形式；stdin 跨 64 KiB 边界的多字节字符不再损坏；递归深度加界（`MAX_VALUE_DEPTH=512` / `MAX_SCHEMA_DEPTH=256`）。`1.5.x` ↔ `0.12.x`；**0.12.0 尚未上传 mooncakes** |
+| `v1.5.0` | `0.12.0` | **当前版本**：修两处「错误放行」——`json_equal` 改为按数字的精确十进制值比较（`9007199254740993` 与 `9007199254740992` 不再被当成同一个值），`RuleSet` 由 `RepairCode::count()` 定尺寸并改为 fail-closed（`R022` 此前无法被关闭）；修拒绝契约（不可执行的结果必带非空 `retry.prompt` 且 `value` 为 `null`）；MCP `agent` 档改为等于 `Options::for_agent()`（含 `skip_prose`）；CLI 修 `--max-repairs` 上限、`--max-prose-buffer=` 少切一位、`--print-config` 空格形式；stdin 跨 64 KiB 边界的多字节字符不再损坏；递归深度加界（`MAX_VALUE_DEPTH=512` / `MAX_SCHEMA_DEPTH=256`）。`1.5.x` ↔ `0.12.x`；**0.12.0 已于 2026-10-28 上传 mooncakes** |
 | `v1.4.0` | `0.11.0` | 更名 InterJSON，产品定位为「LLM 输出的执行门」，对外主入口改为本地 MCP server（`interjson mcp`，四个只读工具，主工具 `interjson_gate` 默认 `agent` 档）。模块、CLI、语言包与浏览器 bundle 统一改名，包名改为 `zhanshishan/interjson`；引擎语义、修复规则与全部不变量不变。mooncakes 现阶段只接受 `0.x.y`：patch 位一一对应，minor 位按发布序顺延（`1.0.x` ↔ `0.7.x`、`1.1.x` ↔ `0.8.x`、`1.2.x` ↔ `0.9.x`、`1.3.x` ↔ `0.10.x`、`1.4.x` ↔ `0.11.x`）。**0.11.0 已上传 mooncakes（2026-10-27，`moon add zhanshishan/interjson`）** |
 | `v1.3.0` | `0.10.0` | 三块结构性重构（当前位置与历史位置分离、增量日志改并行数组 + 路径 arena、CLI 暴露三个资源上限）加一处字节入口缺陷修复。0.10.0 未上传 mooncakes |
 | `v1.2.0` | `0.9.0` | 修 89 条标量根误拒、按值分级 `R011`、加速 CLI 字节路径与增量文本 drain，并让默认路径执行 `--schema`。**0.9.0 未上传 mooncakes** |
@@ -652,12 +656,12 @@ InterJSON 选择**更宽地修复 + 把风险标出来**（`Exactness` + `max_lo
 
 上表的右列是**版本号对应关系**：已发布的 registry 版本在旧包名 `zhanshishan/jsonmend` 下，
 `0.9.0` 与 `0.10.0` 尚未上传；本次更名后的 `zhanshishan/interjson` 已于 **2026-10-27**
-发布 **0.11.0**（`moon add zhanshishan/interjson`）。GitHub 侧 `v1.4.0` 之前的
-Release 都是在旧名下打的，资产沿用旧前缀。
+发布 **0.11.0**、于 **2026-10-28** 发布 **0.12.0**（`moon add zhanshishan/interjson`）。
+GitHub 侧 `v1.4.0` 之前的 Release 都是在旧名下打的，资产沿用旧前缀。
 
-**1.5.0 / 0.12.0 目前是未发布状态**：代码在本仓库里，但标签、Release 与 registry 上传
-都还没做（`0.12.0` 尚未上传 mooncakes，npm 与 PyPI 上也还没有 `interjson-moonbit`）。
-本页凡涉及 1.5.0 的发布状态处一律写「未发布 / 待发布」。
+**1.5.0 / 0.12.0 的发布状态**：标签与 registry 上传已经做完（`0.12.0` 已于
+2026-10-28 上传 mooncakes；GitHub tag `v1.5.0` 已推送，Release 随该 tag 构建）；
+**npm 与 PyPI 上还没有 `interjson-moonbit`**，两个语言包目前只能按仓库路径安装。
 
 发布顺序（详见本地文档 `code/docs/REPRODUCE.md` 的发布清单）：
 **先 `moon publish --dry-run` 探测平台限制，再打标签**——标签一旦推送不再移动。
@@ -795,11 +799,12 @@ profiles (`agent` / `execution`) both are refused rather than executed and regre
 - **CLI** (`interjson`) with `--report`, `--check`, `--strict`, `--indent`, `--multi-root`,
   `--max-repairs`, chunked streaming input, and a browser demo driven by the MoonBit JS build.
 
-**Technical preview.** The native binary comes from the GitHub release — five binaries
+**Technical preview.** The native binary comes from the GitHub release — four binaries
 across three operating systems: `linux-x86_64`, `linux-arm64`, `macos-arm64`,
-`macos-x86_64`, `windows-x86_64`. Building from source needs the
-MoonBit toolchain `moon 0.1.20261016`. Nothing is published yet: 1.5.0 has no tag, no
-release, and no npm/PyPI/mooncakes upload (the registry counterpart is 0.12.0, pending).
+`windows-x86_64`. Building from source needs the
+MoonBit toolchain `moon 0.1.20261016`. The mooncakes counterpart **0.12.0 was
+published on 2026-10-28**; `interjson-moonbit` is not on npm or PyPI yet, so the two
+language packages install from a checkout.
 
 Docs: [code/README.md](code/README.md) (English) · [code/README.zh.md](code/README.zh.md) (中文) ·
 [code/docs/](code/docs/). License: Apache-2.0.
