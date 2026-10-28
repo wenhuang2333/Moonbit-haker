@@ -420,7 +420,7 @@ InterJSON 的差异化压在它的边界上：**流式增量**、**截断补全*
 
 | GitHub tag | mooncakes.io | 关系 |
 | --- | --- | --- |
-| `v1.5.0` | `0.12.0` | **当前版本**：修两处「错误放行」——`json_equal` 改为按数字的精确十进制值比较（`9007199254740993` 与 `9007199254740992` 不再被当成同一个值），`RuleSet` 由 `RepairCode::count()` 定尺寸并改为 fail-closed（`R022` 此前无法被关闭）；修拒绝契约（不可执行的结果必带非空 `retry.prompt` 且 `value` 为 `null`）；MCP `agent` 档改为等于 `Options::for_agent()`（含 `skip_prose`）；CLI 修 `--max-repairs` 上限、`--max-prose-buffer=` 少切一位、`--print-config` 空格形式；stdin 跨 64 KiB 边界的多字节字符不再损坏；递归深度加界。`1.5.x` ↔ `0.12.x`；**0.12.0 已于 2026-10-28 上传 mooncakes**，GitHub `v1.5.0` Release 已发布 8 个产物 |
+| `v1.5.0` | `0.12.0` | **当前版本**：修两处「错误放行」——`json_equal` 改为按数字的精确十进制值比较（`9007199254740993` 与 `9007199254740992` 不再被当成同一个值），`RuleSet` 由 `RepairCode::count()` 定尺寸并改为 fail-closed（`R022` 此前无法被关闭）；修拒绝契约（不可执行的结果必带非空 `retry.prompt` 且 `value` 为 `null`）；MCP `agent` 档改为等于 `Options::for_agent()`（含 `skip_prose`）；CLI 修 `--max-repairs` 上限、`--max-prose-buffer=` 少切一位、`--print-config` 空格形式；stdin 跨 64 KiB 边界的多字节字符不再损坏；值上的四个遍历改为迭代，`max_depth` 因此可以放宽（10 万层可解析），容器内存按实际大小收敛。`1.5.x` ↔ `0.12.x`；**0.12.0 已于 2026-10-28 上传 mooncakes**，GitHub `v1.5.0` Release 已发布 7 个产物 + `SHA256SUMS` |
 | `v1.4.0` | `0.11.0` | 更名 InterJSON，产品定位为「LLM 输出的执行门」，对外主入口改为本地 MCP server（`interjson mcp`，四个只读工具，主工具 `interjson_gate` 默认 `agent` 档）。模块、CLI、语言包与浏览器 bundle 统一改名，包名改为 `zhanshishan/interjson`；引擎语义、修复规则与全部不变量不变。mooncakes 现阶段只接受 `0.x.y`：patch 位一一对应，minor 位按发布序顺延（`1.0.x` ↔ `0.7.x`、`1.1.x` ↔ `0.8.x`、`1.2.x` ↔ `0.9.x`、`1.3.x` ↔ `0.10.x`、`1.4.x` ↔ `0.11.x`）。**0.11.0 已于 2026-10-27 上传** |
 | `v1.3.0` | `0.10.0` | 三块结构性重构（当前位置与历史位置分离、增量日志改并行数组 + 路径 arena、CLI 暴露三个资源上限）加一处字节入口缺陷修复。0.10.0 未上传 mooncakes |
 | `v1.2.0` | `0.9.0` | 修 89 条标量根误拒、按值分级 `R011`、加速 CLI 字节路径与增量文本 drain，并让默认路径执行 `--schema`。0.9.0 未上传 mooncakes |
