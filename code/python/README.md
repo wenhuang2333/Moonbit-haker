@@ -119,9 +119,8 @@ than being silently dropped.
 
 The Python package is `1.5.0`, the engine version. The MoonBit package on
 mooncakes is `0.12.0` because the registry currently accepts only `0.x.y`; the
-bytes are the same. `Client.hello()` reports both. **Neither is published
-yet**: the PyPI upload and the 0.12.0 mooncakes upload are both pending, and
-the published mooncakes history stops at `0.11.0` (the 1.4.0
-correspondence).
+bytes are the same. `Client.hello()` reports both. **The PyPI package is not
+published yet**; the mooncakes counterpart **0.12.0 was published on
+2026-10-28**, and `0.11.0` (the 1.4.0 correspondence) on 2026-10-27.
 
 License: Apache-2.0.

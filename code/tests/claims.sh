@@ -67,7 +67,6 @@ DOCS=(
   "$ROOT/code/docs/PROTOCOL.md"
   "$ROOT/code/docs/CONFORMANCE.md"
   "$ROOT/code/docs/ONEPAGE.md"
-  "$ROOT/code/docs/PITCH.md"
   "$ROOT/code/docs/MEMORY.md"
   "$ROOT/code/npm/README.md"
   "$ROOT/code/python/README.md"

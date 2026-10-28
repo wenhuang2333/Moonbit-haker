@@ -43,9 +43,7 @@ schema.mbt	1217	open.to_string(),
 schema.mbt	135	} => true
 schema.mbt	1498	path
 schema.mbt	1532	path
-schema.mbt	1697	None => 0
 schema.mbt	1705	_ => return -1
-schema.mbt	1710	None => ()
 schema.mbt	1806	1000
 schema.mbt	1814	1000
 schema.mbt	236	0x74 => if u == 0x09 { hit = true } // \t

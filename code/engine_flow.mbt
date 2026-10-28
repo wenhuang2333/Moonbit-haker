@@ -287,7 +287,7 @@ fn Engine::step_in_array(
         if !self.stack[idx].synthetic && !self.concat_pending {
           // `["a" "b"]` is the case §5.2 of the product document admits: the
           // comma is a notation fix, but the structure is a guess.
-          let items = self.stack[idx].items
+          let items = frame_items(self.stack[idx])
           let prev_string = items.length() > 0 &&
             items[items.length() - 1] is Json::String(_)
           let amb : Ambiguity = if prev_string && can_extend_string(u) {
@@ -441,8 +441,14 @@ fn Engine::close_container(
   }
   let frame = self.stack.pop().unwrap()
   let v = match frame.kind {
-    FObj => Json::object(frame.map)
-    FArr => Json::array(frame.items)
+    // `shrink_map` / `shrink_array` before the value is published: a `Map([])`
+    // is created with room for eight entries and an `Array` with room for
+    // eight, and a tool argument object usually has one or two. The retained
+    // value is what the caller keeps, so an object that never grows past its
+    // first key should not carry six empty slots for the rest of the process's
+    // life. This is a copy of a small container, once, at the moment it closes.
+    FObj => Json::object(shrink_map(frame_map(frame)))
+    FArr => Json::array(shrink_array(frame_items(frame)))
   }
   self.value_done(v)
 }
@@ -458,19 +464,21 @@ fn Engine::can_concat(self : Engine) -> Bool {
   } else {
     let f = self.stack[self.stack.length() - 1]
     match f.kind {
-      FArr =>
-        if f.items.length() == 0 {
+      FArr => {
+        let items = frame_items(f)
+        if items.length() == 0 {
           false
         } else {
-          match f.items[f.items.length() - 1] {
+          match items[items.length() - 1] {
             Json::String(_) => true
             _ => false
           }
         }
+      }
       FObj =>
         match f.last_assigned_key {
           Some(k) =>
-            match f.map.get(k) {
+            match frame_map(f).get(k) {
               Some(Json::String(_)) => true
               _ => false
             }
@@ -495,13 +503,14 @@ fn Engine::concat_last(self : Engine, extra : String) -> Bool {
     let f = self.stack[self.stack.length() - 1]
     match f.kind {
       FArr => {
-        let n = f.items.length()
+        let items = frame_items(f)
+        let n = items.length()
         if n == 0 {
           false
         } else {
-          match f.items[n - 1] {
+          match items[n - 1] {
             Json::String(prev) => {
-              f.items[n - 1] = Json::string(prev + extra)
+              items[n - 1] = Json::string(prev + extra)
               true
             }
             _ => false
@@ -510,14 +519,16 @@ fn Engine::concat_last(self : Engine, extra : String) -> Bool {
       }
       FObj =>
         match f.last_assigned_key {
-          Some(k) =>
-            match f.map.get(k) {
+          Some(k) => {
+            let map = frame_map(f)
+            match map.get(k) {
               Some(Json::String(prev)) => {
-                f.map[k] = Json::string(prev + extra)
+                map[k] = Json::string(prev + extra)
                 true
               }
               _ => false
             }
+          }
           None => false
         }
     }
@@ -562,7 +573,7 @@ fn Engine::value_done(self : Engine, v : Json) -> Unit raise InterJSONError {
   let track = self.opts.collect_deltas
   let pid = if track { self.child_path_id(idx) } else { -1 }
   if self.stack[idx].synthetic {
-    self.stack[idx].items.push(v)
+    frame_items(self.stack[idx]).push(v)
     self.stack[idx].ctx = CArrCommaOrEnd
     if track {
       self.delta_land(pid, v)
@@ -571,7 +582,7 @@ fn Engine::value_done(self : Engine, v : Json) -> Unit raise InterJSONError {
   }
   match self.stack[idx].kind {
     FArr => {
-      self.stack[idx].items.push(v)
+      frame_items(self.stack[idx]).push(v)
       self.stack[idx].ctx = CArrCommaOrEnd
       self.stack[idx].after_comma = false
       if track {
@@ -601,9 +612,10 @@ fn Engine::assign(
   v : Json,
 ) -> Unit raise InterJSONError {
   let track = self.opts.collect_deltas
-  if self.stack[idx].map.contains(k) {
+  let members = frame_map(self.stack[idx])
+  if members.contains(k) {
     // Merging two duplicates only loses information when the two values differ.
-    let kept = self.stack[idx].map[k]
+    let kept = members[k]
     let sev = if json_equal(kept, v) { Info } else { Warning }
     match self.opts.duplicate_keys {
       KeepLast => {
@@ -612,7 +624,7 @@ fn Engine::assign(
           self.stack[idx].key_pos,
           severity=Some(sev),
         )
-        self.stack[idx].map[k] = v
+        frame_map(self.stack[idx])[k] = v
         if track {
           self.delta_land(self.child_path_id(idx), v)
         }
@@ -631,7 +643,7 @@ fn Engine::assign(
         )
     }
   } else {
-    self.stack[idx].map[k] = v
+    frame_map(self.stack[idx])[k] = v
     if track {
       self.delta_land(self.child_path_id(idx), v)
     }
@@ -1084,53 +1096,53 @@ fn Engine::emit_literal(
 /// Structural equality of two parsed values, used to decide whether merging a
 /// duplicate key actually dropped information.
 ///
-/// The comparison is depth-bounded. A value deeper than `MAX_VALUE_DEPTH` is
-/// treated as "not equal", because the only use of this function is to decide
-/// whether a merge lost information, and "not equal" is the safe answer: the
-/// merge is then recorded as a loss (`Warning`) rather than as a no-op
-/// (`Info`). The same bound keeps the recursion from exhausting the stack on a
-/// deeply nested input, which would turn a refusal into a crash.
+/// The comparison is **iterative**, for the same reason `copy_json` is: a
+/// recursive comparison made the deepest comparable value a property of the
+/// native stack, which is what forced `Options::max_depth` to be capped at a
+/// depth the comparison could survive. The work list is bounded by the heap,
+/// so the option can mean what it says.
 fn json_equal(a : Json, b : Json) -> Bool {
-  json_equal_at(a, b, 0)
+  let work : Array[(Json, Json)] = [(a, b)]
+  while work.length() > 0 {
+    let (x, y) = work.remove(work.length() - 1)
+    if !json_equal_step(x, y, work) {
+      return false
+    }
+  }
+  true
 }
 
 ///|
-/// The recursive half of `json_equal`, carrying the current depth.
-fn json_equal_at(a : Json, b : Json, depth : Int32) -> Bool {
-  if depth > MAX_VALUE_DEPTH {
-    // Too deep to compare safely: assume the values differ, so the caller
-    // records the merge as a loss instead of pretending nothing was dropped.
-    return false
-  }
-  match (a, b) {
+/// One step of the comparison: `false` means the two values differ, and the
+/// remaining children are pushed onto `work`.
+fn json_equal_step(x : Json, y : Json, work : Array[(Json, Json)]) -> Bool {
+  match (x, y) {
     (Json::Null, Json::Null) => true
     (Json::True, Json::True) => true
     (Json::False, Json::False) => true
-    (Json::Number(x, repr=rx), Json::Number(y, repr=ry)) =>
-      number_equal(x, rx, y, ry)
-    (Json::String(x), Json::String(y)) => x == y
-    (Json::Array(x), Json::Array(y)) => {
-      let mut ok = x.length() == y.length()
-      let mut i = 0
-      while ok && i < x.length() {
-        if !json_equal_at(x[i], y[i], depth + 1) {
-          ok = false
-        }
-        i = i + 1
+    (Json::Number(a, repr=ra), Json::Number(b, repr=rb)) =>
+      number_equal(a, ra, b, rb)
+    (Json::String(a), Json::String(b)) => a == b
+    (Json::Array(a), Json::Array(b)) => {
+      if a.length() != b.length() {
+        return false
       }
-      ok
+      for i = 0; i < a.length(); i = i + 1 {
+        work.push((a[i], b[i]))
+      }
+      true
     }
-    (Json::Object(x), Json::Object(y)) => {
-      let mut ok = x.length() == y.length()
-      if ok {
-        for k, v in x {
-          match y.get(k) {
-            Some(w) => if !json_equal_at(v, w, depth + 1) { ok = false }
-            None => ok = false
-          }
+    (Json::Object(a), Json::Object(b)) => {
+      if a.length() != b.length() {
+        return false
+      }
+      for k, v in a {
+        match b.get(k) {
+          Some(w) => work.push((v, w))
+          None => return false
         }
       }
-      ok
+      true
     }
     _ => false
   }
@@ -1484,10 +1496,10 @@ fn Engine::unwind_top(self : Engine) -> Bool raise InterJSONError {
   if f.synthetic {
     self.stack.pop() |> ignore
     if f.dirty {
-      self.root = Some(Json::array(f.items))
+      self.root = Some(Json::array(shrink_array(frame_items(f))))
       self.phase = PEpilogue
       if self.opts.collect_deltas && f.announced {
-        self.delta_land(root_path, Json::array(f.items))
+        self.delta_land(root_path, Json::array(frame_items(f)))
       }
       return true
     }
@@ -1508,7 +1520,7 @@ fn Engine::unwind_top(self : Engine) -> Bool raise InterJSONError {
       }
       self.report(CloseContainer, self.position())
       self.stack.pop() |> ignore
-      self.value_done(Json::object(f.map))
+      self.value_done(Json::object(shrink_map(frame_map(f))))
       true
     }
     FArr => {
@@ -1517,7 +1529,7 @@ fn Engine::unwind_top(self : Engine) -> Bool raise InterJSONError {
       }
       self.report(CloseContainer, self.position())
       self.stack.pop() |> ignore
-      self.value_done(Json::array(f.items))
+      self.value_done(Json::array(shrink_array(frame_items(f))))
       true
     }
   }
@@ -1708,7 +1720,7 @@ fn Engine::partial_frame(self : Engine, i : Int32, elem : Json?) -> Json {
   let f = self.stack[i]
   match f.kind {
     FArr => {
-      let items = f.items.copy()
+      let items = frame_items(f).copy()
       match elem {
         Some(v) => items.push(v)
         None => ()
@@ -1716,7 +1728,7 @@ fn Engine::partial_frame(self : Engine, i : Int32, elem : Json?) -> Json {
       Json::array(items)
     }
     FObj => {
-      let map = f.map.copy()
+      let map = frame_map(f).copy()
       match f.last_key {
         Some(k) =>
           if f.ctx is CObjColon || f.ctx is CObjValue {
@@ -1787,7 +1799,7 @@ fn Engine::open_path(self : Engine) -> Array[PathSegment] {
           Some(k) => out.push(Key(k))
           None => ()
         }
-      FArr => out.push(Index(f.items.length()))
+      FArr => out.push(Index(frame_items(f).length()))
     }
   }
   out

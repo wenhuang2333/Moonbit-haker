@@ -1455,13 +1455,24 @@ pub fn Schema::evaluate(self : Schema, value : Json) -> SchemaVerdict {
   let satisfied : Array[Int32] = [0]
   let missing : Array[String] = []
   let mismatched : Array[SchemaMismatch] = []
-  walk_schema(self, value, "", total, satisfied, missing, mismatched, 0)
+  walk_schema(self, value, "", total, satisfied, missing, mismatched)
   let ok = missing.length() == 0 && mismatched.length() == 0
   { total: total[0], satisfied: satisfied[0], missing, mismatched, ok, }
 }
 
 ///|
-/// Recursive half of `Schema::evaluate`.
+/// The walk behind `Schema::evaluate`.
+///
+/// It is **iterative**, for the same reason `copy_json` and `json_equal` are:
+/// a recursive walk made the deepest checkable value a property of the native
+/// stack (the wasm backend gives up somewhere between 896 and 1024 frames),
+/// which is what forced `Options::max_depth` to carry a ceiling it should not
+/// have needed. With an explicit work list the depth is bounded by the heap.
+///
+/// The traversal order is the recursive order -- depth first, members in
+/// declaration order -- because `missing` and `mismatched` are reported to the
+/// caller in that order and the tests pin it. Children are therefore pushed in
+/// reverse, so they pop in order.
 fn walk_schema(
   schema : Schema,
   value : Json,
@@ -1470,26 +1481,31 @@ fn walk_schema(
   satisfied : Array[Int32],
   missing : Array[String],
   mismatched : Array[SchemaMismatch],
-  depth : Int32,
 ) -> Unit {
-  // The value being checked can be deeper than the engine's own limit -- it
-  // was built by the caller, not parsed here -- so the walk is bounded too.
-  // Past the bound the node is reported as unsatisfied rather than walked: a
-  // refusal is the safe answer, and a crash is not.
-  if depth > MAX_VALUE_DEPTH {
-    // The bound can only fire at depth 1 or more, so the path is never empty:
-    // the root is walked at depth 0.
-    mismatched.push({
-      path,
-      expected: "a value within " + MAX_VALUE_DEPTH.to_string() + " levels",
-      got: kind_of(value),
-    })
-    return
+  let work : Array[(Schema, Json, String)] = [(schema, value, path)]
+  while work.length() > 0 {
+    let (s, v, p) = work.remove(work.length() - 1)
+    walk_schema_step(s, v, p, total, satisfied, missing, mismatched, work)
   }
+}
+
+///|
+/// One node of the walk. Children that need walking are pushed onto `work`.
+fn walk_schema_step(
+  schema : Schema,
+  value : Json,
+  path : String,
+  total : Array[Int32],
+  satisfied : Array[Int32],
+  missing : Array[String],
+  mismatched : Array[SchemaMismatch],
+  work : Array[(Schema, Json, String)],
+) -> Unit {
   match schema {
     Obj(members) =>
       match value {
-        Json::Object(map) =>
+        Json::Object(map) => {
+          let pending : Array[(Schema, Json, String)] = []
           for m in members {
             let here = join_path(path, m.key)
             let child = match map.get(m.key) {
@@ -1507,17 +1523,7 @@ fn walk_schema(
               satisfied[0] = satisfied[0] + 1
               // A container is walked: the skeleton can constrain deeper.
               match m.schema {
-                Obj(_) | Arr(_) =>
-                  walk_schema(
-                    m.schema,
-                    child,
-                    here,
-                    total,
-                    satisfied,
-                    missing,
-                    mismatched,
-                    depth + 1,
-                  )
+                Obj(_) | Arr(_) => pending.push((m.schema, child, here))
                 _ => ()
               }
             } else {
@@ -1528,6 +1534,8 @@ fn walk_schema(
               })
             }
           }
+          push_reversed(pending, work)
+        }
         _ =>
           mismatched.push({
             path: if path == "" {
@@ -1541,20 +1549,12 @@ fn walk_schema(
       }
     Arr(inner) =>
       match value {
-        Json::Array(items) =>
+        Json::Array(items) => {
+          let pending : Array[(Schema, Json, String)] = []
           for i = 0; i < items.length(); i = i + 1 {
             let here = join_path(path, i.to_string())
             if inner.accepts(items[i]) {
-              walk_schema(
-                inner,
-                items[i],
-                here,
-                total,
-                satisfied,
-                missing,
-                mismatched,
-                depth + 1,
-              )
+              pending.push((inner, items[i], here))
             } else {
               mismatched.push({
                 path: here,
@@ -1563,6 +1563,8 @@ fn walk_schema(
               })
             }
           }
+          push_reversed(pending, work)
+        }
         _ =>
           mismatched.push({
             path: if path == "" {
@@ -1583,6 +1585,21 @@ fn walk_schema(
         })
       }
     _ => ()
+  }
+}
+
+///|
+/// Push `items` onto `work` in reverse, so that they pop in their original
+/// order: the walk has to visit a node's children in the order a recursive
+/// walk would, because that is the order the caller is told about them.
+fn push_reversed(
+  items : Array[(Schema, Json, String)],
+  work : Array[(Schema, Json, String)],
+) -> Unit {
+  let mut i = items.length()
+  while i > 0 {
+    i = i - 1
+    work.push(items[i])
   }
 }
 

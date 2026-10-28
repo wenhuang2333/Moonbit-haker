@@ -1001,7 +1001,9 @@ pub fn RepairPlan::to_json(self : RepairPlan) -> String {
   // refusal would hand the caller the very thing the gate refused.
   sb.write_string(",\"value\":")
   match self.value {
-    Some(v) => sb.write_string(v.stringify())
+    // `render`, not `Json::stringify`: core's serialiser is recursive, so a
+    // deep value would crash on the way out of the plan.
+    Some(v) => sb.write_string(render(v, 0))
     None => sb.write_string("null")
   }
   sb.write_string(",\"text\":")

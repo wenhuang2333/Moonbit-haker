@@ -249,7 +249,7 @@ fn Engine::child_path_id(self : Engine, idx : Int32) -> Int32 {
   let parent = self.stack[idx].path_id
   let f = self.stack[idx]
   match f.kind {
-    FArr => self.dlog.intern(parent, None, f.items.length())
+    FArr => self.dlog.intern(parent, None, frame_items(f).length())
     FObj =>
       match f.last_key {
         Some(k) => self.dlog.intern(parent, Some(k), 0)
@@ -301,12 +301,14 @@ fn Engine::concat_target_path_id(self : Engine) -> Int32 {
   let parent = self.stack[idx].path_id
   let f = self.stack[idx]
   match f.kind {
-    FArr =>
-      if f.items.length() > 0 {
-        self.dlog.intern(parent, None, f.items.length() - 1)
+    FArr => {
+      let items = frame_items(f)
+      if items.length() > 0 {
+        self.dlog.intern(parent, None, items.length() - 1)
       } else {
         parent
       }
+    }
     FObj =>
       match f.last_assigned_key {
         Some(k) => self.dlog.intern(parent, Some(k), 0)

@@ -122,8 +122,8 @@ the MoonBit `PartialParser`.
 This package wraps the same bundle as `static/demo/interjson.js`; it does not
 reimplement the engine. The version is the engine version (`1.5.0`). The
 MoonBit package on mooncakes is `0.12.0` because the registry currently accepts
-only `0.x.y`; the bytes are the same. **Neither is published yet**: the npm
-package and the 0.12.0 mooncakes upload are both pending, and the published
-mooncakes history stops at `0.11.0` (the 1.4.0 correspondence).
+only `0.x.y`; the bytes are the same. **The npm package is not published yet**;
+the mooncakes counterpart **0.12.0 was published on 2026-10-28**, and `0.11.0`
+(the 1.4.0 correspondence) on 2026-10-27.
 
 License: Apache-2.0.

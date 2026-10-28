@@ -31,13 +31,14 @@ or damaged input can make the parser do, not about authentication.
   instead of allocating without limit. The record list is capped at 10 000
   entries.
 - **Recursion is bounded by construction.** `Options::max_depth` has a hard
-  ceiling of `MAX_VALUE_DEPTH = 512` — which is also the documented default, so
-  a caller can tighten it but not loosen it; a larger value is refused with
-  `E050` rather than risking a stack overflow. Declarations (JSON Schema or the
-  library's skeleton language) are bounded by `MAX_SCHEMA_DEPTH = 256` and
-  refused with `E070`. The reason for the ceiling is measured, not guessed: the
-  wasm backend's stack overflows in a recursive walk somewhere between 896 and
-  1024 frames.
+  ceiling — which is also the documented default, so a caller can tighten it but
+  not loosen it; a larger value is refused with `E050` rather than risking a
+  stack overflow. Declarations (JSON Schema or the library's skeleton language)
+  have a tighter bound and are refused with `E070`. The reason for the ceiling is
+  measured, not guessed: the wasm backend's stack overflows in a recursive walk
+  somewhere between 896 and 1024 frames. The constants themselves
+  (`MAX_VALUE_DEPTH`, `MAX_SCHEMA_DEPTH`) live in `code/options.mbt` and
+  `code/schema.mbt`; this document states the guarantee, not a frozen number.
 - **No code execution, no I/O.** Repair is pure text transformation. There is no
   `eval`, no dynamic loading, and the library never opens files or sockets.
 - **Log injection is not possible through messages.** Repair messages are fixed
@@ -79,8 +80,9 @@ know that `{"amount": 100}` should have been `1000`.
 - `snapshot()` copies the current tree; calling it per byte on a large document
   is O(tree) per call and can be used for a denial of service by the *caller*.
   Poll at a sane rate (the benchmark measures 1 KB and 64 KB intervals).
-- The CLI reads the whole input into memory. Peak usage is roughly 18 times the
-  input size (see `docs/BENCHMARK.md`); do not point it at an unbounded stream.
+- The CLI reads the whole input into memory and builds a tree, so peak usage is a
+  multiple of the input size (measured in `docs/BENCHMARK.md`); do not point it
+  at an unbounded stream.
 - Lone surrogates and invalid UTF-8 are replaced rather than rejected in some
   paths; the `E040` code only covers byte-level decoding failures.
 

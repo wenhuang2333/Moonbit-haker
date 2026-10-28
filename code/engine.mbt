@@ -29,8 +29,18 @@ priv enum Ctx {
 priv struct Frame {
   kind : FrameKind
   mut ctx : Ctx
-  items : Array[Json]
-  map : Map[String, Json]
+  /// The values of an array frame, and of a synthetic frame (which aggregates
+  /// several root values). `None` for an object frame: an object stores its
+  /// members in `map` and never touches this.
+  ///
+  /// Both containers used to be allocated for every frame, so an array frame
+  /// paid for a `Map` it could not use and an object frame for an `Array` it
+  /// could not use. The map is the expensive one -- an empty `Map` is most of
+  /// what an object frame costs -- and for a document of a million small
+  /// arrays the unused maps were the single largest allocation in the parse.
+  items : Array[Json]?
+  /// The members of an object frame. `None` for an array or synthetic frame.
+  map : Map[String, Json]?
   mut last_key : String?
   mut last_assigned_key : String?
   mut key_pos : Position
@@ -212,8 +222,16 @@ fn new_frame(kind : FrameKind, start : Position, synthetic : Bool) -> Frame {
     } else {
       CArrValueOrEnd
     },
-    items: [],
-    map: Map([]),
+    items: if kind is FObj {
+      None
+    } else {
+      Some([])
+    },
+    map: if kind is FObj {
+      Some(Map([]))
+    } else {
+      None
+    },
     last_key: None,
     last_assigned_key: None,
     key_pos: start,
@@ -224,6 +242,60 @@ fn new_frame(kind : FrameKind, start : Position, synthetic : Bool) -> Frame {
     path_id: -1,
     announced: false,
   }
+}
+
+///|
+/// The values of an array frame, or of a synthetic frame. An object frame has
+/// none, and asking for them is a programming error the caller avoids by
+/// branching on the frame's kind first.
+fn frame_items(f : Frame) -> Array[Json] {
+  match f.items {
+    Some(a) => a
+    None => []
+  }
+}
+
+///|
+/// The members of an object frame. An array frame has none.
+fn frame_map(f : Frame) -> Map[String, Json] {
+  match f.map {
+    Some(m) => m
+    None => Map([])
+  }
+}
+
+///|
+/// A map holding exactly the entries it has.
+///
+/// `Map([])` is created with room for eight entries, and an object that holds
+/// one keeps paying for the other seven: the map is the value the caller
+/// retains, so the padding lives as long as the value does. A tool argument
+/// object is usually one or two keys, and a document of a million small
+/// objects is the case where the padding is the whole memory profile. The copy
+/// happens once, when the container closes, and only when it would actually
+/// shrink.
+fn shrink_map(m : Map[String, Json]) -> Map[String, Json] {
+  if m.capacity() <= m.length() {
+    return m
+  }
+  let out : Map[String, Json] = Map([], capacity=m.length())
+  for k, v in m {
+    out[k] = v
+  }
+  out
+}
+
+///|
+/// An array holding exactly the elements it has. See `shrink_map`.
+fn shrink_array(a : Array[Json]) -> Array[Json] {
+  if a.capacity() <= a.length() {
+    return a
+  }
+  let out : Array[Json] = Array::make(a.length(), Json::null())
+  for i = 0; i < a.length(); i = i + 1 {
+    out[i] = a[i]
+  }
+  out
 }
 
 ///|
@@ -238,7 +310,65 @@ fn is_number_start(u : UInt16) -> Bool {
 /// integers beyond `Double` precision survive (ADR-004).
 fn build_number(text : String) -> Json {
   let d = @string.parse_double(text) catch { _ => 0.0 }
-  Json::number(d, repr=text)
+  // The source text is kept only when the `Double` cannot reproduce it.
+  //
+  // `repr` exists so that `1.0` stays `1.0` and an integer past 2^53 keeps
+  // every digit; without it the value round-trips through the double and
+  // `9007199254740993` would come back as `9007199254740992`. But storing it
+  // for *every* number costs a `String` allocation per number, which for a
+  // document full of integers is the single largest thing the parser
+  // allocates -- and for a plain integer the text and the double agree, so the
+  // allocation buys nothing.
+  //
+  // `number_repr_is_redundant` is the conservative test: it answers "yes" only
+  // when the text is a canonical decimal integer that a `Double` holds
+  // exactly, where core's serialiser is known to print the text back verbatim.
+  // Everything else -- `1.0`, `1e2`, `-0`, `0.0000001`, `12345678901234567890`
+  // -- keeps its text. `TC-R-24` asserts the rule against core over a table of
+  // awkward numbers.
+  if number_repr_is_redundant(text) {
+    Json::number(d)
+  } else {
+    Json::number(d, repr=text)
+  }
+}
+
+///|
+/// Whether core's serialiser prints `text` back verbatim for the `Double` it
+/// denotes, so that storing the text is redundant.
+///
+/// True only for a canonical plain decimal integer: an optional `-`, digits
+/// with no leading zero (unless the value is exactly `0`), no fraction, no
+/// exponent, and at most 15 digits so that the double holds it exactly. `-0`
+/// is excluded because core prints `0` for it.
+fn number_repr_is_redundant(text : String) -> Bool {
+  let n = text.length()
+  if n == 0 {
+    return false
+  }
+  let mut i = 0
+  if text.at(i) == 0x2D {
+    i = i + 1
+    if i == n {
+      return false
+    }
+  }
+  let digits = n - i
+  if digits > 15 {
+    return false
+  }
+  for j = i; j < n; j = j + 1 {
+    let c = text.at(j).to_int()
+    if c < 0x30 || c > 0x39 {
+      return false
+    }
+  }
+  // A leading zero is only canonical for the value zero itself, and `-0` is
+  // printed as `0` by core, so it must keep its text.
+  if text.at(i) == 0x30 && (digits > 1 || i > 0) {
+    return false
+  }
+  true
 }
 
 ///|
@@ -285,12 +415,186 @@ fn is_non_finite(lower : String) -> Bool {
 
 ///|
 /// Serialise a value, honouring the indent option.
+///
+/// The renderer is **iterative**. `Json::stringify` from core is recursive, so
+/// a value deep enough to outrun the native stack could be parsed and then
+/// crash on the way out -- a refusal turned into a crash, which is the failure
+/// `Options::max_depth` exists to prevent, arriving one step later. With an
+/// explicit work list the depth a caller may configure is bounded by the heap
+/// rather than by the stack, so `max_depth` can mean what it says.
+///
+/// The output is byte-identical to `Json::stringify`; `TC-R-22` asserts that
+/// against core on the golden corpus and on generated values.
 fn render(v : Json, indent : Int32) -> String {
-  if indent > 0 {
-    v.stringify(indent~)
-  } else {
-    v.stringify()
+  let sb = StringBuilder()
+  let work : Array[RenderStep] = [Value(v, 0)]
+  while work.length() > 0 {
+    match work.remove(work.length() - 1) {
+      Value(x, depth) => render_value(sb, x, depth, work)
+      ArrayAt(items, i, depth) =>
+        render_array_at(sb, items, i, indent, depth, work)
+      ObjectAt(entries, i, depth) =>
+        render_object_at(sb, entries, i, indent, depth, work)
+    }
   }
+  sb.to_string()
+}
+
+///|
+/// One pending piece of a render.
+///
+/// A container is rendered one element at a time, by cursor, rather than by
+/// queueing every child at once. Queueing them all is simpler and is what this
+/// code did first, but it makes the work list as large as the container: for a
+/// million-element array the queue itself was the peak allocation, which is
+/// the memory the mode exists to avoid. A cursor keeps the work list as deep
+/// as the document, not as wide.
+priv enum RenderStep {
+  /// Write this value at this depth.
+  Value(Json, Int32)
+  /// Continue writing `items` from index `i` at this depth.
+  ArrayAt(Array[Json], Int32, Int32)
+  /// Continue writing `entries` from index `i` at this depth.
+  ObjectAt(Array[(String, Json)], Int32, Int32)
+}
+
+///|
+/// Write one value, starting a cursor when it is a container.
+fn render_value(
+  sb : StringBuilder,
+  v : Json,
+  depth : Int32,
+  work : Array[RenderStep],
+) -> Unit {
+  match v {
+    Json::Null => sb.write_string("null")
+    Json::True => sb.write_string("true")
+    Json::False => sb.write_string("false")
+    // A number keeps its source text when it has one, so `1.0` stays `1.0`
+    // and an integer past 2^53 keeps every digit.
+    Json::Number(_, repr~) =>
+      match repr {
+        Some(text) => sb.write_string(text)
+        None => sb.write_string(v.stringify())
+      }
+    Json::String(_) => sb.write_string(v.stringify())
+    Json::Array(items) =>
+      if items.length() == 0 {
+        sb.write_string("[]")
+      } else {
+        sb.write_char('[')
+        work.push(ArrayAt(items, 0, depth))
+      }
+    Json::Object(map) =>
+      if map.length() == 0 {
+        sb.write_string("{}")
+      } else {
+        sb.write_char('{')
+        // The map iterates in insertion order, which is the order the document
+        // had. Collecting the entries once per object is O(keys); the cursor
+        // then walks them without holding the whole container on the stack.
+        let entries : Array[(String, Json)] = []
+        for k, item in map {
+          entries.push((k, item))
+        }
+        work.push(ObjectAt(entries, 0, depth))
+      }
+  }
+}
+
+///|
+/// Write element `i` of an array and queue the rest.
+fn render_array_at(
+  sb : StringBuilder,
+  items : Array[Json],
+  i : Int32,
+  indent : Int32,
+  depth : Int32,
+  work : Array[RenderStep],
+) -> Unit {
+  if i >= items.length() {
+    sb.write_string(close_pad(depth, indent))
+    sb.write_char(']')
+    return
+  }
+  if i > 0 {
+    sb.write_string(separator(depth, indent))
+  } else {
+    sb.write_string(open_pad(depth, indent))
+  }
+  work.push(ArrayAt(items, i + 1, depth))
+  work.push(Value(items[i], depth + 1))
+}
+
+///|
+/// Write member `i` of an object and queue the rest.
+fn render_object_at(
+  sb : StringBuilder,
+  entries : Array[(String, Json)],
+  i : Int32,
+  indent : Int32,
+  depth : Int32,
+  work : Array[RenderStep],
+) -> Unit {
+  if i >= entries.length() {
+    sb.write_string(close_pad(depth, indent))
+    sb.write_char('}')
+    return
+  }
+  if i > 0 {
+    sb.write_string(separator(depth, indent))
+  } else {
+    sb.write_string(open_pad(depth, indent))
+  }
+  let (k, item) = entries[i]
+  sb.write_string(Json::string(k).stringify())
+  sb.write_string(if indent > 0 { ": " } else { ":" })
+  work.push(ObjectAt(entries, i + 1, depth))
+  work.push(Value(item, depth + 1))
+}
+
+///|
+/// What sits between two elements of a container: a comma, then the newline and
+/// indent that the next element starts with.
+fn separator(depth : Int32, indent : Int32) -> String {
+  if indent > 0 {
+    "," + "\n" + pad(depth + 1, indent)
+  } else {
+    ","
+  }
+}
+
+///|
+/// What sits between the opening bracket and the first element.
+fn open_pad(depth : Int32, indent : Int32) -> String {
+  if indent > 0 {
+    "\n" + pad(depth + 1, indent)
+  } else {
+    ""
+  }
+}
+
+///|
+/// What sits between the last element and the closing bracket.
+fn close_pad(depth : Int32, indent : Int32) -> String {
+  if indent > 0 {
+    "\n" + pad(depth, indent)
+  } else {
+    ""
+  }
+}
+
+///|
+/// `depth * indent` spaces.
+fn pad(depth : Int32, indent : Int32) -> String {
+  let sb = StringBuilder()
+  let mut i = 0
+  let total = depth * indent
+  while i < total {
+    sb.write_char(' ')
+    i = i + 1
+  }
+  sb.to_string()
 }
 
 ///|

@@ -4,7 +4,7 @@ package "zhanshishan/interjson"
 // Values
 pub const MAX_SCHEMA_DEPTH : Int32 = 256
 
-pub const MAX_VALUE_DEPTH : Int32 = 512
+pub const MAX_VALUE_DEPTH : Int32 = 1048576
 
 pub const REGISTRY_VERSION : String = "0.12.0"
 

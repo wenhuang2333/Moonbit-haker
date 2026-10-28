@@ -44,7 +44,7 @@ sentence to send back to the model when the answer is no.
 | Capabilities | `tools.listChanged: false` (tools only; no resources or prompts) |
 | Tools | `interjson_gate` (primary), `interjson_repair`, `interjson_validate`, `interjson_readiness` — all read-only |
 | Request line limit | 8 MiB (8,388,608 bytes); a longer line is answered with JSON-RPC `-32700` and discarded through the next LF |
-| Engine limits | nesting depth 512 (`MAX_VALUE_DEPTH`, the ceiling on `Options::max_depth`; above it the option is refused with `E050`), input 67,108,864 UTF-16 code units, single token 16,777,216; a *declaration* deeper than 256 (`MAX_SCHEMA_DEPTH`) is refused with `E070` |
+| Engine limits | nesting depth (`Options::max_depth`, default 512; the ceiling on it is documented in [`../SECURITY.md`](../SECURITY.md) and above it the option is refused with `E050`), input 67,108,864 UTF-16 code units, single token 16,777,216; a *declaration* deeper than the schema bound in `SECURITY.md` is refused with `E070` |
 | Stdout | JSON-RPC messages only; diagnostics go to stderr |
 | Notifications | never answered (`notifications/initialized`, `notifications/cancelled`) |
 | State | stateless: every tool call is independent |
@@ -117,18 +117,18 @@ symlink.
 
 ### Release assets
 
-The published release assets are
-`interjson-linux-x86_64`, `interjson-macos-arm64`,
+The published release assets are `interjson-linux-x86_64`,
+`interjson-linux-arm64`, `interjson-macos-arm64`,
 `interjson-windows-x86_64.exe`, `interjson-probe.wasm`,
-`interjson-demo.js`, `interjson-install.sh` and `SHA256SUMS`. Releases before
-v1.4.0 were published as JSONMend and keep the `jsonmend-*` asset prefix and
-the `jsonmend_*` tool names; use v1.4.0 or later for the `interjson` CLI and
-`interjson_gate`.
+`interjson-demo.js`, `interjson-install.sh` and `SHA256SUMS`. There is **no
+Intel macOS asset**: the MoonBit toolchain publishes no `darwin-x86_64` target,
+so no runner can build one. Releases before v1.4.0 were published as JSONMend
+and keep the `jsonmend-*` asset prefix and the `jsonmend_*` tool names; use
+v1.4.0 or later for the `interjson` CLI and `interjson_gate`.
 
-The 1.5.0 release is tagged `v1.5.0`; the asset set is built by the release workflow
-for that tag, and the mooncakes counterpart `0.12.0` was published on 2026-10-28
-in this repository's state, so the installer above installs the latest
-*published* release until it is.
+The 1.5.0 release is tagged `v1.5.0` and is published with those eight assets;
+the mooncakes counterpart `0.12.0` was published on 2026-10-28, so the installer
+above installs the 1.5.0 binaries.
 
 ### pip: `interjson-moonbit`
 
@@ -600,11 +600,11 @@ Recipes for the first two are in
 [INTEGRATIONS.md](INTEGRATIONS.md#making-the-gate-mandatory).
 
 **Resource limits:** one request line may not exceed 8 MiB; a longer line gets
-`-32700` and is discarded through the next LF. The engine's own limits (depth
-512, input 67,108,864 code units, token 16,777,216) apply per call and are
-reported as `E020`/`E021`/`E022`; a declaration deeper than 256 is `E070`, and a
-`max_depth` above 512 is `E050`. A client should still run one server process
-per session and supervise it.
+`-32700` and is discarded through the next LF. The engine's own limits (depth,
+input 67,108,864 code units, token 16,777,216) apply per call and are reported
+as `E020`/`E021`/`E022`; a declaration past the schema bound is `E070`, and a
+`max_depth` above the ceiling in [`../SECURITY.md`](../SECURITY.md) is `E050`. A
+client should still run one server process per session and supervise it.
 
 **Hardening notes:** run the server as the user who owns the data, not as root;
 point `INTERJSON_BIN` (or the client's command) at an absolute path you control
@@ -665,11 +665,11 @@ The repository's own gates cover the same surface:
 # 19 protocol/MCP conformance groups, including the mcp group
 python3 code/tests/conformance/run_conformance.py --cli "$B"
 
-# 120 command line assertions, including --print-config and initialize
+# command line assertions, including --print-config and initialize
 bash code/tests/cli_smoke.sh
 ```
 
-`19/19 conformance groups passed` and `120 passed, 0 failed` are the expected
+`19/19 conformance groups passed` and `122 passed, 0 failed` are the expected
 lines. The conformance suite starts the server itself, performs
 `initialize` (including the `2024-11-05` fallback), checks that a notification
 produces no response, and calls `tools/list` and each tool — it is the

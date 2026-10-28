@@ -289,37 +289,54 @@ pub fn PartialParser::snapshot_copy(self : PartialParser) -> Snapshot {
 ///|
 /// Deep copy of a `Json` value.
 ///
-/// The copy is depth-bounded. A subtree deeper than `MAX_VALUE_DEPTH` is
-/// returned as it is rather than copied, so a pathological value cannot
-/// exhaust the stack. That branch is unreachable for a value the engine
-/// produced: `Options::validate` refuses a `max_depth` above the same bound,
-/// so nothing the engine parses is ever that deep. The bound exists for a
-/// caller that hands this function a value built elsewhere.
+/// The copy is **iterative**. It used to recurse once per level, which meant
+/// the depth it could handle was a property of the native stack rather than of
+/// the machine, and the wasm backend gave up somewhere between 896 and 1024
+/// frames. That is what forced `Options::max_depth` to have a low ceiling:
+/// the option had to be capped at a depth the *copier* could survive, so a
+/// caller could tighten the limit but never loosen it.
+///
+/// With an explicit work list the depth is bounded by the heap, so the option
+/// can mean what it says. `Array` and `Map` are reference types, so a child
+/// container can be linked into its parent before it is filled and the
+/// mutation is visible through the parent.
 pub fn copy_json(v : Json) -> Json {
-  copy_json_at(v, 0)
+  let root = copy_json_shell(v)
+  let work : Array[(Json, Json)] = [(v, root)]
+  while work.length() > 0 {
+    let (src, dst) = work.remove(work.length() - 1)
+    copy_json_step(src, dst, work)
+  }
+  root
 }
 
 ///|
-/// The recursive half of `copy_json`, carrying the current depth.
-fn copy_json_at(v : Json, depth : Int32) -> Json {
-  if depth > MAX_VALUE_DEPTH {
-    return v
-  }
-  match v {
-    Json::Array(items) => {
-      let out : Array[Json] = []
+/// Everything the copy still has to do for one container.
+fn copy_json_step(src : Json, dst : Json, work : Array[(Json, Json)]) -> Unit {
+  match (src, dst) {
+    (Json::Array(items), Json::Array(out)) =>
       for item in items {
-        out.push(copy_json_at(item, depth + 1))
+        let child = copy_json_shell(item)
+        out.push(child)
+        work.push((item, child))
       }
-      Json::array(out)
-    }
-    Json::Object(map) => {
-      let out : Map[String, Json] = Map([])
+    (Json::Object(map), Json::Object(out)) =>
       for k, item in map {
-        out[k] = copy_json_at(item, depth + 1)
+        let child = copy_json_shell(item)
+        out[k] = child
+        work.push((item, child))
       }
-      Json::object(out)
-    }
+    _ => ()
+  }
+}
+
+///|
+/// The container a copy of `v` needs, or `v` itself when it is a scalar: a
+/// scalar has no children, so it is already its own copy.
+fn copy_json_shell(v : Json) -> Json {
+  match v {
+    Json::Array(_) => Json::array([])
+    Json::Object(_) => Json::object(Map([]))
     _ => v
   }
 }

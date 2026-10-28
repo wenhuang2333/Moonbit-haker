@@ -253,20 +253,23 @@ test "TC-R-15 a deep JSON Schema object is refused, not crashed" {
 }
 
 ///|
-test "TC-R-16 a deep value does not exhaust the stack" {
-  // `max_depth` used to be accepted at any positive value, so a caller
-  // asking for 100000 turned the bounded `E020` into a stack overflow.
-  // `analyze` never raises: the refusal comes back as a plan.
-  let plan = analyze("[".repeat(5000) + "]".repeat(5000), options={
-    ..Options::default(),
-    max_depth: MAX_VALUE_DEPTH,
-  })
-  assert_eq(plan.is_executable(), false)
-  assert_eq(plan.error_code, "E020")
+test "TC-R-16 a deep value no longer exhausts the stack" {
+  // This is the defect the whole depth redesign is about. `max_depth` used to
+  // be capped at 512 because four walks were recursive and the wasm stack
+  // gives out between 896 and 1024 frames; a caller could tighten the limit
+  // but never loosen it. Every walk is iterative now, so a deep value parses,
+  // renders, compares and copies without touching the native stack.
+  let depth = 5000
+  let doc = "[".repeat(depth) + "1" + "]".repeat(depth)
+  let plan = analyze(doc, options={ ..Options::default(), max_depth: 100000, })
+  assert_eq(plan.is_executable(), true)
+  assert_eq(plan.text.length(), depth * 2 + 1)
 }
 
 ///|
 test "TC-R-17 max_depth above the ceiling is an option error" {
+  // The ceiling still exists -- a typo should not ask for an allocation the
+  // machine cannot make -- but it is now a sanity bound, not a stack bound.
   let plan = analyze("{}", options={
     ..Options::default(),
     max_depth: MAX_VALUE_DEPTH + 1,
@@ -276,33 +279,88 @@ test "TC-R-17 max_depth above the ceiling is an option error" {
 }
 
 ///|
-test "TC-R-18 the ordinary depth still works" {
-  // The bound is far above any real document; a legitimate nesting must not
-  // be refused by it.
-  let deep = "[".repeat(100) + "]".repeat(100)
-  let plan = reg_analyze(deep)
+test "TC-R-18 the default depth still refuses what it always refused" {
+  // Loosening the ceiling must not loosen the default: a document deeper than
+  // the documented 512 is still refused with `E020`.
+  let plan = reg_analyze("[".repeat(600) + "]".repeat(600))
+  assert_eq(plan.is_executable(), false)
+  assert_eq(plan.error_code, "E020")
+}
+
+///|
+test "TC-R-18b a legitimate nesting is still accepted" {
+  let plan = reg_analyze("[".repeat(100) + "]".repeat(100))
   assert_eq(plan.is_executable(), true)
 }
 
 // ---------------------------------------------------------------------------
-// The value walk over a caller-supplied value is bounded too.
+// The walks over a caller-supplied value are iterative, so their depth is
+// bounded by the heap rather than by the native stack.
 // ---------------------------------------------------------------------------
 
 ///|
-test "TC-R-19 a declaration deeper than the bound is refused, not crashed" {
-  // `Schema` is a public enum with public constructors, so a caller can build
-  // a declaration deeper than any parser would accept -- and
-  // `Schema::evaluate` walks it. Past `MAX_VALUE_DEPTH` the node is reported
-  // unsatisfied: a refusal is the safe answer, a stack overflow is not.
-  let mut schema = Schema::Int
-  let mut value = Json::number(1.0)
-  for _i = 0; _i < MAX_VALUE_DEPTH + 50; _i = _i + 1 {
-    schema = Schema::Arr(schema)
-    value = Json::array([value])
+test "TC-R-19 a deep value survives copy, compare, render and evaluate" {
+  // The four walks that used to be recursive, all on one deep value. Before
+  // the change each of these was a stack overflow waiting for a caller who
+  // built the value themselves.
+  let depth = 2000
+  let mut v = Json::number(1.0)
+  for _i = 0; _i < depth; _i = _i + 1 {
+    v = Json::array([v])
   }
-  let verdict = schema.evaluate(value)
-  assert_eq(verdict.ok, false)
-  assert_eq(verdict.mismatched.length() > 0, true)
+  let copy = copy_json(v)
+  assert_eq(json_equal(v, copy), true)
+  assert_eq(render(v, 0).length(), depth * 2 + 1)
+  // The declaration is built, not parsed: the schema *parsers* are still
+  // recursive and are still bounded by `MAX_SCHEMA_DEPTH` (TC-R-19c), but a
+  // caller that constructs a `Schema` directly is not going through them.
+  let mut schema = Schema::Int
+  for _i = 0; _i < depth; _i = _i + 1 {
+    schema = Schema::Arr(schema)
+  }
+  let verdict = schema.evaluate(v)
+  assert_eq(verdict.ok, true)
+}
+
+///|
+test "TC-R-19b the copy is independent of the original" {
+  // The iterative copy has to be a real copy, not a share: mutating the copy
+  // must not touch the source.
+  let src = @json.parse("{\"a\":[1,2],\"b\":{\"c\":3}}") catch {
+    _ => Json::null()
+  }
+  let copy = copy_json(src)
+  match copy {
+    Json::Object(m) =>
+      match m.get("a") {
+        Some(Json::Array(items)) => items.push(Json::number(9.0))
+        _ => assert_true(false, msg="the copy has no array at a")
+      }
+    _ => assert_true(false, msg="the copy is not an object")
+  }
+  match src {
+    Json::Object(m) =>
+      match m.get("a") {
+        Some(Json::Array(items)) => assert_eq(items.length(), 2)
+        _ => assert_true(false, msg="the source has no array at a")
+      }
+    _ => assert_true(false, msg="the source is not an object")
+  }
+}
+
+///|
+test "TC-R-19c a declaration is still bounded" {
+  // Declarations are parsed by two recursive parsers, so that bound is real
+  // and stays: a declaration past `MAX_SCHEMA_DEPTH` is `E070`.
+  let deep = "[".repeat(MAX_SCHEMA_DEPTH + 10) +
+    "]".repeat(MAX_SCHEMA_DEPTH + 10)
+  let mut code = ""
+  try {
+    let _ = Schema::parse(deep)
+  } catch {
+    e => code = e.code()
+  }
+  assert_eq(code, "E070")
 }
 
 ///|
@@ -326,4 +384,20 @@ test "TC-R-21 a nested array where an array was expected names its path" {
   let verdict = schema.evaluate(value)
   assert_eq(verdict.ok, false)
   assert_eq(verdict.mismatched[0].path, "1")
+}
+
+///|
+test "TC-R-25 syntax readiness samples a prefix with no value yet" {
+  // The sampling loop asks the partial parser for a snapshot at every step.
+  // Before the first value is complete the snapshot has no value, and that
+  // branch has to do nothing rather than stop the search: the answer is the
+  // first offset at which the document *already* equals its final value, and
+  // an empty prefix is simply not that offset yet.
+  //
+  // Leading whitespace guarantees at least one such sample: at offset 1 the
+  // input is `" "`, which has no value.
+  let ready = syntax_readiness_permille("   1", step=1)
+  assert_eq(ready, 1000)
+  let same = syntax_readiness_permille("   1")
+  assert_eq(same, 1000)
 }
