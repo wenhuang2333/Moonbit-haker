@@ -34,6 +34,9 @@ moon.lock
 #                                 「无许可证」，而 README 的 badge 指向子目录
 #   .github/ISSUE_TEMPLATE/*.md   缺陷与规则提案模板；原先被 *.md 吞掉，
 #                                 于是 GitHub 上「新建 Issue」是空白页
+#   .github/SECURITY.md           GitHub 的 Security 面板与「Report a
+#                                 vulnerability」只读这个路径；`code/SECURITY.md`
+#                                 是正本，这份是同一内容的分发位置
 #   code/docs/EVAL*.md            CI 跑出来的测量报告，由 run_eval.py、
 #   code/docs/READINESS.md        run_independent.py、run_readiness.py、
 #   code/docs/MEMORY.md           memory_baseline.py 直接写入，CI 还把它们
@@ -71,6 +74,7 @@ moon.lock
 !LICENSE
 !NOTICE
 !.github/ISSUE_TEMPLATE/*.md
+!.github/SECURITY.md
 !.github/PULL_REQUEST_TEMPLATE.md
 
 # 差分报告的本地副本（提交版是 docs/DIVERGENCES.md）

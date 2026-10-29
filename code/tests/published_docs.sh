@@ -74,7 +74,7 @@ printf 'published documents: %d\n' "${#PUBLISHED[@]}"
 #
 # `NOTREE.md` is on the list because its numbers are the memory ratios, and
 # `memory_gate.py` -- not `claims.sh` -- is what keeps those honest.
-FIGURE_FREE="code/docs/PROTOCOL.md code/docs/SPEC.md code/docs/INTEGRATIONS.md code/docs/NOTREE.md code/docs/MEMORY.md code/docs/EVAL.md code/docs/EVAL_AMBIGUITY.md code/docs/EVAL_INDEPENDENT.md code/docs/EVAL_PATHS.md code/docs/EVAL_REFERENCE.md code/docs/EVAL_REGISTRATION.md code/docs/READINESS.md code/docs/DIVERGENCES.md code/docs/CONFORMANCE.md code/tests/eval/third_party/jsontestsuite/PROVENANCE.md code/tests/eval/third_party/jsontestsuite/README.md code/CHANGELOG.md code/SECURITY.md code/CONTRIBUTING.md .github/ISSUE_TEMPLATE/defect.md .github/ISSUE_TEMPLATE/new-rule.md .github/PULL_REQUEST_TEMPLATE.md"
+FIGURE_FREE=".github/SECURITY.md code/docs/PROTOCOL.md code/docs/SPEC.md code/docs/INTEGRATIONS.md code/docs/NOTREE.md code/docs/MEMORY.md code/docs/EVAL.md code/docs/EVAL_AMBIGUITY.md code/docs/EVAL_INDEPENDENT.md code/docs/EVAL_PATHS.md code/docs/EVAL_REFERENCE.md code/docs/EVAL_REGISTRATION.md code/docs/READINESS.md code/docs/DIVERGENCES.md code/docs/CONFORMANCE.md code/tests/eval/third_party/jsontestsuite/PROVENANCE.md code/tests/eval/third_party/jsontestsuite/README.md code/CHANGELOG.md code/SECURITY.md code/CONTRIBUTING.md .github/ISSUE_TEMPLATE/defect.md .github/ISSUE_TEMPLATE/new-rule.md .github/PULL_REQUEST_TEMPLATE.md"
 
 CLAIMS="code/tests/claims.sh"
 for f in "${PUBLISHED[@]}"; do
@@ -146,6 +146,20 @@ for f in "${PUBLISHED[@]}"; do
     fail "$f declares version $v but code/moon.mod is $MOD_VERSION"
   done <<< "$declared"
 done
+
+# --- 4. the two copies of SECURITY.md are the same file ----------------------
+#
+# GitHub's Security tab and its "Report a vulnerability" button only read
+# `.github/SECURITY.md`, so that path has to exist; `code/SECURITY.md` is the
+# canonical copy, next to the code the guarantees are about. Two copies of one
+# document drift, so they are compared instead of trusted.
+if [ -f code/SECURITY.md ] && [ -f .github/SECURITY.md ]; then
+  if ! cmp -s code/SECURITY.md .github/SECURITY.md; then
+    fail ".github/SECURITY.md differs from code/SECURITY.md; they must be identical (GitHub reads the first, the second is canonical)"
+  fi
+elif [ -f code/SECURITY.md ] || [ -f .github/SECURITY.md ]; then
+  fail "SECURITY.md exists at only one of the two paths GitHub or a reader expects"
+fi
 
 if [ "$FAIL" -gt 0 ]; then
   printf '\npublished_docs.sh: %d problem(s). A document that is published is a document a\n' "$FAIL" >&2

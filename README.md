@@ -2,8 +2,9 @@
 
 **版本**：1.5.1
 
-**技术预览（technical preview）**：GitHub `v1.5.0` 已发布（8 个产物）；mooncakes 上
-`0.12.0` 已于 2026-10-28 发布；**npm 与 PyPI 上还没有 `interjson-moonbit`**（边界见本节末尾）。
+**技术预览（technical preview）**：GitHub `v1.5.1` 已发布（7 个产物 + `SHA256SUMS`）；
+mooncakes 上 `0.13.0` 已于 2026-10-29 发布；**npm 与 PyPI 上还没有 `interjson-moonbit`**
+（边界见本节末尾）。
 
 [![CI](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml/badge.svg)](https://github.com/wenhuang2333/Moonbit-haker/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -75,7 +76,7 @@ claude mcp add interjson -- interjson mcp
 >   其他平台需要从源码构建。**没有 Intel macOS 产物**：MoonBit 工具链只发布
 >   `darwin-aarch64`、`linux-x86_64`、`linux-aarch64`，那个平台连工具链都装不上。
 > - **从源码构建需要 MoonBit 工具链 `moon 0.1.20261016`**（版本锁在仓库里，其他版本未验证）。
-> - **mooncakes 上的 `0.12.0` 已于 2026-10-28 发布**（`moon add
+> - **mooncakes 上的 `0.13.0` 已于 2026-10-29 发布**（`moon add
 >   zhanshishan/interjson`）；**npm 与 PyPI 上还没有 `interjson-moonbit`**，
 >   两个语言包目前只能按仓库路径安装。
 > - 引擎与全部不变量已由测试锁定（见[质量与证据](#质量与证据)），但对外包与 registry 渠道
@@ -451,7 +452,9 @@ GitHub 侧 `v1.4.0` 之前的 Release 都在旧包名 `zhanshishan/jsonmend` 下
 `code/version.mbt` 的 `VERSION` / `REGISTRY_VERSION`；`code/moon.mod`、`code/npm/package.json`、
 `code/python/pyproject.toml` 是三个编译器够不到的字面量，`tests/cli_smoke.sh` 断言四处相等，
 `tests/claims.sh` 断言文档引用同一个数字。发布顺序：**先 `moon publish --dry-run` 探测平台
-限制，再打标签**——标签一旦推送不再移动；Release 的资产是否与 `SHA256SUMS` 一致，由
+限制，再打标签**——标签一旦推送不再移动（`v1.5.0` 破例过一次，条件与理由记在
+`code/CHANGELOG.md`：Release 工作流失败且**一个产物都没发布**，移动没有改写任何已存在的
+引用）；Release 的资产是否与 `SHA256SUMS` 一致，由
 `code/tests/release_assets.sh` 检查。逐条复现步骤在仓库内的 `code/docs/REPRODUCE.md`
 （不随包发布；`README.md` 与 `code/README.md` 里的命令就是它的可执行部分）。
 
