@@ -197,6 +197,14 @@ jobs:
         working-directory: code/npm
         run: node --test
 
+      # Apache-2.0 section 4: a redistributor has to pass the licence and the
+      # NOTICE on. Both packages had neither and nothing checked -- the
+      # tarball and the wheel were only ever built by hand. This builds them,
+      # looks for the licence in the artefact, and installs the npm tarball to
+      # confirm it works.
+      - name: Both language packages are publishable as they stand
+        run: bash code/tests/package_dist.sh
+
       # `claims.sh` checks the figures a document quotes. Which documents it
       # checks used to be decided by file arguments written at each check site,
       # and that list had drifted in both directions: it named two documents that
