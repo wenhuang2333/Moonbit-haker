@@ -6,7 +6,7 @@
     <title>InterJSON 控制台 — 流式 JSON 修复与执行门</title>
     <meta
       name="description"
-      content="InterJSON 交互控制台：22 条修复规则、五种安全档位、执行门判定、流式部分解析、字段就绪曲线与 CLI。页面里每一次修复都由 MoonBit 编译出的 interjson.js 现场完成。"
+      content="InterJSON 交互控制台：本地 MCP 执行门、22 条修复规则、五种安全档位、执行门判定、流式部分解析、深度预算、字段就绪曲线与 CLI。页面里每一次判定与修复都由 MoonBit 编译出的 interjson.js 现场完成。"
     />
     <style>
       :root {
@@ -600,6 +600,34 @@
         </div>
 
         <div class="card span-2" style="margin-top: 16px">
+          <h3>深度预算 · 1.5 起值上的遍历是迭代的</h3>
+          <p class="note">
+            深度上限原本是栈深度；1.5 起，值上的四个遍历（拷贝、判等、骨架求值、渲染）都改成迭代，
+            于是深度由堆而不是原生栈决定：<code>MAX_VALUE_DEPTH = 1048576</code> 是防笔误的理智上界，
+            库默认的 <code>max_depth</code> 仍是 512。下面这份文档是现场生成的嵌套数组，
+            交给同一个引擎判定 —— 超过预算报 <code>E020</code>，放宽后就能解析。
+          </p>
+          <div class="row" style="margin: 10px 0">
+            <label for="dp-depth">嵌套层数</label>
+            <select id="dp-depth" style="max-width: 10rem">
+              <option value="512">512（库默认预算）</option>
+              <option value="5000">5 000</option>
+              <option value="50000">50 000</option>
+              <option value="100000">100 000</option>
+            </select>
+            <label for="dp-budget">判定时使用的预算</label>
+            <select id="dp-budget" style="max-width: 9rem">
+              <option value="512">512（默认）</option>
+              <option value="100000">100 000</option>
+              <option value="1048576">1048576（MAX_VALUE_DEPTH）</option>
+            </select>
+            <button id="dp-run" type="button">生成并判定</button>
+          </div>
+          <div class="verdict" id="dp-verdict">—</div>
+          <p class="meta" id="dp-meta">—</p>
+        </div>
+
+        <div class="card span-2" style="margin-top: 16px">
           <h3>决策计划 JSON（<code>RepairPlan::to_json</code> 原文）</h3>
           <pre id="gate-plan" class="tall">—</pre>
           <div class="row" style="margin-top: 8px">
@@ -841,7 +869,7 @@
             <ul>
               <li>输出必合法 JSON · 修复幂等 · 任意分块与一次性结果一致 · 快照是稳定前缀 · 任何字节序列不 panic。</li>
               <li>页面里的每个数字都来自 <code>static/demo/interjson.js</code>（<code>code/examples/web/main.mbt</code> 的 MoonBit → JS 产物），没有为演示写的特例，也没有第二份解析器。</li>
-              <li>规则、错误码与退出码取自 <code>code/docs/RULES.md</code>、<code>code/docs/ERRORS.md</code>；MCP 工具表与 <code>--print-config</code> 输出取自 <code>code/cmd/interjson/mcp.mbt</code> 与真实二进制的运行结果；质量数字取自 README 的证据表。</li>
+              <li>规则、错误码与退出码取自 <code>code/docs/RULES.md</code>、<code>code/docs/ERRORS.md</code>；MCP 工具表与 <code>--print-config</code> 输出取自 <code>code/cmd/interjson/mcp.mbt</code> 与真实二进制的运行结果；MCP 的 JSON-RPC 往返是从真实 <code>interjson mcp</code> 进程抓下来逐字节存进去的；质量数字与 README 的证据表由 <code>code/tests/claims.sh</code> 共同锁定。</li>
             </ul>
           </div>
           <div>
@@ -862,12 +890,12 @@
       {
         "version": "1.5.1",
         "evidence": [
-          { "n": "217", "label": "条白盒测试" },
-          { "n": "868", "label": "次后端测试（4 个后端各 217/217）" },
+          { "n": "249", "label": "条白盒测试" },
+          { "n": "996", "label": "次后端测试（4 个后端各 249/249）" },
           { "n": "1200", "label": "条真值评测 · 恢复率 100.00%" },
           { "n": "402", "label": "例差分 · 202 处差异全部归因" },
           { "n": "19", "label": "组协议一致性同跑" },
-          { "n": "109.1 KiB", "label": "wasm-gc 产物 · 644.9 KiB 浏览器包" }
+          { "n": "114.5 KiB", "label": "wasm-gc 产物 · 673.3 KiB 浏览器包" }
         ],
         "policies": [
           { "id": "permissive", "label": "permissive", "hint": "默认：能修就修，允许有损与第二种读法（显示通道）。" },
@@ -988,7 +1016,7 @@
             { "flag": "--retry-hint", "cmds": ["repair", "explain"], "desc": "拒绝时打印可直接回灌模型的提示" },
             { "flag": "--indent", "arg": "2", "cmds": ["repair"], "desc": "输出缩进空格数，默认紧凑输出" },
             { "flag": "--multi-root", "arg": "array", "cmds": ["repair"], "desc": "多个根值：first/array/error" },
-            { "flag": "--chunk", "arg": "64", "cmds": ["repair"], "desc": "仅与 --batch 同用：把每条输入按 N 个码元分块喂入" },
+            { "flag": "--chunk", "arg": "64", "cmds": ["repair", "explain"], "desc": "分块喂入：每次喂 N 个码元（≤1048576），验证流式路径；与 --batch 同用时按 N 字节切每条输入" },
             { "flag": "--batch", "cmds": ["repair"], "desc": "逐行读 {id,input} JSON，逐行输出结果" },
             { "flag": "--step", "arg": "8", "cmds": ["readiness"], "desc": "每 N 个码元观察一次" },
             { "flag": "--max-loss", "arg": "cosmetic", "cmds": ["repair", "explain"], "desc": "精确度上限：exact、cosmetic 或 lossy；超出即拒绝（退出码 5）" },
@@ -1041,7 +1069,7 @@
             "title": "MoonBit 库 · 进程内",
             "tag": "moon add zhanshishan/interjson",
             "cmd": "let p = @interjson.PartialParser::new()",
-            "note": "不想起子进程时直接用库：PartialParser 逐个码元喂，analyze 给出同一份执行门判断。mooncakes 0.13.0 已发布（2026-10-29），与 1.5.1 除版本字符串外逐字节相同。"
+            "note": "不想起子进程时直接用库：PartialParser 逐个码元喂，analyze 给出同一份执行门判断。mooncakes 0.13.0 已发布（2026-10-29）；GitHub v1.5.1 ↔ mooncakes 0.13.0 的对应关系由 code/version.mbt 的 VERSION / REGISTRY_VERSION 定义，serve 的 hello 同时报告两个号。"
           }
         ],
         "mcp": {
@@ -1055,9 +1083,9 @@
             { "id": "json", "label": "通用 mcpServers JSON（默认）", "config": "{\"mcpServers\":{\"interjson\":{\"command\":\"interjson\",\"args\":[\"mcp\"]}}}" }
           ],
           "messages": {
-            "refused": { "request": "{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"tools/call\", \"params\": {\"name\": \"interjson_gate\", \"arguments\": {\"text\": \"{\\\"amount\\\":100,\\\"currency\\\":\\\"USD\\\"\", \"schema_json\": {\"type\": \"object\", \"properties\": {\"amount\": {\"type\": \"number\"}, \"currency\": {\"type\": \"string\"}}, \"required\": [\"amount\"]}}}}", "response": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"decision=lossy_repair executable=false exactness=lossy\\nerror=E010 E010 StrictViolation at 1:31 (offset 30): R009 CloseContainer: exactness lossy exceeds max_loss cosmetic\\nretry (send this back to the model): InterJSON refused the arguments: E010 R009 CloseContainer at line 1 column 31 (offset 30).\\nReason: exactness lossy exceeds max_loss cosmetic\\nContext: nt\\\":100,\\\"currency\\\":\\\"USD\\\"\\n                                 ^\\nRe-emit the arguments as valid JSON with exactly one reading.\"}],\"isError\":false,\"structuredContent\":{\"decision\":\"lossy_repair\",\"label\":\"REJECT (a value was changed)\",\"exactness\":\"lossy\",\"ambiguous\":false,\"information_loss\":true,\"valid_json\":false,\"normalized\":true,\"ambiguity\":\"none\",\"execution\":\"blocked\",\"executable\":false,\"syntax_ready_permille\":-1,\"schema_total\":0,\"schema_satisfied\":0,\"schema_missing\":[],\"error\":{\"code\":\"E010\",\"message\":\"E010 StrictViolation at 1:31 (offset 30): R009 CloseContainer: exactness lossy exceeds max_loss cosmetic\"},\"repairs\":[{\"rule\":\"R009\",\"name\":\"CloseContainer\",\"action\":\"insert\",\"offset\":30,\"line\":1,\"column\":31,\"severity\":\"warning\",\"ambiguity\":\"unambiguous\",\"confidence\":\"refused\",\"confidence_value\":0,\"information_loss\":true}],\"retry\":{\"code\":\"E010\",\"prompt\":\"InterJSON refused the arguments: E010 R009 CloseContainer at line 1 column 31 (offset 30).\\nReason: exactness lossy exceeds max_loss cosmetic\\nContext: nt\\\":100,\\\"currency\\\":\\\"USD\\\"\\n                                 ^\\nRe-emit the arguments as valid JSON with exactly one reading.\"},\"repairs_truncated\":false,\"value\":null,\"text\":\"\"}}}" },
-            "allowed": { "request": "{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"tools/call\", \"params\": {\"name\": \"interjson_gate\", \"arguments\": {\"text\": \"{\\\"amount\\\":100,\\\"currency\\\":\\\"USD\\\"}\", \"schema_json\": {\"type\": \"object\", \"properties\": {\"amount\": {\"type\": \"number\"}, \"currency\": {\"type\": \"string\"}}, \"required\": [\"amount\"]}}}}", "response": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"decision=safe executable=true exactness=exact\"}],\"isError\":false,\"structuredContent\":{\"decision\":\"safe\",\"label\":\"SAFE TO EXECUTE\",\"exactness\":\"exact\",\"ambiguous\":false,\"information_loss\":false,\"valid_json\":true,\"normalized\":false,\"ambiguity\":\"none\",\"execution\":\"allowed\",\"executable\":true,\"syntax_ready_permille\":-1,\"schema_total\":2,\"schema_satisfied\":2,\"schema_missing\":[],\"error\":null,\"repairs\":[],\"retry\":null,\"repairs_truncated\":false,\"value\":{\"amount\":100,\"currency\":\"USD\"},\"text\":\"{\\\"amount\\\":100,\\\"currency\\\":\\\"USD\\\"}\"}}}" },
-            "init": { "request": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {\"protocolVersion\": \"2025-06-18\", \"capabilities\": {}, \"clientInfo\": {\"name\": \"demo\", \"version\": \"0\"}}}", "response": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"interjson\",\"title\":\"InterJSON — the execution gate\",\"version\":\"1.5.1\"},\"instructions\":\"InterJSON is a local execution gate for model output. It runs on this machine over stdio and performs no network requests.\\n\\nBefore executing tool arguments or trusting structured output, call `interjson_gate` with the raw argument text and the tool's inputSchema as `schema_json`.\\n- `executable: true` means the arguments are safe to execute; `value` is the parsed object.\\n- `executable: false` means do not execute: send `retry.prompt` back to the model and use the re-emitted arguments.\\n\\n`interjson_repair` returns repaired text, `interjson_validate` reports legality without repairing, and `interjson_readiness` reports when streaming fields become final.\"}}" }
+            "refused": { "request": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"interjson_gate\",\"arguments\":{\"text\":\"{\\\"amount\\\":100,\\\"currency\\\":\\\"USD\\\"\",\"schema_json\":{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":\"number\"},\"currency\":{\"type\":\"string\"}},\"required\":[\"amount\"]}}}}", "response": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"decision=lossy_repair executable=false exactness=lossy\\nerror=E010 E010 StrictViolation at 1:31 (offset 30): R009 CloseContainer: exactness lossy exceeds max_loss cosmetic\\nretry (send this back to the model): InterJSON refused the arguments: E010 R009 CloseContainer at line 1 column 31 (offset 30).\\nReason: exactness lossy exceeds max_loss cosmetic\\nContext: nt\\\":100,\\\"currency\\\":\\\"USD\\\"\\n                                 ^\\nRe-emit the arguments as valid JSON with exactly one reading.\"}],\"isError\":false,\"structuredContent\":{\"decision\":\"lossy_repair\",\"label\":\"REJECT (a value was changed)\",\"exactness\":\"lossy\",\"ambiguous\":false,\"information_loss\":true,\"valid_json\":false,\"normalized\":true,\"ambiguity\":\"none\",\"execution\":\"blocked\",\"executable\":false,\"syntax_ready_permille\":-1,\"schema_total\":0,\"schema_satisfied\":0,\"schema_missing\":[],\"error\":{\"code\":\"E010\",\"message\":\"E010 StrictViolation at 1:31 (offset 30): R009 CloseContainer: exactness lossy exceeds max_loss cosmetic\"},\"repairs\":[{\"rule\":\"R009\",\"name\":\"CloseContainer\",\"action\":\"insert\",\"offset\":30,\"line\":1,\"column\":31,\"severity\":\"warning\",\"ambiguity\":\"unambiguous\",\"confidence\":\"refused\",\"confidence_value\":0,\"information_loss\":true}],\"retry\":{\"code\":\"E010\",\"prompt\":\"InterJSON refused the arguments: E010 R009 CloseContainer at line 1 column 31 (offset 30).\\nReason: exactness lossy exceeds max_loss cosmetic\\nContext: nt\\\":100,\\\"currency\\\":\\\"USD\\\"\\n                                 ^\\nRe-emit the arguments as valid JSON with exactly one reading.\"},\"repairs_truncated\":false,\"value\":null}}}" },
+            "allowed": { "request": "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"interjson_gate\",\"arguments\":{\"text\":\"{\\\"amount\\\":100,\\\"currency\\\":\\\"USD\\\"}\",\"schema_json\":{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":\"number\"},\"currency\":{\"type\":\"string\"}},\"required\":[\"amount\"]}}}}", "response": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"decision=safe executable=true exactness=exact\"}],\"isError\":false,\"structuredContent\":{\"decision\":\"safe\",\"label\":\"SAFE TO EXECUTE\",\"exactness\":\"exact\",\"ambiguous\":false,\"information_loss\":false,\"valid_json\":true,\"normalized\":false,\"ambiguity\":\"none\",\"execution\":\"allowed\",\"executable\":true,\"syntax_ready_permille\":-1,\"schema_total\":2,\"schema_satisfied\":2,\"schema_missing\":[],\"error\":null,\"repairs\":[],\"retry\":null,\"repairs_truncated\":false,\"value\":{\"amount\":100,\"currency\":\"USD\"}}}}" },
+            "init": { "request": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"demo\",\"version\":\"0\"}}}", "response": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"interjson\",\"title\":\"InterJSON — the execution gate\",\"version\":\"1.5.1\"},\"instructions\":\"InterJSON is a local execution gate for model output. It runs on this machine over stdio and performs no network requests.\\n\\nBefore executing tool arguments or trusting structured output, call `interjson_gate` with the raw argument text and the tool's inputSchema as `schema_json`.\\n- `executable: true` means the arguments are safe to execute; `value` is the parsed object.\\n- `executable: false` means do not execute: send `retry.prompt` back to the model and use the re-emitted arguments.\\n\\n`interjson_repair` returns repaired text, `interjson_validate` reports legality without repairing, and `interjson_readiness` reports when streaming fields become final.\"}}" }
           }
         }
       }
@@ -1677,6 +1705,63 @@
         $("gate-args").value = GATE_DECL_DEFAULT.args;
         $("gate-schema").value = GATE_DECL_DEFAULT.schema;
         $("gate-policy").value = GATE_DECL_DEFAULT.policy;
+
+        // ---- depth budget ---------------------------------------------------
+        // The engine's value walks became iterative in 1.5, so the depth a
+        // document may reach is bounded by the heap, not the native stack. The
+        // page builds a deeply nested array and asks the same bundle to judge
+        // it under a caller-chosen budget; nothing here parses anything.
+        function renderDepth() {
+          const analyzeDepth = api("analyze_depth");
+          if (!analyzeDepth) {
+            $("dp-verdict").className = "verdict bad";
+            $("dp-verdict").textContent = "interjson.js 没有加载";
+            return;
+          }
+          const depth = Number($("dp-depth").value);
+          const budget = Number($("dp-budget").value);
+          const text = "[".repeat(depth) + "]".repeat(depth);
+          const started = performance.now();
+          const plan = parseJson(analyzeDepth(text, budget));
+          const elapsed = performance.now() - started;
+          if (!plan) {
+            $("dp-verdict").className = "verdict bad";
+            $("dp-verdict").textContent = "引擎返回了无法解析的结果";
+            return;
+          }
+          const verdict = $("dp-verdict");
+          clear(verdict);
+          if (plan.executable) {
+            verdict.className = "verdict ok";
+            verdict.appendChild(el("span", "", "PARSED"));
+            verdict.appendChild(
+              el("span", "sub", depth + " 层在 " + budget + " 的预算内判为可执行"),
+            );
+          } else {
+            verdict.className = "verdict bad";
+            verdict.appendChild(el("span", "", "REFUSED"));
+            verdict.appendChild(
+              el(
+                "span",
+                "sub",
+                plan.error
+                  ? plan.error.code + " · " + plan.error.message
+                  : plan.decision,
+              ),
+            );
+          }
+          $("dp-meta").textContent =
+            "输入 " +
+            text.length +
+            " 码元 · 判定用时 " +
+            elapsed.toFixed(1) +
+            " ms · 预算 " +
+            budget +
+            " · 库默认 512 · MAX_VALUE_DEPTH 1048576";
+        }
+        $("dp-run").addEventListener("click", renderDepth);
+        $("dp-depth").addEventListener("change", renderDepth);
+        $("dp-budget").addEventListener("change", renderDepth);
 
         // ---- hero gate -----------------------------------------------------
         function renderHero() {
@@ -2356,6 +2441,7 @@
         runWorkbench();
         runGate();
         renderStream();
+        renderDepth();
         rdRender();
       })();
     </script>

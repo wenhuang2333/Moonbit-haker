@@ -283,10 +283,21 @@ python3 tests/gen_llm_fixtures.py --check
 
 页面里的每一帧都来自同一个 `PartialParser` 与 `analyze`，用 MoonBit 编译成的 `interjson.js`
 在浏览器里直接跑；**没有第二个解析器，也没有为演示写的特例**。`static/demo/index.html` 是
-交互控制台（本地 MCP 执行门、修复工作台、执行门、流式重放、22 条规则一键试用、字段就绪曲线、
-CLI 命令构造器与退出码表、六种接入方式），`static/demo/live.html` 是四条真实场景的逐帧重放，
-`static/demo/mcp.html` 重放一次真实的 Claude Code 会话。直接用浏览器打开即可，无需服务器；
-重新生成 bundle 用 `bash static/demo/build.sh`。
+交互控制台，八个板块全部现场计算：
+
+- **本地 MCP 执行门** —— 四个只读工具、`interjson mcp --print-config` 的七种客户端配置，
+  以及三段从真实 `interjson mcp` 进程抓下来的 JSON-RPC 往返（截断 → E010、完整 → 放行、
+  `initialize`）；
+- **修复工作台**（五种安全档位、skip-prose、计划 / 记录 / 回灌提示）、**执行门**
+  （骨架声明与工具 `inputSchema`）、**流式重放**（delta 事件流与 `syntax` / `schema` /
+  `settled` 三个数字）、**22 条规则**一键试用与自检、**字段就绪曲线**、
+  **CLI 命令构造器与退出码表**、**六种接入方式**；
+- **深度预算** —— 1.5 起值上的遍历是迭代的，页面现场生成 10 万层嵌套数组，用同一个引擎
+  在 512 / 10 万 / `MAX_VALUE_DEPTH` 三档预算下判定（默认预算下报 `E020`，放宽后解析）。
+
+`static/demo/live.html` 是四条真实场景的逐帧重放，`static/demo/mcp.html` 重放一次真实的
+Claude Code 会话。直接用浏览器打开即可，无需服务器；重新生成 bundle 用
+`bash static/demo/build.sh`。
 
 ![演示页](static/demo/screenshot.png)
 

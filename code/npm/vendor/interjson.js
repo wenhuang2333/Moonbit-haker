@@ -1289,7 +1289,7 @@ const _M0FPC28internal7strconv20parse__int64_2einnerN6recordS1379 = new _M0TPC16
 const _M0FP211zhanshishan9interjson12lookup__pathN6recordS3087 = new _M0TPC16string10StringView(".", 0, 1);
 const _M0FP211zhanshishan9interjson17treated__segmentsN6recordS2133 = new _M0TPC16string10StringView(".", 0, 1);
 const _M0MP211zhanshishan9interjson6Schema8at__pathN6recordS2177 = new _M0TPC16string10StringView(".", 0, 1);
-const _M0FP411zhanshishan9interjson8examples3web10live__textN6constrS4138 = 1;
+const _M0FP411zhanshishan9interjson8examples3web10live__textN6constrS4144 = 1;
 function _M0FPB13consume4__acc(acc, input) {
   const _p = (acc >>> 0) + ((Math.imul(input, -1028477379) | 0) >>> 0) | 0;
   const _p$2 = 17;
@@ -17484,6 +17484,32 @@ function _M0FP411zhanshishan9interjson8examples3web6escape(s) {
   }
   return sb.val;
 }
+function _M0FP411zhanshishan9interjson8examples3web20analyze__depth__text(input, max_depth) {
+  const _tmp = _M0MP211zhanshishan9interjson7Options7default();
+  const opts = new _M0TP211zhanshishan9interjson7Options(_tmp.mode, max_depth, _tmp.max_input_len, _tmp.max_token_len, _tmp.max_prose_buffer, _tmp.duplicate_keys, _tmp.incomplete_number, _tmp.pending_key, _tmp.non_finite, _tmp.strip_fence, _tmp.collect_repairs, _tmp.want_text, _tmp.skip_prose, _tmp.quote_lookahead, _tmp.multi_root, _tmp.rules, _tmp.indent, _tmp.max_repairs, _tmp.max_loss, _tmp.collect_deltas, _tmp.reject_ambiguous);
+  const plan = _M0FP211zhanshishan9interjson7analyze(input, opts, undefined, undefined);
+  const sb = _M0MPB13StringBuilder21StringBuilder_2einner(0);
+  _M0IPB13StringBuilderPB6Logger13write__string(sb, "{\"decision\":");
+  _M0IPB13StringBuilderPB6Logger13write__string(sb, `\"${_M0FP411zhanshishan9interjson8examples3web6escape(_M0MP211zhanshishan9interjson17ExecutionDecision4name(plan.decision))}\"`);
+  _M0IPB13StringBuilderPB6Logger13write__string(sb, ",\"executable\":");
+  const _p = _M0MP211zhanshishan9interjson10RepairPlan14is__executable(plan);
+  _M0IPB13StringBuilderPB6Logger13write__string(sb, _p ? "true" : "false");
+  _M0IPB13StringBuilderPB6Logger13write__string(sb, ",\"max_depth\":");
+  _M0IPB13StringBuilderPB6Logger13write__string(sb, _M0MPC13int3Int18to__string_2einner(max_depth, 10));
+  _M0IPB13StringBuilderPB6Logger13write__string(sb, ",\"error\":");
+  const _bind = plan.error_code;
+  if (_bind === "") {
+    _M0IPB13StringBuilderPB6Logger13write__string(sb, "null");
+  } else {
+    _M0IPB13StringBuilderPB6Logger13write__string(sb, "{\"code\":");
+    _M0IPB13StringBuilderPB6Logger13write__string(sb, `\"${_M0FP411zhanshishan9interjson8examples3web6escape(_bind)}\"`);
+    _M0IPB13StringBuilderPB6Logger13write__string(sb, ",\"message\":");
+    _M0IPB13StringBuilderPB6Logger13write__string(sb, `\"${_M0FP411zhanshishan9interjson8examples3web6escape(plan.error_message)}\"`);
+    _M0IPB13StringBuilderPB6Logger13write__string(sb, "}");
+  }
+  _M0IPB13StringBuilderPB6Logger13write__string(sb, "}");
+  return sb.val;
+}
 function _M0FP411zhanshishan9interjson8examples3web13analyze__text(input, policy, schema) {
   const opts = _M0FP411zhanshishan9interjson8examples3web12web__options(policy);
   if (schema === "") {
@@ -18020,7 +18046,7 @@ function _M0FP411zhanshishan9interjson8examples3web10live__text(input, upto, sch
       let _try_err$2;
       _L$3: {
         _L$4: {
-          const _bind$8 = _M0FP211zhanshishan9interjson19semantic__readiness(input, _sk, _M0FP411zhanshishan9interjson8examples3web10live__textN6constrS4138, undefined);
+          const _bind$8 = _M0FP211zhanshishan9interjson19semantic__readiness(input, _sk, _M0FP411zhanshishan9interjson8examples3web10live__textN6constrS4144, undefined);
           if (_bind$8.$tag === 1) {
             const _ok = _bind$8;
             full = _ok._0;
@@ -18079,6 +18105,7 @@ function _M0FP411zhanshishan9interjson8examples3web10live__text(input, upto, sch
   _M0FP411zhanshishan9interjson8examples3web14js__register3s("analyze", _M0FP411zhanshishan9interjson8examples3web13analyze__text);
   _M0FP411zhanshishan9interjson8examples3web14js__register3s("analyze_json_schema", _M0FP411zhanshishan9interjson8examples3web27analyze__json__schema__text);
   _M0FP411zhanshishan9interjson8examples3web14js__register3s("analyze_prose", _M0FP411zhanshishan9interjson8examples3web20analyze__prose__text);
+  _M0FP411zhanshishan9interjson8examples3web13js__register2("analyze_depth", _M0FP411zhanshishan9interjson8examples3web20analyze__depth__text);
   _M0FP411zhanshishan9interjson8examples3web14js__register3s("analyze_json_schema_prose", _M0FP411zhanshishan9interjson8examples3web34analyze__json__schema__prose__text);
   _M0FP411zhanshishan9interjson8examples3web14js__register2s("readiness", _M0FP411zhanshishan9interjson8examples3web15readiness__text);
   _M0FP411zhanshishan9interjson8examples3web13js__register2("deltas", _M0FP411zhanshishan9interjson8examples3web12deltas__text);

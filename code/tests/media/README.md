@@ -17,7 +17,7 @@ and derives `live-demo.gif` from the live segment.
 | --- | --- |
 | `refresh.sh` | all of the below, in order |
 | `demo_visual_smoke.py` | `screenshot.png`, `mcp-screenshot.png`, `surfaces-poster.png`; also checks the MCP page's E010 → safe flow |
-| `index_console_smoke.py` | nothing; it asserts that `index.html` still answers: the MCP section, the workbench, the execution gate, the stream replay, the 22 rules, the readiness curve and the CLI builder, with no console error and no overflow at 390px |
+| `index_console_smoke.py` | nothing; it asserts that `index.html` still answers: the MCP section, the workbench, the execution gate, the stream replay, the depth budget, the 22 rules, the readiness curve and the CLI builder, with no console error and no overflow at 390px |
 | `render_mcp_gif.py` | `mcp-demo.gif`, `mcp-demo.png` |
 | `demo_record.py` | the four WebM segments for `demo.mp4` (needs `ffmpeg` for assembly) |
 | `record_claude_mcp.py` | the raw Claude Code session transcript (optional; requires the `claude` CLI) |

@@ -114,6 +114,41 @@ pub fn repair_opts_text(input : String, policy : String) -> String {
 }
 
 ///|
+/// The decision for a document under a caller-chosen `max_depth`, as JSON:
+/// `{"decision": …, "executable": …, "max_depth": …, "error": …}`.
+///
+/// The value walks became iterative in 1.5.0, so the depth a document may
+/// have is bounded by the heap rather than by the native stack: the limit that
+/// used to be a stack depth is now a caller-chosen budget. The demo page
+/// raises it to show a hundred-thousand-level document parsed in the browser,
+/// so the entry point takes the budget as an argument instead of hard-coding
+/// one: the default stays where the library puts it.
+pub fn analyze_depth_text(input : String, max_depth : Int32) -> String {
+  let opts = { ..@interjson.Options::default(), max_depth, }
+  let plan = @interjson.analyze(input, options=opts)
+  let sb = StringBuilder()
+  sb.write_string("{\"decision\":")
+  sb.write_string("\"" + escape(plan.decision.name()) + "\"")
+  sb.write_string(",\"executable\":")
+  sb.write_string(plan.is_executable().to_string())
+  sb.write_string(",\"max_depth\":")
+  sb.write_string(max_depth.to_string())
+  sb.write_string(",\"error\":")
+  match plan.error_code {
+    "" => sb.write_string("null")
+    code => {
+      sb.write_string("{\"code\":")
+      sb.write_string("\"" + escape(code) + "\"")
+      sb.write_string(",\"message\":")
+      sb.write_string("\"" + escape(plan.error_message) + "\"")
+      sb.write_string("}")
+    }
+  }
+  sb.write_string("}")
+  sb.to_string()
+}
+
+///|
 /// The full decision plan as JSON, with the library's declaration language.
 ///
 /// A declaration that cannot be parsed is reported as `{"error": …}` instead of
@@ -562,6 +597,7 @@ fn main {
   js_register3s("analyze", analyze_text)
   js_register3s("analyze_json_schema", analyze_json_schema_text)
   js_register3s("analyze_prose", analyze_prose_text)
+  js_register2("analyze_depth", analyze_depth_text)
   js_register3s("analyze_json_schema_prose", analyze_json_schema_prose_text)
   js_register2s("readiness", readiness_text)
   js_register2("deltas", deltas_text)

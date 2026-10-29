@@ -18,6 +18,8 @@ from __future__ import annotations
 import functools
 import http.server
 import json
+import os
+import re
 import socketserver
 import threading
 from pathlib import Path
@@ -25,10 +27,41 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[3]
-DEMO = ROOT / "static" / "demo"
+DEMO = Path(os.environ.get("JSONMEND_DEMO_DIR") or (ROOT / "static" / "demo"))
 
 SECTIONS = ["mcp", "workbench", "gate", "stream", "rules", "readiness", "cli", "surfaces"]
-EVIDENCE = ["217", "868", "1200", "402", "109.1"]
+# The evidence strip quotes figures that `claims.sh` already derives and checks
+# against the published documents, so it is read back from the README rather
+# than copied here: a stale number then fails in one place instead of drifting
+# in two. The regexes are anchored to the README's own rows.
+README = ROOT / "README.md"
+
+
+def readme_evidence() -> dict[str, str]:
+    """The figures the README states, read from the README itself.
+
+    `claims.sh` keeps those numbers equal to a freshly derived value, so the
+    page is checked against the same source instead of a second copy that
+    would drift on its own.
+    """
+    text = README.read_text(encoding="utf-8")
+    rows = {
+        "tests": r"各 (\d+)/(\d+) 通过",
+        "runs": r"通过（共 (\d+) 次）",
+        "wasm": r"wasm-gc 产物体积 \| ([\d.]+) KiB",
+        "truth": r"\| (\d+) 条（19 个变异族",
+        "diff": r"\| (\d+) 条用例 \| (\d+) 处差异",
+        "conformance": r"\| (\d+) 组 `serve`/MCP 用例",
+    }
+    found: dict[str, str] = {}
+    for key, pattern in rows.items():
+        match = re.search(pattern, text)
+        assert match, f"README no longer states the {key} figure ({pattern!r})"
+        found[key] = match.group(1)
+    found["divergences"] = re.search(rows["diff"], text).group(2)
+    return found
+
+
 NEW_FLAGS = {
     "repair": ["--max-loss", "--max-input-len", "--max-depth", "--max-token-len", "--max-repairs"],
     "explain": ["--with-text", "--max-loss"],
@@ -61,10 +94,19 @@ def main() -> None:
             for section in SECTIONS:
                 assert page.locator(f"#{section}").count() == 1, f"missing section #{section}"
 
-            # 2. The evidence strip must carry the current figures.
-            evidence = page.text_content("#evidence-strip")
-            for value in EVIDENCE:
-                assert value in evidence, f"evidence {value} missing: {evidence}"
+            # 2. The evidence strip must quote the same figures as the README,
+            # which `claims.sh` keeps equal to a freshly derived value. The
+            # numbers are read from the cards themselves, not from the whole
+            # strip: a wrong card would otherwise be hidden by a label that
+            # happens to repeat the right number.
+            expected = readme_evidence()
+            cards = page.eval_on_selector_all(".stat b", "els => els.map(e => e.textContent.trim())")
+            numbers = [c for c in cards if not c.endswith("KiB")]
+            for key in ("tests", "runs", "truth", "diff", "conformance"):
+                assert expected[key] in numbers, f"README {key}={expected[key]} is not a card value: {cards}"
+            assert any(c.startswith(expected["wasm"]) for c in cards), f"wasm {expected['wasm']} missing: {cards}"
+            labels = page.text_content("#evidence-strip")
+            assert expected["divergences"] in labels, f"divergences {expected['divergences']} missing"
 
             # 3. The MCP section: four tools, seven client configs, real transcripts.
             assert page.locator("#mcp table tbody tr").count() == 4, "expected four MCP tools"
@@ -119,6 +161,18 @@ def main() -> None:
             assert "%" in page.text_content("#rd-settled"), page.text_content("#rd-settled")
             assert page.locator("#rd-events tr").count() >= 1
 
+            # 8b. The depth budget answers, and refuses past the default limit.
+            page.select_option("#dp-depth", "100000")
+            page.select_option("#dp-budget", "512")
+            page.wait_for_timeout(500)
+            assert "REFUSED" in page.text_content("#dp-verdict"), page.text_content("#dp-verdict")
+            assert "E020" in page.text_content("#dp-verdict"), page.text_content("#dp-verdict")
+            page.select_option("#dp-budget", "100000")
+            page.wait_for_timeout(800)
+            assert "PARSED" in page.text_content("#dp-verdict"), page.text_content("#dp-verdict")
+            meta = page.text_content("#dp-meta")
+            assert "100000" in meta and "MAX_VALUE_DEPTH" in meta, meta
+
             # 9. The CLI builder offers the flags this version documents.
             for command, flags in NEW_FLAGS.items():
                 page.select_option("#cli-cmd", command)
@@ -144,7 +198,7 @@ def main() -> None:
         httpd.shutdown()
         if errors:
             raise SystemExit("console errors: " + " | ".join(errors[:5]))
-        print("index console ok; MCP, workbench, gate, stream, rules, readiness and CLI all answered")
+        print("index console ok; MCP, workbench, gate, stream, depth, rules, readiness and CLI all answered")
 
 
 if __name__ == "__main__":

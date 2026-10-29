@@ -197,6 +197,19 @@ check(
 );
 check("deltas carries the appended text", deltas.deltas[2].text, "Mo");
 
+// The depth budget: 1.5 made the value walks iterative, so the nesting depth
+// is bounded by the heap rather than by the native stack, and the budget is
+// the caller's to choose.
+const deep = "[".repeat(1000) + "]".repeat(1000);
+const deepRefused = JSON.parse(registered.analyze_depth(deep, 512));
+check("depth budget refuses a document past the limit", deepRefused.executable, false);
+check("depth refusal names E020", deepRefused.error.code, "E020");
+check("depth refusal reports the budget", deepRefused.max_depth, 512);
+const allowed = JSON.parse(registered.analyze_depth(deep, 1000));
+check("depth budget accepts the same document when raised", allowed.executable, true);
+check("depth acceptance reports the budget", allowed.max_depth, 1000);
+check("depth acceptance is a safe decision", allowed.decision, "safe");
+
 if (failures > 0) {
   console.log(`\n${failures} demo check(s) failed`);
   process.exit(1);
