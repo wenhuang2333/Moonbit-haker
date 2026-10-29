@@ -29,13 +29,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install the MoonBit toolchain
+      # The toolchain is pinned. `install/unix.sh` with no argument installs
+      # `latest`, and on 2026-10-29 a new MoonBit release changed the JavaScript
+      # backend's output: the committed demo bundle stopped matching a rebuild,
+      # `git diff --exit-code` failed, and the failure had nothing to do with the
+      # commit under test. A gate whose verdict depends on what a third party
+      # published overnight is not a gate. `MOONBIT_INSTALL_VERSION` is the
+      # installer's own pin; bump it deliberately, together with the committed
+      # bundles, the way `moon.mod` is bumped.
+      - name: Install the MoonBit toolchain (pinned)
+        env:
+          MOONBIT_INSTALL_VERSION: ${{ vars.MOONBIT_VERSION || '0.10.16+b1a0e846e' }}
         run: |
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
 
+      # A pin that silently falls back to `latest` is worse than no pin, so the
+      # version the installer actually produced is compared with the one asked
+      # for.
       - name: Toolchain versions
-        run: moon version --all
+        env:
+          MOONBIT_INSTALL_VERSION: ${{ vars.MOONBIT_VERSION || '0.10.16+b1a0e846e' }}
+        run: |
+          moon version --all
+          # `MOONBIT_INSTALL_VERSION` names the *compiler* release
+          # (`moonc v0.10.16+b1a0e846e`); `moon` itself reports its own
+          # version. The pin is checked against moonc, which is the binary whose
+          # output the committed bundles depend on.
+          INSTALLED="$(moon version --all 2>&1 |
+            sed -n 's/^moonc v\([^ ]*\).*/\1/p' | head -1)"
+          echo "requested $MOONBIT_INSTALL_VERSION, installed moonc $INSTALLED"
+          if [ "$INSTALLED" != "$MOONBIT_INSTALL_VERSION" ]; then
+            echo "::error::the toolchain pin did not take: wanted $MOONBIT_INSTALL_VERSION, got moonc $INSTALLED"
+            exit 1
+          fi
 
       - name: Type check (warnings are errors)
         working-directory: code
@@ -249,6 +276,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install the MoonBit toolchain
+        env:
+          MOONBIT_INSTALL_VERSION: ${{ vars.MOONBIT_VERSION || '0.10.16+b1a0e846e' }}
         run: |
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
