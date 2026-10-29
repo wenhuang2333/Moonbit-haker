@@ -6,9 +6,12 @@ or damaged input can make the parser do, not about authentication.
 
 ## What the library guarantees
 
-- **No panic on any input — and this one is tested, not asserted.** Every byte
-  sequence either produces a result or raises one of the documented
-  `InterJSONError`s. Two suites cover it:
+- **No panic observed, and the claim is bounded by the budget that was run.**
+  Every byte sequence either produces a result or raises one of the documented
+  `InterJSONError`s — that is the design, and these are the tests behind it.
+  They are empirical, so the honest claim is "no panic observed in N cases", not
+  "no panic on any input"; the budget is stated with each suite below and again
+  in the paragraph after the table. Two suites cover it:
 
   | Suite | What it generates | Default budget | CI | Nightly |
   | --- | --- | --- | --- | --- |
@@ -19,8 +22,7 @@ or damaged input can make the parser do, not about authentication.
   run. The property suite's token-soup property (TC-P-06) additionally asserts
   that no internal error (`E030`) escapes.
 
-  **The honest claim is "no panic observed in N cases", not "no panic on any
-  input".** The default local run is 300 fuzz cases × 15 (3 shapes × 5 chunk
+  The default local run is 300 fuzz cases × 15 (3 shapes × 5 chunk
   sizes) = 4 500 byte-level parses per property, plus the property suite's
   400 cases per property. CI raises the fuzz budget to 2 000 cases (30 000
   byte-level parses) and the nightly to 100 000. Every generator is seeded, so
@@ -89,7 +91,8 @@ know that `{"amount": 100}` should have been `1000`.
   is O(tree) per call and can be used for a denial of service by the *caller*.
   Poll at a sane rate (the benchmark measures 1 KB and 64 KB intervals).
 - The CLI reads the whole input into memory and builds a tree, so peak usage is a
-  multiple of the input size (measured in `docs/BENCHMARK.md`); do not point it
+  multiple of the input size (measured by `tests/memory_gate.py`; the full report is
+  in `docs/MEMORY.md`, maintained in the repository and not published); do not point it
   at an unbounded stream.
 - Lone surrogates and invalid UTF-8 are replaced rather than rejected in some
   paths; the `E040` code only covers byte-level decoding failures.

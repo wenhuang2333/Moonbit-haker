@@ -6,13 +6,15 @@ because formatting is not part of the contract.
 
 | item | value |
 | --- | --- |
-| provenance | omitted (--no-stamp) so this report is reproducible byte for byte; run without the flag for the date and the binary hash |
+| generated (UTC) | 2026-10-29T06:36:53Z |
+| binary under test | `./_build/native/release/build/cmd/interjson/interjson.exe` |
+| binary identity | sha256:24663a54a1c6773d, 789232 bytes, mtime 2026-10-29T06:22:46Z |
 | primary oracle | `json-repair` (Python, MIT) 0.64.0 |
-| secondary oracle | `jsonrepair` (TypeScript/Node, ISC) 3.15.0 from `/Users/zhanshishan/.npm-global/lib/node_modules` |
+| secondary oracle | **skipped** (skipped by --no-node; the node column is not scored) |
 | corpus | 99 hand written cases + 303 automatic mutations |
 | corpus selection | deterministic: fixed list plus fixed mutations, no seed |
 | comparison | `json.loads(interjson stdout)` vs `json_repair.repair_json(..., return_objects=True)` |
-| reproduce | `python3 code/tests/diff/run_diff.py --cli <interjson binary> [--node-module-dir DIR]` (see docs/REPRODUCE.md) |
+| reproduce | `python3 code/tests/diff/run_diff.py --cli <interjson binary> [--node-module-dir DIR]` (reproduce with the command shown) |
 
 A divergence is *documented* when InterJSON's own repair record list
 explains it: the rules that fired are exactly the rules whose
@@ -31,7 +33,7 @@ documented behaviour differs from the reference implementation.
 | divergences with a documented cause | 202 |
 | unexplained divergences | 0 |
 | documented-scope agreement | 100.0% |
-| agreement with jsonrepair (node) | 59.7% (236/395) |
+| agreement with jsonrepair (node) | skipped (skipped by --no-node; not scored as 0%) |
 
 ## Divergence classes
 
@@ -657,4 +659,4 @@ Every divergence has a documented cause. They fall into four groups:
 
 4. **Out of scope input**: Markdown fences, prose before the value, `#` comments, lone surrogates, `...` and inputs that contain no JSON value at all. InterJSON strips fences and (with `skip_prose`) prose, replaces lone surrogates with U+FFFD, drops `...`, and rejects input without any JSON value with E001/E002 instead of inventing a value.
 
-The raw agreement rate is therefore low by construction: the mutated corpus is almost entirely truncated input, which is exactly where the two design philosophies differ. `docs/RULES.md` documents each rule and `docs/ERRORS.md` each error code; the acceptance metric of D02 G3 is measured on the documented scope, where this harness reports 100% with zero unexplained divergences.
+The raw agreement rate is therefore low by construction: the mutated corpus is almost entirely truncated input, which is exactly where the two design philosophies differ. The rule table and the error-code table in `README.md` document each one; the acceptance metric of D02 G3 is measured on the documented scope, where this harness reports 100% with zero unexplained divergences.

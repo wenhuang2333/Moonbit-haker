@@ -5,7 +5,7 @@
 | | |
 | --- | --- |
 | 模块 | `zhanshishan/interjson` |
-| 版本 | 1.5.0 |
+| 版本 | 1.5.1 |
 | 许可证 | Apache-2.0 |
 | 后端 | wasm-gc / native / JS / wasm，同一套测试，各 249/249 通过 |
 | 发行渠道 | GitHub `v1.5.0`（8 个产物：三系统四二进制 + wasm 探针 + 浏览器包 + 安装脚本 + `SHA256SUMS`）；[mooncakes](https://mooncakes.io/docs/zhanshishan/interjson) `0.12.0`（2026-10-28 发布）。**npm 与 PyPI 上还没有 `interjson-moonbit`**，两个语言包按仓库路径安装 |
@@ -111,7 +111,7 @@ try {
 
 ## 修复规则一览
 
-每次修改都对应一条编号稳定的记录；含示例与需求映射的完整字典见 `docs/RULES.md`。
+每次修改都对应一条编号稳定的记录；下表是全部编号，带示例与需求映射的完整字典在仓库内维护，不随包发布。
 
 | 编号 | 名称 | 含义 |
 | --- | --- | --- |
@@ -161,7 +161,7 @@ UTF-16 码元计数，`line` 与 `column` 从 1 开始；消息是固定模板�
 | `E060` | `InvalidEvent` | `interjson/llm` 收到无法解释的事件负载。 |
 | `E070` | `SchemaError` | 骨架声明本身写错，或用了子集之外的键。 |
 
-完整参考见 `docs/ERRORS.md`，规范契约见 [`docs/SPEC.md`](docs/SPEC.md)。
+上表是两类信号的完整编号；更长的参考（每个码的载荷、严格模式升级与失效模式）在仓库内维护，不随包发布。规范契约见 [`docs/SPEC.md`](docs/SPEC.md)。
 
 ## 快照语义
 

@@ -12,12 +12,12 @@ question for host-side callers (`serve`, npm, pip, HTTP).
 | | |
 | --- | --- |
 | Module | `zhanshishan/interjson` |
-| Version | 1.5.0 |
+| Version | 1.5.1 |
 | License | Apache-2.0 |
 | MCP server | `interjson mcp`, also `interjson-mcp`; JSON-RPC 2.0 over stdio, protocol `2025-06-18` (`2025-03-26` and `2024-11-05` accepted) |
 | Backends | wasm-gc, native, JS, wasm — one test suite, all four |
-| Registry | [`mooncakes.io zhanshishan/interjson`](https://mooncakes.io/docs/zhanshishan/interjson) — 0.12.0 is the 1.5.0 correspondence and **was published on 2026-10-28**; 0.11.0 (the 1.4.0 correspondence) was published on 2026-10-27; older releases are under the former name `zhanshishan/jsonmend` |
-| Prebuilt binaries | The GitHub release `v1.5.0`: four binaries across three operating systems (`linux-x86_64`, `linux-arm64`, `macos-arm64`, `windows-x86_64.exe`), the wasm probe, the browser bundle, `SHA256SUMS` and the `interjson-install.sh` one-command installer. There is **no Intel macOS build** — the MoonBit toolchain publishes no `darwin-x86_64` target. Older releases keep the `jsonmend-*` asset prefix |
+| Registry | [`mooncakes.io zhanshishan/interjson`](https://mooncakes.io/docs/zhanshishan/interjson) — 0.13.0 is the 1.5.1 correspondence and **was published on 2026-10-29**; 0.12.0 (the 1.5.0 correspondence) was published on 2026-10-28; 0.11.0 (the 1.4.0 correspondence) was published on 2026-10-27; older releases are under the former name `zhanshishan/jsonmend` |
+| Prebuilt binaries | The GitHub release `v1.5.1`: four binaries across three operating systems (`linux-x86_64`, `linux-arm64`, `macos-arm64`, `windows-x86_64.exe`), the wasm probe, the browser bundle, `SHA256SUMS` and the `interjson-install.sh` one-command installer. There is **no Intel macOS build** — the MoonBit toolchain publishes no `darwin-x86_64` target. Older releases keep the `jsonmend-*` asset prefix |
 | Docs | [`docs/MCP.md`](docs/MCP.md) (deployment), [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) (host-side recipes), [`docs/SPEC.md`](docs/SPEC.md) (the normative contract), [../README.md](../README.md) (project front page) |
 
 This page is the package page for mooncakes.io and the **API reference**: the
@@ -256,8 +256,10 @@ you. A declaration (JSON Schema or the skeleton language) deeper than
 
 ## Repair rules overview
 
-Every change is one record whose code is stable. The full dictionary, with
-examples and the requirement each rule implements, is in `docs/RULES.md`.
+Every change is one record whose code is stable. The table below is the complete
+list of codes; the dictionary that adds worked examples and the requirement each
+rule implements is maintained in the repository but is not part of the published
+package.
 
 | Code | Name | Meaning |
 | --- | --- | --- |
@@ -315,8 +317,11 @@ templates and never embed user input.
 
 `RepairCode::code`, `InterJSONError::code`, and `InterJSONError::to_string`
 produce the stable strings (`R005`, `E020`, and a one-line diagnostic
-respectively). The full reference is in `docs/ERRORS.md`; the normative contract
-is [`docs/SPEC.md`](docs/SPEC.md).
+respectively). The tables above are the complete set of both families, and the
+exit codes are in the [Command line](#command-line) section. The longer
+reference — per-code payloads, the strict-mode escalation rules and the failure
+modes — is maintained in the repository but is not published. The normative
+contract is [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Snapshot semantics
 
@@ -403,7 +408,7 @@ Flags:
 | `--chunk N` | Feed the input in N-code-unit chunks (≤1048576) to exercise the streaming path. |
 | `--batch` | Read `{"id","input"}` objects line by line and write one result object per line. |
 | `-h`, `--help` | Show help. |
-| `--version` | Show the version (`interjson 1.5.0`). |
+| `--version` | Show the version (`interjson 1.5.1`). |
 | file, or `-` | Read a file; `-` or an omitted argument reads standard input. |
 
 `--indent=N`, `--multi-root=MODE`, and `--max-repairs=N` are accepted as
@@ -426,8 +431,9 @@ and can be opened directly from disk. The demo's MoonBit entry points are plain
 `String`-in/`String`-out functions registered on the host page through
 `globalThis.interjsonRegister*`, so the page contains no second implementation.
 The same bundle backs `static/demo/interjson.js` and the npm package. Rebuild it
-with `bash static/demo/build.sh`; the steps and the headless check are in
-`docs/REPRODUCE.md`.
+with `bash static/demo/build.sh`; the build steps and how to open the page are in
+[`static/demo/README.md`](../static/demo/README.md), and
+`node code/tests/demo_smoke.mjs` checks the committed bundle still answers.
 
 ## Testing
 
@@ -448,11 +454,13 @@ moon run examples/agent_loop --target native --release
 
 Cross-backend results are identical: **249/249** tests pass on each of wasm-gc,
 native, JS and wasm. `.github/workflows/ci.yml` runs the same commands on every
-push, so the numbers are re-derived rather than trusted. Reproduction steps,
-thresholds and the known shortfalls are in `docs/REPRODUCE.md` and
-`docs/TRACEABILITY.md`; the evaluation protocol and its revision history are in
-[`docs/EVAL_REGISTRATION.md`](docs/EVAL_REGISTRATION.md) and
-[`docs/EVAL.md`](docs/EVAL.md); how AI tooling was used is in `docs/AI_USAGE.md`.
+push, so the numbers are re-derived rather than trusted. The commands above are
+the reproduction path; the figures they produce are in the [repository front
+page's evidence table](../README.md#质量与证据), and the components that fall short
+of their budgets are listed as known limitations there and in
+[Known limitations](#known-limitations) below. The evaluation protocol and its
+revision history are in [`docs/EVAL_REGISTRATION.md`](docs/EVAL_REGISTRATION.md)
+and [`docs/EVAL.md`](docs/EVAL.md).
 
 ## Differences from jsonrepair
 
@@ -466,8 +474,8 @@ switches have no direct equivalent. A differential harness runs `jsonrepair`
 mutated inputs, compares parsed values, and classifies every divergence; all 202
 divergences in the committed report have a documented cause and none is
 unexplained. The method and the reference-library versions are in
-[`docs/DIVERGENCES.md`](docs/DIVERGENCES.md); the rule-to-requirement mapping is
-in `docs/TRACEABILITY.md`.
+[`docs/DIVERGENCES.md`](docs/DIVERGENCES.md), which classifies each divergence
+against the rule and error codes listed earlier on this page.
 
 ## Performance
 
@@ -491,8 +499,9 @@ memory and artifact size) are in the [repository front page's evidence
 table](../README.md#质量与证据); this page does not restate them, so the two cannot
 drift apart. These figures are observations, not a guarantee: throughput depends
 on the input shape, chunk size, snapshot frequency, and the toolchain version.
-The full method, the historical tables and the decision records are in
-`docs/BENCHMARK.md`; `docs/REPRODUCE.md` explains how to rerun the benchmarks.
+The benches above are the method; the longer historical tables and the decision
+records behind the budgets are maintained in the repository but are not
+published.
 
 ## Known limitations
 
@@ -554,7 +563,7 @@ The full method, the historical tables and the decision records are in
   frame stack are bounded by it, and the wasm backend's stack overflows in a
   recursive walk between 896 and 1024 frames. Declarations have a tighter,
   separate bound, refused with `E070`.
-- **The refusal contract changed in 1.5.0.** In 1.4.x a plan that was *accepted*
+- **The refusal contract changed in 1.5.0** (and is unchanged in 1.5.1). In 1.4.x a plan that was *accepted*
   but not executable serialised as `"retry": null` while still carrying a live
   `value`. Now `executable == false` implies `value: null`, `text: ""` and a
   non-empty `retry.prompt`, under every profile. A 1.4.x caller that branched on
@@ -573,8 +582,9 @@ The full method, the historical tables and the decision records are in
 ## Contributing
 
 - `CONTRIBUTING.md` covers the development environment, how to run the tests,
-  commit conventions, and how to add a repair rule — a rule change must update
-  `docs/RULES.md`, `docs/TRACEABILITY.md`, and the golden tests together.
+  commit conventions, and how to add a repair rule — a rule change must update the
+  rule and error tables above and the golden tests together; the internal
+  requirement matrix is maintained with the code but is not published.
 - Issue templates cover defects (input, options, expected versus actual output, and
   backend) and new-rule proposals.
 - `SECURITY.md` describes how to report a problem: this library processes untrusted

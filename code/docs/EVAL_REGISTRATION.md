@@ -173,7 +173,8 @@
 
 ## 9. 未覆盖的内容（诚实声明）
 
-- 本评测不测性能；吞吐与内存见 `BENCHMARK.md`。
+- 本评测不测性能；吞吐与内存由 `tests/bench.sh` 与 `tests/memory_gate.py` 测，
+  记录在仓库内的 `BENCHMARK.md`（不随包发布）。
 - 本评测的真值来自**合成语料**，不代表真实模型输出的分布；真实分布下的
   恢复率需要线上回放，属于下一轮工作。
 - 长文档截断（>1 MiB）只由 TC-P-01 属性测试覆盖，不在本语料内。
@@ -216,7 +217,7 @@
 `--skip-prose` 的语义是「丢弃第一个 `{` 或 `[` 之前的文字」。当根是标量时
 （`Sure! ...\n42`）没有容器可以定位，说明文字与 JSON 无法区分。
 **修订：`prose` 只施加在容器根文档上。** 这是 `--skip-prose` 的一个真实边界，
-已记入 [DIVERGENCES.md](DIVERGENCES.md) 与 `RULES.md` R021 一节。
+已记入 [DIVERGENCES.md](DIVERGENCES.md)，规则的权威列表见 [../README.md](../README.md)。
 
 ### 10.5 截断族的祖先语义
 
@@ -235,7 +236,7 @@
 | `Engine::report` 支持显式 `severity` 覆盖 | 上述两条需要调用点决定级别，`severity_in(code, slot)` 无法表达 |
 
 R022 是**新增**码，不改动 R001–R021 的任何含义（码只追加，见
-`ERRORS.md`）。
+`../README.md` 的错误码表）。
 
 ### 10.7 eval-2 的结果
 

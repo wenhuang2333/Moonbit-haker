@@ -607,14 +607,17 @@ def main() -> int:
     )
     add("| strict oracle | `json.loads` with `NaN`/`Infinity` rejected via `parse_constant` |")
     add("| secondary strict oracle | Node `JSON.parse` |")
-    add("| InterJSON | `%s`, sha256 `%s` |" % (args.cli, cli_sha))
+    # The binary and the oracle paths are machine-specific, and the committed
+    # copy of this report has to be the copy CI regenerates -- otherwise
+    # `git diff --exit-code` after the CI step fails on a path, not on a
+    # finding. So the identity recorded is the *content* (a hash, a version)
+    # and not where it happened to live.
+    add("| InterJSON | `interjson`, sha256 `%s` |" % cli_sha)
     add("| Python oracle | %s |" % ("`json_repair` 0.64.0" if PY_AVAILABLE else NA))
     add(
         "| Node oracle | %s |"
         % (
-            "`jsonrepair` 3.15.0 (NODE_PATH=%s)" % os.path.join(args.node_dir, "node_modules")
-            if node_rows is not None
-            else NA
+            "`jsonrepair` 3.15.0" if node_rows is not None else NA
         )
     )
     add("| network | not needed |")

@@ -18,7 +18,7 @@
 
 ///|
 /// The version of this release. GitHub tags it `v1.5.0`.
-pub const VERSION : String = "1.5.0"
+pub const VERSION : String = "1.5.1"
 
 ///|
 /// The mooncakes version that corresponds to `VERSION`.
@@ -29,4 +29,4 @@ pub const VERSION : String = "1.5.0"
 /// release order -- `1.1.x` ↔ `0.8.x`, `1.2.x` ↔ `0.9.x`, `1.3.x` ↔ `0.10.x`,
 /// `1.4.x` ↔ `0.11.x`, `1.5.x` ↔ `0.12.x` -- and `serve`'s `hello` reports
 /// both, so a client can always tell which registry build it is talking to.
-pub const REGISTRY_VERSION : String = "0.12.0"
+pub const REGISTRY_VERSION : String = "0.13.0"

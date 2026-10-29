@@ -31,17 +31,21 @@ REPO="${INTERJSON_REPO:-wenhuang2333/Moonbit-haker}"
 VERSION="${INTERJSON_VERSION:-}"
 INSTALL_DIR="${INTERJSON_DIR:-$HOME/.local/bin}"
 
+# `die` takes the exit code it should end with, because the header documents
+# three of them: 1 for a failed download or checksum, 2 for an unsupported
+# platform. A single exit code made the documented contract a lie -- a script
+# that always exits 1 cannot be branched on.
 die() {
+  code="$1"; shift
   printf 'error: %s\n' "$*" >&2
-  exit 1
+  exit "$code"
 }
 
 need() {
-  command -v "$1" >/dev/null 2>&1 || die "$1 is required but was not found"
+  command -v "$1" >/dev/null 2>&1 || die 1 "$1 is required but was not found"
 }
 
 need uname
-need tar
 need curl
 
 # -- platform --------------------------------------------------------------
@@ -53,13 +57,13 @@ case "$os" in
   Linux) os_name="linux" ;;
   Darwin) os_name="macos" ;;
   MINGW* | MSYS* | CYGWIN*) os_name="windows" ;;
-  *) die "unsupported operating system: $os" ;;
+  *) die 2 "unsupported operating system: $os" ;;
 esac
 
 case "$arch" in
   x86_64 | amd64) arch_name="x86_64" ;;
   arm64 | aarch64) arch_name="arm64" ;;
-  *) die "unsupported architecture: $arch" ;;
+  *) die 2 "unsupported architecture: $arch" ;;
 esac
 
 if [ "$os_name" = "windows" ]; then
@@ -75,9 +79,9 @@ elif [ "$os_name" = "macos" ]; then
   # toolchain publishes `darwin-aarch64`, `linux-x86_64` and `linux-aarch64`
   # only, so an Intel Mac cannot build the binary at all. Say that, rather than
   # failing later with a 404 on an asset that does not exist.
-  die "no InterJSON build for Intel macOS: the MoonBit toolchain has no darwin-x86_64 target (build from source on an Apple Silicon Mac, or use a Linux/Windows machine)"
+  die 2 "no InterJSON build for Intel macOS: the MoonBit toolchain has no darwin-x86_64 target (build from source on an Apple Silicon Mac, or use a Linux/Windows machine)"
 else
-  die "unsupported platform: $os/$arch"
+  die 2 "unsupported platform: $os/$arch"
 fi
 
 # -- version ---------------------------------------------------------------
@@ -86,7 +90,7 @@ if [ -z "$VERSION" ]; then
   VERSION="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" |
     sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' |
     head -n 1)"
-  [ -n "$VERSION" ] || die "could not determine the latest release; set INTERJSON_VERSION"
+  [ -n "$VERSION" ] || die 1 "could not determine the latest release; set INTERJSON_VERSION"
 fi
 
 base="https://github.com/${REPO}/releases/download/${VERSION}"
@@ -101,11 +105,11 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 printf '  download : '
-curl -fsSL -o "$tmp/$asset" "${base}/${asset}" || die "download failed: ${base}/${asset}"
+curl -fsSL -o "$tmp/$asset" "${base}/${asset}" || die 1 "download failed: ${base}/${asset}"
 printf 'ok\n'
 
 printf '  checksums: '
-curl -fsSL -o "$tmp/SHA256SUMS" "${base}/SHA256SUMS" || die "SHA256SUMS could not be downloaded"
+curl -fsSL -o "$tmp/SHA256SUMS" "${base}/SHA256SUMS" || die 1 "SHA256SUMS could not be downloaded"
 printf 'ok\n'
 
 # -- verify ----------------------------------------------------------------
@@ -115,15 +119,15 @@ if command -v sha256sum >/dev/null 2>&1; then
 elif command -v shasum >/dev/null 2>&1; then
   actual="$(shasum -a 256 "$tmp/$asset" | cut -d' ' -f1)"
 else
-  die "neither sha256sum nor shasum is available; cannot verify the download"
+  die 1 "neither sha256sum nor shasum is available; cannot verify the download"
 fi
 
 expected="$(awk -v f="$asset" '$2 == f || $2 == "*"f { print $1 }' "$tmp/SHA256SUMS" | head -n 1)"
-[ -n "$expected" ] || die "SHA256SUMS does not name $asset; refusing to install an unverified binary"
+[ -n "$expected" ] || die 1 "SHA256SUMS does not name $asset; refusing to install an unverified binary"
 
 if [ "$actual" != "$expected" ]; then
   rm -f "$tmp/$asset"
-  die "checksum mismatch for $asset (expected $expected, got $actual); nothing was installed"
+  die 1 "checksum mismatch for $asset (expected $expected, got $actual); nothing was installed"
 fi
 printf '  verified : sha256 %s\n' "$actual"
 

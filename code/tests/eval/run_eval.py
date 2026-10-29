@@ -376,7 +376,7 @@ def main() -> int:
     w("")
     w("见 [EVAL_REGISTRATION.md](EVAL_REGISTRATION.md) §9：本轮只覆盖合成语料的")
     w("单点变异，不覆盖真实模型分布、多处变异组合与 >1 MiB 文档；性能与内存见")
-    w("`docs/BENCHMARK.md`。")
+    w("由 `tests/bench.sh` 与 `tests/memory_gate.py` 测，记录在仓库内（不随包发布）。")
     w("")
 
     with open(args.out, "w", encoding="utf-8") as fh:

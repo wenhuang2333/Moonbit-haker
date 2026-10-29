@@ -109,6 +109,7 @@ The runner also starts `interjson mcp` and checks:
 - Repair-rule coverage. That is `prop_wbtest.mbt`, the golden suite, the
   differential report and the ground-truth evaluation; the conformance corpus
   only pins the protocol surface.
-- Performance. `tests/bench.sh` and `docs/BENCHMARK.md` own those numbers.
+- Performance. `tests/bench.sh` owns those numbers; the measurement log is in
+  `docs/BENCHMARK.md`, maintained in the repository and not published.
 - Volatile fields. Nothing in a response is time- or machine-dependent, which
   is why exact subset matching is possible.

@@ -53,23 +53,15 @@ derive() {
 
 # The documents are searched for a literal string. `grep -F` is used so that
 # `.` in a version or a ratio is not a wildcard.
-# Every document that is published -- that is, every document the `.gitignore`
-# whitelist lets into GitHub -- is searched for the figures. The list used to
-# name five files, two of which are not published at all, so a wrong number
-# in `code/docs/MCP.md` or `code/docs/CONFORMANCE.md` was never checked: the
-# judge-facing documents were gated and the reader-facing ones were not.
-DOCS=(
- "$ROOT/README.md"
- "$ROOT/code/README.md"
- "$ROOT/code/README.zh.md"
- "$ROOT/code/docs/MCP.md"
- "$ROOT/code/docs/INTEGRATIONS.md"
- "$ROOT/code/docs/PROTOCOL.md"
- "$ROOT/code/docs/CONFORMANCE.md"
- "$ROOT/code/docs/MEMORY.md"
- "$ROOT/code/npm/README.md"
- "$ROOT/code/python/README.md"
-)
+# NOTE: there is deliberately no document list here.
+#
+# There used to be one (`DOCS=(...)`), and it was never read: every check below
+# names the files it searches, and that list had drifted to include two
+# documents that are not published at all. A list nobody reads is worse than no
+# list, because it looks like coverage. What keeps the checks honest instead is
+# `tests/published_docs.sh`, which derives the set of published documents from
+# `.gitignore` and fails when one of them stops being mentioned where it should
+# be -- and the comment at each `require_in` site naming the document it expects.
 
 # require_in <literal> <doc-file>...
 # Fails when none of the given files contains the literal.
@@ -132,7 +124,7 @@ for t in wasm wasm-gc js native; do
  # written here: the documents quote "<n>/<n> per backend", and a hard-coded
  # denominator would go stale the moment a test is added.
  require_in "$n/$n" "$ROOT/README.md" \
- "$ROOT/产品文档-精简版.md" "$CODE/README.md" "$CODE/README.zh.md"
+ "$CODE/README.md" "$CODE/README.zh.md"
 done
 
 # --- CLI assertions ----------------------------------------------------------
@@ -218,9 +210,9 @@ EOF
  derive "coverage_gate" "$GATE_C/$GATE_T" "bash tests/coverage.sh"
  derive "coverage_root" "$ROOT_C/$ROOT_T" "moon coverage report -f summary"
  derive "coverage_llm" "$LLM_C/$LLM_T" "moon coverage report -f summary"
- require_in "$ROOT_C/$ROOT_T" "$ROOT/README.md" "$ROOT/产品文档-精简版.md"
- require_in "$LLM_C/$LLM_T" "$ROOT/README.md" "$ROOT/产品文档-精简版.md"
- require_in "$GATE_C/$GATE_T" "$ROOT/产品文档-精简版.md"
+ require_in "$ROOT_C/$ROOT_T" "$ROOT/README.md" "$CODE/docs/MCP.md"
+ require_in "$LLM_C/$LLM_T" "$ROOT/README.md"
+ require_in "$GATE_C/$GATE_T" "$ROOT/README.md"
 else
  fail "the instrumented test run failed, so no coverage number was derived"
 fi
@@ -255,7 +247,9 @@ BUNDLE="$ROOT/static/demo/interjson.js"
 if [ -f "$BUNDLE" ]; then
  BUNDLE_KIB="$(size_kib "$(wc -c <"$BUNDLE" | tr -d ' ')")"
  derive "bundle_kib" "$BUNDLE_KIB" "wc -c < static/demo/interjson.js"
- require_in "$BUNDLE_KIB KiB"
+ # Deliberately not asserted: no document quotes the bundle size. `require_in`
+ # with no file argument is a no-op that reads like a check, so it is spelled
+ # out here instead.
 fi
 
 if [ -f "$BIN" ]; then
@@ -282,11 +276,11 @@ if [ -f "$EVAL_REPORT" ]; then
  EVAL_R="$(sed -n 's/^| 恢复率（value == truth） | \([0-9.]*\)%.*/\1/p' "$EVAL_REPORT" | head -1)"
  if [ -n "$EVAL_N" ]; then
  derive "eval_cases" "$EVAL_N" "code/docs/EVAL.md"
- require_in "$EVAL_N" "$ROOT/README.md" "$ROOT/产品文档-精简版.md"
+ require_in "$EVAL_N" "$ROOT/README.md"
  fi
  if [ -n "$EVAL_R" ]; then
  derive "eval_recovery" "$EVAL_R" "code/docs/EVAL.md"
- require_in "$EVAL_R%" "$ROOT/README.md" "$ROOT/产品文档-精简版.md"
+ require_in "$EVAL_R%" "$ROOT/README.md"
  fi
 fi
 
@@ -314,7 +308,7 @@ if [ -f "$RDY" ]; then
  RDY_N="$(awk -F'|' '/^\| .* \| [0-9]+ \| [0-9]+‰/ { c++ } END { print c + 0 }' "$RDY")"
  if [ "$RDY_N" -gt 0 ]; then
  derive "readiness_cases" "$RDY_N" "code/docs/READINESS.md"
- require_in "$RDY_N 个场景" "$ROOT/README.md" "$ROOT/产品文档-精简版.md"
+ require_in "$RDY_N 个场景" "$ROOT/README.md"
  fi
 fi
 

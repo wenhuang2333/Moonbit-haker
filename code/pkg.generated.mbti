@@ -6,9 +6,9 @@ pub const MAX_SCHEMA_DEPTH : Int32 = 256
 
 pub const MAX_VALUE_DEPTH : Int32 = 1048576
 
-pub const REGISTRY_VERSION : String = "0.12.0"
+pub const REGISTRY_VERSION : String = "0.13.0"
 
-pub const VERSION : String = "1.5.0"
+pub const VERSION : String = "1.5.1"
 
 pub fn advice_for(PlanOp) -> String
 
@@ -444,6 +444,7 @@ pub fn RepairPlan::prompt(Self) -> String
 pub fn RepairPlan::suggestions(Self) -> Array[String]
 pub fn RepairPlan::summary(Self) -> String
 pub fn RepairPlan::to_json(Self) -> String
+pub fn RepairPlan::to_json_with_text(Self, Bool) -> String
 
 pub(all) struct RepairResult {
   text : String

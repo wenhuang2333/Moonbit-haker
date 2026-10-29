@@ -310,7 +310,7 @@
       <div class="top-inner">
         <a class="brand" href="#top">
           <span class="mark" aria-hidden="true">{}</span>
-          <span>InterJSON <small>v1.4.0</small></span>
+          <span>InterJSON <small>v1.5.1</small></span>
         </a>
         <nav class="links" aria-label="页面章节">
           <a href="#mcp" data-nav="mcp">MCP</a>
@@ -852,7 +852,7 @@
               <li><a href="./README.md">static/demo/README.md</a> — 本地打开方式</li>
               <li><a href="https://github.com/wenhuang2333/Moonbit-haker">GitHub 仓库</a> · <code>cd code &amp;&amp; moon test</code></li>
             </ul>
-            <p class="meta">InterJSON v1.4.0 · mooncakes <code>0.11.0</code> 已发布（2026-10-27）· 页面无外部依赖，可离线打开。</p>
+            <p class="meta">InterJSON v1.5.1 · mooncakes <code>0.13.0</code> 已发布（2026-10-29）· 页面无外部依赖，可离线打开。</p>
           </div>
         </div>
       </footer>
@@ -860,7 +860,7 @@
 
     <script id="jm-fixtures" type="application/json">
       {
-        "version": "1.4.0",
+        "version": "1.5.1",
         "evidence": [
           { "n": "217", "label": "条白盒测试" },
           { "n": "868", "label": "次后端测试（4 个后端各 217/217）" },
@@ -1041,7 +1041,7 @@
             "title": "MoonBit 库 · 进程内",
             "tag": "moon add zhanshishan/interjson",
             "cmd": "let p = @interjson.PartialParser::new()",
-            "note": "不想起子进程时直接用库：PartialParser 逐个码元喂，analyze 给出同一份执行门判断。mooncakes 0.11.0 已发布（2026-10-27），与 1.4.0 除版本字符串外逐字节相同；0.9.0 / 0.10.0 尚未上传。"
+            "note": "不想起子进程时直接用库：PartialParser 逐个码元喂，analyze 给出同一份执行门判断。mooncakes 0.13.0 已发布（2026-10-29），与 1.5.1 除版本字符串外逐字节相同。"
           }
         ],
         "mcp": {
@@ -1057,7 +1057,7 @@
           "messages": {
             "refused": { "request": "{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"tools/call\", \"params\": {\"name\": \"interjson_gate\", \"arguments\": {\"text\": \"{\\\"amount\\\":100,\\\"currency\\\":\\\"USD\\\"\", \"schema_json\": {\"type\": \"object\", \"properties\": {\"amount\": {\"type\": \"number\"}, \"currency\": {\"type\": \"string\"}}, \"required\": [\"amount\"]}}}}", "response": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"decision=lossy_repair executable=false exactness=lossy\\nerror=E010 E010 StrictViolation at 1:31 (offset 30): R009 CloseContainer: exactness lossy exceeds max_loss cosmetic\\nretry (send this back to the model): InterJSON refused the arguments: E010 R009 CloseContainer at line 1 column 31 (offset 30).\\nReason: exactness lossy exceeds max_loss cosmetic\\nContext: nt\\\":100,\\\"currency\\\":\\\"USD\\\"\\n                                 ^\\nRe-emit the arguments as valid JSON with exactly one reading.\"}],\"isError\":false,\"structuredContent\":{\"decision\":\"lossy_repair\",\"label\":\"REJECT (a value was changed)\",\"exactness\":\"lossy\",\"ambiguous\":false,\"information_loss\":true,\"valid_json\":false,\"normalized\":true,\"ambiguity\":\"none\",\"execution\":\"blocked\",\"executable\":false,\"syntax_ready_permille\":-1,\"schema_total\":0,\"schema_satisfied\":0,\"schema_missing\":[],\"error\":{\"code\":\"E010\",\"message\":\"E010 StrictViolation at 1:31 (offset 30): R009 CloseContainer: exactness lossy exceeds max_loss cosmetic\"},\"repairs\":[{\"rule\":\"R009\",\"name\":\"CloseContainer\",\"action\":\"insert\",\"offset\":30,\"line\":1,\"column\":31,\"severity\":\"warning\",\"ambiguity\":\"unambiguous\",\"confidence\":\"refused\",\"confidence_value\":0,\"information_loss\":true}],\"retry\":{\"code\":\"E010\",\"prompt\":\"InterJSON refused the arguments: E010 R009 CloseContainer at line 1 column 31 (offset 30).\\nReason: exactness lossy exceeds max_loss cosmetic\\nContext: nt\\\":100,\\\"currency\\\":\\\"USD\\\"\\n                                 ^\\nRe-emit the arguments as valid JSON with exactly one reading.\"},\"repairs_truncated\":false,\"value\":null,\"text\":\"\"}}}" },
             "allowed": { "request": "{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"tools/call\", \"params\": {\"name\": \"interjson_gate\", \"arguments\": {\"text\": \"{\\\"amount\\\":100,\\\"currency\\\":\\\"USD\\\"}\", \"schema_json\": {\"type\": \"object\", \"properties\": {\"amount\": {\"type\": \"number\"}, \"currency\": {\"type\": \"string\"}}, \"required\": [\"amount\"]}}}}", "response": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"decision=safe executable=true exactness=exact\"}],\"isError\":false,\"structuredContent\":{\"decision\":\"safe\",\"label\":\"SAFE TO EXECUTE\",\"exactness\":\"exact\",\"ambiguous\":false,\"information_loss\":false,\"valid_json\":true,\"normalized\":false,\"ambiguity\":\"none\",\"execution\":\"allowed\",\"executable\":true,\"syntax_ready_permille\":-1,\"schema_total\":2,\"schema_satisfied\":2,\"schema_missing\":[],\"error\":null,\"repairs\":[],\"retry\":null,\"repairs_truncated\":false,\"value\":{\"amount\":100,\"currency\":\"USD\"},\"text\":\"{\\\"amount\\\":100,\\\"currency\\\":\\\"USD\\\"}\"}}}" },
-            "init": { "request": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"demo\",\"version\":\"0\"}}}", "response": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"interjson\",\"title\":\"InterJSON — the execution gate\",\"version\":\"1.4.0\"},\"instructions\":\"InterJSON is a local execution gate for model output. It runs on this machine over stdio and performs no network requests.\\n\\nBefore executing tool arguments or trusting structured output, call `interjson_gate` with the raw argument text and the tool's inputSchema as `schema_json`.\\n- `executable: true` means the arguments are safe to execute; `value` is the parsed object.\\n- `executable: false` means do not execute: send `retry.prompt` back to the model and use the re-emitted arguments.\\n\\n`interjson_repair` returns repaired text, `interjson_validate` reports legality without repairing, and `interjson_readiness` reports when streaming fields become final.\"}}" }
+            "init": { "request": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {\"protocolVersion\": \"2025-06-18\", \"capabilities\": {}, \"clientInfo\": {\"name\": \"demo\", \"version\": \"0\"}}}", "response": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"interjson\",\"title\":\"InterJSON — the execution gate\",\"version\":\"1.5.0\"},\"instructions\":\"InterJSON is a local execution gate for model output. It runs on this machine over stdio and performs no network requests.\\n\\nBefore executing tool arguments or trusting structured output, call `interjson_gate` with the raw argument text and the tool's inputSchema as `schema_json`.\\n- `executable: true` means the arguments are safe to execute; `value` is the parsed object.\\n- `executable: false` means do not execute: send `retry.prompt` back to the model and use the re-emitted arguments.\\n\\n`interjson_repair` returns repaired text, `interjson_validate` reports legality without repairing, and `interjson_readiness` reports when streaming fields become final.\"}}" }
           }
         }
       }

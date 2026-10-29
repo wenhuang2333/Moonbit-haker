@@ -1,6 +1,6 @@
 # InterJSON — LLM 输出的执行门 · 本地 MCP
 
-**版本**：1.5.0
+**版本**：1.5.1
 
 **技术预览（technical preview）**：GitHub `v1.5.0` 已发布（8 个产物）；mooncakes 上
 `0.12.0` 已于 2026-10-28 发布；**npm 与 PyPI 上还没有 `interjson-moonbit`**（边界见本节末尾）。
@@ -26,7 +26,16 @@ SHA-256、把二进制放上 `PATH` 并打印该加的 `export PATH=...`。校�
 `interjson-windows-x86_64.exe`（另有 `interjson-probe.wasm`、
 `interjson-demo.js`、`interjson-install.sh` 与 `SHA256SUMS`）。
 
-**② 过门。** 模型被 `max_tokens` 截断，参数少了一个右花括号。把这段原文交给门：
+**② 过门。** 模型被 `max_tokens` 截断，参数少了一个右花括号。真实用法是把它交给
+**MCP 工具**（这才是产品面）：
+
+```bash
+interjson mcp --print-config=claude    # 打印 Claude Code 的配置
+claude mcp add interjson -- interjson mcp
+```
+
+装好之后，执行任何工具调用前先调 `interjson_gate`，把参数原文和该工具的
+`inputSchema` 一起传进去。**不接 MCP 也能直接验**——同一个判定在命令行上就能看到：
 
 ```bash
 printf '{"amount":100,"currency":"USD"' | interjson explain --policy agent --json
@@ -213,8 +222,9 @@ with Client() as jm:
 | 大模型工具流适配 | `interjson/llm`：Anthropic 细粒度工具流与 OpenAI 兼容流，支持多路并发与 SSE 解析 |
 | 资源上限与多后端 | `max_depth`/`max_input_len`/`max_token_len`（`E020`/`E021`/`E022`）；wasm-gc / native / JS / wasm 四个后端测试结果一致，CLI 为 native |
 
-完整选项表与逐条规则见 [code/README.md](code/README.md#options) 与本地文档
-`code/docs/RULES.md`、`code/docs/ERRORS.md`。
+完整选项表、22 条规则的逐条说明与 12 个错误码见
+[code/README.md](code/README.md#options)——那是发布的表，读者直接能看。更长的规则字典
+（带示例、需求映射、失效模式）在仓库内维护，不随包发布。
 
 ## 质量与证据
 
@@ -224,7 +234,7 @@ with Client() as jm:
 | 流式用例（S-001…S-021）与分块不变性 | 21 条 + 逐码元/二分/1 KB 切分 | 通过 |
 | 增量流视图 | `drain_views` / `for_each_delta` 与 `drain_deltas` 逐字段比对（120 份文档 × 7 组选项 × 2 语料） | 一致，路径解码逐段相同 |
 | 属性与模糊测试 | 8 组 × 400 例（`INTERJSON_LONGRUN` 可提高，夜间跑 1 000 000 例）；字节级 fuzz 5 组 × 300 例（CI 2 000、夜间 100 000） | 通过，无反例 |
-| 真值评测（协议先冻结） | 1200 条（19 个变异族 + 1 个对照组，每族 60 条） | 恢复率 **100.00%**，漏标率 **0**，四条预登记判据 + 3b 子判据全 PASS |
+| 真值评测（协议先冻结） | 1200 条（19 个变异族 + 1 个对照组，每族 60 条） | 恢复率 **100.00%**；差异 0 条，所以**漏标率是 n/a（0/0）而不是 0**——一个没有分母的比率写成 0 会让人以为测出了一个零。四条预登记判据 + 3b 子判据全 PASS |
 | 自愈闭环 | `examples/agent_loop` 4 个 episode | 2 次重试后执行、1 次骨架不符回灌、1 次无改进则放弃 |
 | 增量流重放 | 400 份生成文档 + 400 份变异输入 | 「增量重放 == 快照」全部成立 |
 | 大模型适配器 | 9 个夹具 × 双 provider | 通过（含截断、转义切分、代理对切分、多路并发） |
@@ -236,7 +246,7 @@ with Client() as jm:
 | **Python 包** | 20 个测试（客户端 14 + HTTP 6） | 通过 |
 | 示例对照 | 6 组输入/期望输出 | 逐字节一致 |
 | 差分测试（对照 `jsonrepair`、`json-repair`） | 402 条用例 | 202 处差异**全部有文档解释**，未解释 0 |
-| 库代码行覆盖率 | 根包 4029/4296、`llm` 包 337/391 | 93.8% / 86.2%；覆盖率门按「有未覆盖行的文件」口径计 4291/4612 = **93.1%** |
+| 库代码行覆盖率 | 根包 4032/4299、`llm` 包 337/391 | 93.8% / 86.2%；覆盖率门按「有未覆盖行的文件」口径计 4294/4615 = **93.0%** |
 | **独立第三方语料** | `nst/JSONTestSuite` 318 文件（MIT，commit `1ef36fa0`） | `y_` 误修 **2/95**（重复键），`n_` 有效值 **165/188** vs `json_repair` 166、`jsonrepair` 144 |
 | **骨架就绪表** | 10 个场景 | 6 个存在落差（最小 713‰、最大 **908‰**），4 个两层同时到达末尾 |
 | **安全层单价** | 4.9 KiB × 20 次调用 | `analyze` = `repair` 的 0.95–1.01×，`for_agent` 1.05–1.12×，`+schema` 1.06–1.12× |
@@ -368,9 +378,9 @@ InterJSON 的差异化压在它的边界上：**流式增量**、**截断补全*
 - **命令行仅支持 native 后端；解析器实例非线程安全**，每个流用一个实例；恢复策略是启发式的，
   不是某个标准的合规实现。
 
-完整清单（含 1.4.x → 1.5.0 的契约变化与逐条边界）见
-[code/README.md#known-limitations](code/README.md#known-limitations) 与本地文档
-`code/docs/TRACEABILITY.md`。
+完整清单（含 1.4.x → 1.5.x 的契约变化与逐条边界）见
+[code/README.md#known-limitations](code/README.md#known-limitations)。需求 → 用例 → 证据的
+追踪矩阵在仓库内维护，不随包发布。
 
 ## 文档索引
 
@@ -398,12 +408,18 @@ InterJSON 的差异化压在它的边界上：**流式增量**、**截断补全*
 
 | 文档 | 内容 |
 | --- | --- |
-| `code/docs/RULES.md` | 22 条修复规则：触发条件、级别、消息模板、示例 |
-| `code/docs/ERRORS.md` | 12 个错误码、严格模式升级、退出码、失效模式 |
-| `code/docs/BENCHMARK.md` | 吞吐、线性、流式、内存、体积的完整方法与表格 |
-| `code/docs/REPRODUCE.md` | 从零复现全部结论 |
-| `code/docs/TRACEABILITY.md` | 需求 → 用例 → 证据 追踪矩阵 |
-| `code/docs/AI_USAGE.md` | AI 使用说明：用在何处、哪些判断不外包、如何核验 |
+| [code/README.md](code/README.md) | 库 API：`Options`、`PartialParser`、`Schema`；**22 条规则与 12 个错误码的完整表** |
+| [code/README.zh.md](code/README.zh.md) | 同上（中文） |
+| [code/docs/MCP.md](code/docs/MCP.md) | 本地 MCP 部署指南：四个工具、`outputSchema`、错误码、安装 |
+| [code/docs/INTEGRATIONS.md](code/docs/INTEGRATIONS.md) | 宿主侧接入配方，含把门变成强制点的 `PreToolUse` hook |
+| [code/docs/PROTOCOL.md](code/docs/PROTOCOL.md) | `serve` 的线格式契约 |
+| [code/docs/CONFORMANCE.md](code/docs/CONFORMANCE.md) | 协议与 MCP 一致性套件的规范 |
+| [code/docs/SPEC.md](code/docs/SPEC.md) | 兼容性契约 |
+| [code/docs/NOTREE.md](code/docs/NOTREE.md) | 无树模式的设计与实测目标（**未实现**） |
+| [code/SECURITY.md](code/SECURITY.md) | 威胁模型、递归上界、fuzz 预算 |
+| [code/CONTRIBUTING.md](code/CONTRIBUTING.md) | 改引擎前的硬约束 |
+| [code/CHANGELOG.md](code/CHANGELOG.md) | 逐版本变更 |
+| [code/docs/MEMORY.md](code/docs/MEMORY.md) · [DIVERGENCES.md](code/docs/DIVERGENCES.md) · [EVAL.md](code/docs/EVAL.md) | 生成物：内存基线、差分报告、真值评测 |
 | `marks/发布前清单.md` | 本轮的评审清单与验收记录（驱动 1.5.0 的那份） |
 | `产品文档.md` · `marks/` | **历史档案（旧版）**：更名前的逐轮快照、问题与决策，以及早期设计文档；仅追溯用 |
 
@@ -420,7 +436,8 @@ InterJSON 的差异化压在它的边界上：**流式增量**、**截断补全*
 
 | GitHub tag | mooncakes.io | 关系 |
 | --- | --- | --- |
-| `v1.5.0` | `0.12.0` | **当前版本**：修两处「错误放行」——`json_equal` 改为按数字的精确十进制值比较（`9007199254740993` 与 `9007199254740992` 不再被当成同一个值），`RuleSet` 由 `RepairCode::count()` 定尺寸并改为 fail-closed（`R022` 此前无法被关闭）；修拒绝契约（不可执行的结果必带非空 `retry.prompt` 且 `value` 为 `null`）；MCP `agent` 档改为等于 `Options::for_agent()`（含 `skip_prose`）；CLI 修 `--max-repairs` 上限、`--max-prose-buffer=` 少切一位、`--print-config` 空格形式；stdin 跨 64 KiB 边界的多字节字符不再损坏；值上的四个遍历改为迭代，`max_depth` 因此可以放宽（10 万层可解析），容器内存按实际大小收敛。`1.5.x` ↔ `0.12.x`；**0.12.0 已于 2026-10-28 上传 mooncakes**，GitHub `v1.5.0` Release 已发布 7 个产物 + `SHA256SUMS` |
+| `v1.5.1` | `0.13.0` | **当前版本**：1.5.0 的 tag 打出去之后才完成的深度与内存工作，单独成版——**tag 是发布物，分支是后来者**，而 1.5.0 的二进制与 1.5.0 的文档说的不是同一件事。值上的四个遍历（拷贝、判等、骨架求值、渲染）改为迭代，深度由堆而不是原生栈决定，`MAX_VALUE_DEPTH` 从 512 提到 1048576，**10 万层的文档四个后端都能解析**；数值不再为可往返的源文本分配 `String`，容器按实际内容定尺寸，渲染器改游标。实测整数 9.7 → 5.2 倍、嵌套数组 47 → 24 倍。新增 `tests/memory_gate.py` 进 CI。`1.5.1` ↔ `0.13.0`；**0.13.0 已上传 mooncakes（2026-10-29）** |
+| `v1.5.0` | `0.12.0` | 1.5.0 发布时的内容：修两处「错误放行」——`json_equal` 改为按数字的精确十进制值比较（`9007199254740993` 与 `9007199254740992` 不再被当成同一个值），`RuleSet` 由 `RepairCode::count()` 定尺寸并改为 fail-closed（`R022` 此前无法被关闭）；修拒绝契约（不可执行的结果必带非空 `retry.prompt` 且 `value` 为 `null`）；MCP `agent` 档改为等于 `Options::for_agent()`（含 `skip_prose`）；CLI 修 `--max-repairs` 上限、`--max-prose-buffer=` 少切一位、`--print-config` 空格形式；stdin 跨 64 KiB 边界的多字节字符不再损坏。`1.5.0` ↔ `0.12.0`；**0.12.0 已于 2026-10-28 上传 mooncakes**，GitHub `v1.5.0` Release 已发布 7 个产物 + `SHA256SUMS` |
 | `v1.4.0` | `0.11.0` | 更名 InterJSON，产品定位为「LLM 输出的执行门」，对外主入口改为本地 MCP server（`interjson mcp`，四个只读工具，主工具 `interjson_gate` 默认 `agent` 档）。模块、CLI、语言包与浏览器 bundle 统一改名，包名改为 `zhanshishan/interjson`；引擎语义、修复规则与全部不变量不变。mooncakes 现阶段只接受 `0.x.y`：patch 位一一对应，minor 位按发布序顺延（`1.0.x` ↔ `0.7.x`、`1.1.x` ↔ `0.8.x`、`1.2.x` ↔ `0.9.x`、`1.3.x` ↔ `0.10.x`、`1.4.x` ↔ `0.11.x`）。**0.11.0 已于 2026-10-27 上传** |
 | `v1.3.0` | `0.10.0` | 三块结构性重构（当前位置与历史位置分离、增量日志改并行数组 + 路径 arena、CLI 暴露三个资源上限）加一处字节入口缺陷修复。0.10.0 未上传 mooncakes |
 | `v1.2.0` | `0.9.0` | 修 89 条标量根误拒、按值分级 `R011`、加速 CLI 字节路径与增量文本 drain，并让默认路径执行 `--schema`。0.9.0 未上传 mooncakes |
@@ -435,7 +452,8 @@ GitHub 侧 `v1.4.0` 之前的 Release 都在旧包名 `zhanshishan/jsonmend` 下
 `code/python/pyproject.toml` 是三个编译器够不到的字面量，`tests/cli_smoke.sh` 断言四处相等，
 `tests/claims.sh` 断言文档引用同一个数字。发布顺序：**先 `moon publish --dry-run` 探测平台
 限制，再打标签**——标签一旦推送不再移动；Release 的资产是否与 `SHA256SUMS` 一致，由
-`code/tests/release_assets.sh` 检查（详见本地文档 `code/docs/REPRODUCE.md` 的发布清单）。
+`code/tests/release_assets.sh` 检查。逐条复现步骤在仓库内的 `code/docs/REPRODUCE.md`
+（不随包发布；`README.md` 与 `code/README.md` 里的命令就是它的可执行部分）。
 
 ## 路线图
 

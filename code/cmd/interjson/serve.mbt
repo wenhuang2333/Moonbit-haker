@@ -477,7 +477,16 @@ fn handle_analyze(
     Some(s) => @ij.analyze(text, options=opts, schema=s)
     None => @ij.analyze(text, options=opts)
   }
-  @json.parse(plan.to_json()) catch {
+  // `value` and `text` are the same document twice. A gate response used to
+  // carry both, so a 1 MB tool-call argument produced ~3 MB of
+  // `structuredContent` -- the payload, the rendered text, and the text channel.
+  // `text` is now opt-in (`with_text`), because a caller that has `value` can
+  // render it and the MCP gate never reads `text`.
+  let with_text = match params.get("with_text") {
+    Some(Json::True) => true
+    _ => false
+  }
+  @json.parse(plan.to_json_with_text(with_text)) catch {
     _ => raise @ij.InvalidState("the plan could not be serialised")
   }
 }

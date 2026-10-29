@@ -170,6 +170,16 @@ jobs:
         working-directory: code/npm
         run: node --test
 
+      # `claims.sh` checks the figures a document quotes. Which documents it
+      # checks used to be decided by file arguments written at each check site,
+      # and that list had drifted in both directions: it named two documents that
+      # are not published (so those checks were skipped and reported as "not
+      # published"), and it omitted one that is published. Neither state is
+      # visible by reading the script, so the set is derived from the
+      # `.gitignore` whitelist and compared.
+      - name: Every published document is searched by the claims gate
+        run: bash code/tests/published_docs.sh
+
       - name: The numbers the documents quote are the numbers this build produces
         working-directory: code
         run: |
@@ -258,6 +268,11 @@ jobs:
           cd "$RUNNER_TEMP/node-oracle"
           npm install --no-audit --no-fund "jsonrepair@3.15.0"
 
+      # The committed report is the copy the next reader looks at, so CI has to
+      # be able to say it is still the copy this build produces. It used to be
+      # regenerated here and thrown away -- which is how the committed file came
+      # to say "n/a (library not installed)" while every CI run measured against
+      # a real `jsonrepair`. Regenerate, then diff.
       - name: Independent corpus (nst/JSONTestSuite, vendored)
         working-directory: code
         run: |
@@ -265,6 +280,7 @@ jobs:
           python3 tests/eval/run_independent.py \
             --cli ./_build/native/release/build/cmd/interjson/interjson.exe \
             --node-dir "$RUNNER_TEMP/node-oracle/node_modules"
+          git diff --exit-code -- code/docs/EVAL_INDEPENDENT.md
 
       - name: Differential report (must exit 0)
         working-directory: code

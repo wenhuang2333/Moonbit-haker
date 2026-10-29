@@ -872,6 +872,21 @@ fn kv(key : String, value : String) -> String {
 /// Machine readable form of the plan, for `interjson explain --json` and for the
 /// browser demo. Field names are part of the contract.
 pub fn RepairPlan::to_json(self : RepairPlan) -> String {
+  self.to_json_with_text(true)
+}
+
+///|
+/// The plan as JSON, with or without the rendered document.
+///
+/// `include_text: false` drops the `text` field, which is the rendered form of
+/// `value`: a caller that has `value` can render it, and sending both puts two
+/// copies of the document on the wire. The MCP gate uses `false`; `to_json()`
+/// keeps `true` because it is the documented contract `explain --json` and the
+/// browser demo read.
+pub fn RepairPlan::to_json_with_text(
+  self : RepairPlan,
+  include_text : Bool,
+) -> String {
   let sb = StringBuilder()
   sb.write_string("{")
   sb.write_string(kv("decision", self.decision.name()))
@@ -999,6 +1014,13 @@ pub fn RepairPlan::to_json(self : RepairPlan) -> String {
   // value: `plan_of_final` already drops it for a value that fails its
   // declaration, and a refusal carries none. Leaving the value in place for a
   // refusal would hand the caller the very thing the gate refused.
+  // `value` and `text` are the same document twice: `text` is the rendered form
+  // of `value`, and `value` is what `text` parses to. Emitting both put two full
+  // copies on the wire -- a 1 MB tool-call argument became ~3 MB of
+  // `structuredContent` -- and a caller that needs the text can ask for it.
+  // `text` is therefore emitted only when it is not derivable from `value`
+  // (a refusal carries an empty value and no text either), and `include_text`
+  // is the caller's opt-in for the rest.
   sb.write_string(",\"value\":")
   match self.value {
     // `render`, not `Json::stringify`: core's serialiser is recursive, so a
@@ -1006,8 +1028,10 @@ pub fn RepairPlan::to_json(self : RepairPlan) -> String {
     Some(v) => sb.write_string(render(v, 0))
     None => sb.write_string("null")
   }
-  sb.write_string(",\"text\":")
-  sb.write_string("\"" + json_escape(self.text) + "\"")
+  if include_text {
+    sb.write_string(",\"text\":")
+    sb.write_string("\"" + json_escape(self.text) + "\"")
+  }
   sb.write_string("}")
   sb.to_string()
 }

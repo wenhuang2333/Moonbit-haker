@@ -72,8 +72,11 @@ intended in `docs/DIVERGENCES.md` (the file is generated; put the explanation in
 4. Add golden cases to `golden_wbtest.mbt`, a property-test angle to
    `prop_wbtest.mbt` if it changes output shape, and a streaming case to
    `stream_wbtest.mbt` if it can fire across a chunk boundary.
-5. Update `docs/RULES.md`, `docs/ERRORS.md` (if the code list changes) and
-   `docs/TRACEABILITY.md`, and add a line to `CHANGELOG.md`.
+5. Update the rule and error tables in `README.md` and `README.zh.md`, the
+   requirement mapping, and add a line to `CHANGELOG.md`. The rule dictionary
+   (`docs/RULES.md`), the error reference (`docs/ERRORS.md`) and the traceability
+   matrix (`docs/TRACEABILITY.md`) are kept in the repository but are not
+   published; they must be updated in the same change.
 
 ## Invariants that must not regress
 
@@ -90,8 +93,8 @@ intended in `docs/DIVERGENCES.md` (the file is generated; put the explanation in
 - No warnings, `moon fmt` clean.
 - Comments are used for the *why*, not the *what*; the engine already reads as a
   state machine.
-- Public API additions need a reason: the surface is deliberately small
-  (`docs/TRACEABILITY.md`, NFR-API-01).
+- Public API additions need a reason: the surface is deliberately small (the
+  `NFR-API-01` budget, tracked in the unpublished requirement matrix).
 - Commit messages: short English imperative ("Add R019 string concatenation").
 
 ## Commit and review checklist

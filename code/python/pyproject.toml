@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "interjson-moonbit"
-version = "1.5.0"
+version = "1.5.1"
 description = "The local execution gate for LLM output: an MCP server and streaming JSON repair, powered by the MoonBit engine."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Apache-2.0" }
+license = { file = "LICENSE" }
 authors = [{ name = "InterJSON contributors" }]
 keywords = [
   "json",
@@ -56,3 +56,8 @@ packages = ["interjson"]
 # checker ignores the annotations and a consumer gets `Any` everywhere.
 [tool.setuptools.package-data]
 interjson = ["py.typed"]
+
+# Apache-2.0 section 4(d): a redistributor has to pass the NOTICE on. Keeping it
+# at the distribution root makes it part of the sdist and the wheel's metadata.
+[tool.setuptools.data-files]
+"." = ["LICENSE", "NOTICE"]

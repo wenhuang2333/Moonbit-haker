@@ -593,7 +593,7 @@ def main():
     lines.append(f"| corpus | {len(HAND_WRITTEN)} hand written cases + {len(mutations())} automatic mutations |")
     lines.append("| corpus selection | deterministic: fixed list plus fixed mutations, no seed |")
     lines.append("| comparison | `json.loads(interjson stdout)` vs `json_repair.repair_json(..., return_objects=True)` |")
-    lines.append("| reproduce | `python3 code/tests/diff/run_diff.py --cli <interjson binary> [--node-module-dir DIR]` (see docs/REPRODUCE.md) |\n")
+    lines.append("| reproduce | `python3 code/tests/diff/run_diff.py --cli <interjson binary> [--node-module-dir DIR]` (reproduce with the command shown) |\n")
     lines.append("A divergence is *documented* when InterJSON's own repair record list")
     lines.append("explains it: the rules that fired are exactly the rules whose")
     lines.append("documented behaviour differs from the reference implementation.\n")
@@ -719,8 +719,8 @@ def main():
         lines.append(
             "The raw agreement rate is therefore low by construction: the mutated "
             "corpus is almost entirely truncated input, which is exactly where the "
-            "two design philosophies differ. `docs/RULES.md` documents each rule and "
-            "`docs/ERRORS.md` each error code; the acceptance metric of D02 G3 is "
+            "two design philosophies differ. The rule table and the error-code table in "
+            "`README.md` document each one; the acceptance metric of D02 G3 is "
             "measured on the documented scope, where this harness reports 100% with "
             "zero unexplained divergences.\n"
         )

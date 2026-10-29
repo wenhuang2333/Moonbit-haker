@@ -1272,24 +1272,24 @@ const _M0MP211zhanshishan9interjson9RetryHint9of__errorN5tupleS3683 = { _0: "", 
 const _M0FP211zhanshishan9interjson20enum__literals__textN6recordS2212 = new _M0TPC16string10StringView(",", 0, 1);
 const _M0MP211zhanshishan9interjson11Constraints4textN6recordS2219 = new _M0TPC16string10StringView(",", 0, 1);
 const _M0MPC16string10StringView4findN6constrS350 = 0;
-const _M0FP211zhanshishan9interjson21json__schema__patternN6recordS3846 = new _M0TPC16string10StringView("\\", 0, 1);
-const _M0FP211zhanshishan9interjson21json__schema__patternN6recordS3847 = new _M0TPC16string10StringView("[", 0, 1);
-const _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3848 = 1;
-const _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3849 = 1;
-const _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3850 = 0;
+const _M0FP211zhanshishan9interjson21json__schema__patternN6recordS3848 = new _M0TPC16string10StringView("\\", 0, 1);
+const _M0FP211zhanshishan9interjson21json__schema__patternN6recordS3849 = new _M0TPC16string10StringView("[", 0, 1);
+const _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3850 = 1;
 const _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3851 = 1;
 const _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3852 = 0;
 const _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3853 = 1;
-const _M0FP211zhanshishan9interjson21json__schema__patternN6recordS3854 = new _M0TPC16string10StringView(",", 0, 1);
-const _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3978 = new _M0TPC16string10StringView("~", 0, 1);
-const _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3979 = new _M0TPC16string10StringView("~0", 0, 2);
-const _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3980 = new _M0TPC16string10StringView("/", 0, 1);
-const _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3981 = new _M0TPC16string10StringView("~1", 0, 2);
+const _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3854 = 0;
+const _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3855 = 1;
+const _M0FP211zhanshishan9interjson21json__schema__patternN6recordS3856 = new _M0TPC16string10StringView(",", 0, 1);
+const _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3980 = new _M0TPC16string10StringView("~", 0, 1);
+const _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3981 = new _M0TPC16string10StringView("~0", 0, 2);
+const _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3982 = new _M0TPC16string10StringView("/", 0, 1);
+const _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3983 = new _M0TPC16string10StringView("~1", 0, 2);
 const _M0FPC28internal7strconv20parse__int64_2einnerN6recordS1379 = new _M0TPC16string10StringView("", 0, 0);
 const _M0FP211zhanshishan9interjson12lookup__pathN6recordS3087 = new _M0TPC16string10StringView(".", 0, 1);
 const _M0FP211zhanshishan9interjson17treated__segmentsN6recordS2133 = new _M0TPC16string10StringView(".", 0, 1);
 const _M0MP211zhanshishan9interjson6Schema8at__pathN6recordS2177 = new _M0TPC16string10StringView(".", 0, 1);
-const _M0FP411zhanshishan9interjson8examples3web10live__textN6constrS4136 = 1;
+const _M0FP411zhanshishan9interjson8examples3web10live__textN6constrS4138 = 1;
 function _M0FPB13consume4__acc(acc, input) {
   const _p = (acc >>> 0) + ((Math.imul(input, -1028477379) | 0) >>> 0) | 0;
   const _p$2 = 17;
@@ -16171,7 +16171,7 @@ function _M0MP211zhanshishan9interjson17ExecutionDecision5label(self) {
     }
   }
 }
-function _M0MP211zhanshishan9interjson10RepairPlan8to__json(self) {
+function _M0MP211zhanshishan9interjson10RepairPlan20to__json__with__text(self, include_text) {
   const sb = _M0MPB13StringBuilder21StringBuilder_2einner(0);
   _M0IPB13StringBuilderPB6Logger13write__string(sb, "{");
   const _p = "decision";
@@ -16353,10 +16353,15 @@ function _M0MP211zhanshishan9interjson10RepairPlan8to__json(self) {
     const _v = _Some;
     _M0IPB13StringBuilderPB6Logger13write__string(sb, _M0FP211zhanshishan9interjson6render(_v, 0));
   }
-  _M0IPB13StringBuilderPB6Logger13write__string(sb, ",\"text\":");
-  _M0IPB13StringBuilderPB6Logger13write__string(sb, `\"${_M0FP211zhanshishan9interjson12json__escape(self.text)}\"`);
+  if (include_text) {
+    _M0IPB13StringBuilderPB6Logger13write__string(sb, ",\"text\":");
+    _M0IPB13StringBuilderPB6Logger13write__string(sb, `\"${_M0FP211zhanshishan9interjson12json__escape(self.text)}\"`);
+  }
   _M0IPB13StringBuilderPB6Logger13write__string(sb, "}");
   return sb.val;
+}
+function _M0MP211zhanshishan9interjson10RepairPlan8to__json(self) {
+  return _M0MP211zhanshishan9interjson10RepairPlan20to__json__with__text(self, true);
 }
 function _M0MP211zhanshishan9interjson7Options8for__llm() {
   const _tmp = _M0MP211zhanshishan9interjson7Options7default();
@@ -16508,7 +16513,7 @@ function _M0FP211zhanshishan9interjson21json__schema__pattern(s) {
     return new _M0DTPC16result6ResultGRP211zhanshishan9interjson11PatternSpecRP211zhanshishan9interjson14InterJSONErrorE3Err(new _M0DTPC15error5Error54zhanshishan_2finterjson_2eInterJSONError_2eSchemaError("json schema: `pattern` has an unterminated class"));
   }
   const inner = _M0MPC16string10StringView9to__owned(_M0MPC16string6String21clamped__view_2einner(body, 1, close));
-  if (_M0MPC16string6String8contains(inner, _M0FP211zhanshishan9interjson21json__schema__patternN6recordS3846) || _M0MPC16string6String8contains(inner, _M0FP211zhanshishan9interjson21json__schema__patternN6recordS3847)) {
+  if (_M0MPC16string6String8contains(inner, _M0FP211zhanshishan9interjson21json__schema__patternN6recordS3848) || _M0MPC16string6String8contains(inner, _M0FP211zhanshishan9interjson21json__schema__patternN6recordS3849)) {
     return new _M0DTPC16result6ResultGRP211zhanshishan9interjson11PatternSpecRP211zhanshishan9interjson14InterJSONErrorE3Err(new _M0DTPC15error5Error54zhanshishan_2finterjson_2eInterJSONError_2eSchemaError("json schema: `pattern` character classes may not contain escapes or nested classes"));
   }
   const rest = _M0MPC16string10StringView9to__owned(_M0MPC16string6String21clamped__view_2einner(body, close + 1 | 0, undefined));
@@ -16516,23 +16521,23 @@ function _M0FP211zhanshishan9interjson21json__schema__pattern(s) {
   let max_len;
   _L: {
     if (rest === "") {
-      min_len = _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3848;
-      max_len = _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3849;
+      min_len = _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3850;
+      max_len = _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3851;
       break _L;
     } else {
       if (rest === "*") {
-        min_len = _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3850;
+        min_len = _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3852;
         max_len = undefined;
         break _L;
       } else {
         if (rest === "+") {
-          min_len = _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3851;
+          min_len = _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3853;
           max_len = undefined;
           break _L;
         } else {
           if (rest === "?") {
-            min_len = _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3852;
-            max_len = _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3853;
+            min_len = _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3854;
+            max_len = _M0FP211zhanshishan9interjson21json__schema__patternN6constrS3855;
             break _L;
           } else {
             let _tmp$2;
@@ -16550,7 +16555,7 @@ function _M0FP211zhanshishan9interjson21json__schema__pattern(s) {
             }
             if (_tmp$2) {
               const spec = _M0MPC16string10StringView9to__owned(_M0MPC16string6String21clamped__view_2einner(rest, 1, rest.length - 1 | 0));
-              const parts = _M0MPB4Iter9to__arrayGRPC16string10StringViewE(_M0MPC16string6String5split(spec, _M0FP211zhanshishan9interjson21json__schema__patternN6recordS3854));
+              const parts = _M0MPB4Iter9to__arrayGRPC16string10StringViewE(_M0MPC16string6String5split(spec, _M0FP211zhanshishan9interjson21json__schema__patternN6recordS3856));
               if (parts.length === 1) {
                 const _bind = _M0FP211zhanshishan9interjson29json__schema__quantifier__int(_M0MPC15array5Array2atGRP211zhanshishan9interjson6RepairE(parts, 0));
                 let k;
@@ -17132,7 +17137,7 @@ function _M0FP211zhanshishan9interjson17pointer__of__path(segs) {
       if (seg.$tag === 0) {
         const _Key = seg;
         const _k = _Key._0;
-        _M0IPB13StringBuilderPB6Logger13write__string(sb, _M0MPC16string6String12replace__all(_M0MPC16string6String12replace__all(_k, _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3978, _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3979), _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3980, _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3981));
+        _M0IPB13StringBuilderPB6Logger13write__string(sb, _M0MPC16string6String12replace__all(_M0MPC16string6String12replace__all(_k, _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3980, _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3981), _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3982, _M0FP211zhanshishan9interjson17pointer__of__pathN6recordS3983));
       } else {
         const _Index = seg;
         const _i = _Index._0;
@@ -18015,7 +18020,7 @@ function _M0FP411zhanshishan9interjson8examples3web10live__text(input, upto, sch
       let _try_err$2;
       _L$3: {
         _L$4: {
-          const _bind$8 = _M0FP211zhanshishan9interjson19semantic__readiness(input, _sk, _M0FP411zhanshishan9interjson8examples3web10live__textN6constrS4136, undefined);
+          const _bind$8 = _M0FP211zhanshishan9interjson19semantic__readiness(input, _sk, _M0FP411zhanshishan9interjson8examples3web10live__textN6constrS4138, undefined);
           if (_bind$8.$tag === 1) {
             const _ok = _bind$8;
             full = _ok._0;

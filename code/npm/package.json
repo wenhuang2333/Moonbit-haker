@@ -1,6 +1,6 @@
 {
   "name": "interjson-moonbit",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "The local execution gate for LLM output, as a Model Context Protocol server and a library, powered by the MoonBit engine.",
   "license": "Apache-2.0",
   "author": {
@@ -32,7 +32,9 @@
     "index.d.ts",
     "mcp.cjs",
     "vendor/interjson.js",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "build": "bash build.sh",
