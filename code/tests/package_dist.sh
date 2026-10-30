@@ -71,18 +71,43 @@ else
 fi
 
 # --- the Python wheel -------------------------------------------------------
+# The publishable wheel is the one `build_wheel.sh` produces: it carries the
+# engine for every release platform, so `pip install interjson-moonbit` is the
+# whole install. A plain `pip wheel` on a checkout builds the client without
+# the binaries, and that artefact is *not* what gets published -- shipping it
+# would reproduce the bug this exists to prevent, a first call that fails with
+# FileNotFoundError.
 echo "building the Python wheel..."
-# `--no-build-isolation` uses the setuptools that is already installed; with
-# isolation the build tries to download setuptools, which a sandboxed or
-# offline machine cannot do.
-python3 -m pip wheel --no-deps --no-build-isolation -w "$TMP/wheel" code/python >/dev/null 2>&1
-WHEEL="$(ls "$TMP"/wheel/*.whl 2>/dev/null | head -1)"
+# The gate builds its own wheel from the binary this checkout just compiled.
+# That keeps the packaging path under test on every commit without needing a
+# published release (which would make the gate depend on a previous tag), and
+# it is the same code path that produces the published wheel -- only the set
+# of platforms differs.
+EXTRA_WHEEL="$(mktemp -d "${TMPDIR:-/tmp}/interjson-wheelgate.XXXXXX")"
+HOST_KEY=""
+case "$(python3 -c 'import platform,sys; print(sys.platform, platform.machine().lower())')" in
+  "darwin arm64")   HOST_KEY="macos-arm64" ;;
+  "linux x86_64")   HOST_KEY="linux-x86_64" ;;
+  "linux aarch64")  HOST_KEY="linux-arm64" ;;
+  "linux arm64")    HOST_KEY="linux-arm64" ;;
+esac
+WHEEL=""
+if [ -n "$HOST_KEY" ] && [ -f "$ROOT/code/_build/native/release/build/cmd/interjson/interjson.exe" ]; then
+  if bash "$ROOT/code/python/build_wheel.sh" --from-local "$HOST_KEY" \
+    --platforms "$HOST_KEY" --out "$EXTRA_WHEEL" >/dev/null 2>&1; then
+    WHEEL="$(ls "$EXTRA_WHEEL"/interjson_moonbit-*.whl 2>/dev/null | head -1)"
+  fi
+fi
 if [ -z "$WHEEL" ]; then
-  fail "the Python wheel could not be built"
+  # No local build to package: fall back to a wheel someone already built.
+  WHEEL="$(ls "$ROOT"/dist/python/interjson_moonbit-*.whl 2>/dev/null | head -1)"
+fi
+if [ -z "$WHEEL" ]; then
+  fail "no Python wheel was built; run bash code/python/build_wheel.sh first"
 else
   NAMES="$(python3 -c "
 import sys, zipfile
-print('\\n'.join(zipfile.ZipFile(sys.argv[1]).namelist()))
+print('\n'.join(zipfile.ZipFile(sys.argv[1]).namelist()))
 " "$WHEEL")"
   printf '%s\n' "$NAMES" | grep -q 'interjson/py.typed' ||
     fail "the Python wheel does not contain the py.typed marker"
@@ -90,6 +115,19 @@ print('\\n'.join(zipfile.ZipFile(sys.argv[1]).namelist()))
     fail "the Python wheel does not contain LICENSE"
   printf '%s\n' "$NAMES" | grep -qE '(^|/)NOTICE$' ||
     fail "the Python wheel does not contain NOTICE"
+  # Self-contained: the wheel carries the engine for the platform it will be
+  # installed on. A full release wheel carries all four; the gate's own build
+  # carries the host platform, which is the one that can be executed here.
+  if [ -n "$HOST_KEY" ]; then
+    if ! printf '%s\n' "$NAMES" | grep -qE "interjson/bin/$HOST_KEY/interjson(\.exe)?$"; then
+      fail "the Python wheel does not carry the engine for $HOST_KEY"
+    fi
+  fi
+  # A wheel built by `build_wheel.sh` must never be engine-less: that is the
+  # regression this gate exists for.
+  if ! printf '%s\n' "$NAMES" | grep -q 'interjson/bin/'; then
+    fail "the Python wheel carries no engine at all"
+  fi
 fi
 
 # --- the installed package must work ----------------------------------------
@@ -108,6 +146,46 @@ if (ij.repair(\"{'a':1,}\") !== '{\"a\":1}') { throw new Error('repair is wrong'
   fail "the installed npm package does not behave as documented"
 fi
 
+# --- the installed Python wheel must work with nothing else installed --------
+# This is the whole point of the bundled binaries: a reader who runs
+# `pip install interjson-moonbit` on a machine with no MoonBit toolchain, no
+# `interjson` on PATH and no INTERJSON_BIN must be able to make a call. The
+# environment is scrubbed here so a developer's own setup cannot hide a wheel
+# that only works because an engine happened to be lying around.
+if [ -n "${WHEEL:-}" ]; then
+  echo "installing the Python wheel into an empty virtualenv..."
+  python3 -m venv "$TMP/pyenv" >/dev/null 2>&1
+  if "$TMP/pyenv/bin/pip" install --no-index --no-deps -q "$WHEEL" >/dev/null 2>&1; then
+    if ! env -u INTERJSON_BIN PATH="$TMP/pyenv/bin:/usr/bin:/bin" \
+      "$TMP/pyenv/bin/python" - "$PY_VERSION" <<'PY' >/dev/null 2>&1
+import sys
+from interjson import Client, __version__, find_binary
+
+assert __version__ == sys.argv[1], f"version {__version__} != {sys.argv[1]}"
+binary = find_binary()
+assert "site-packages" in binary, f"did not use the bundled engine: {binary}"
+with Client() as jm:
+    result = jm.repair("{'a':1,}")
+    assert result["text"] == '{"a":1}', result["text"]
+    plan = jm.analyze('{"a":1,"a":2}', profile="agent")
+    assert plan["executable"] is False, plan
+    assert plan["retry"]["prompt"], "a refusal carries no prompt"
+PY
+    then
+      fail "the installed Python wheel does not work without an external engine"
+    fi
+    # The console scripts are the MCP surface; they must start too.
+    if ! env -u INTERJSON_BIN PATH="$TMP/pyenv/bin:/usr/bin:/bin" \
+      "$TMP/pyenv/bin/interjson-mcp" --version >/dev/null 2>&1; then
+      fail "interjson-mcp from the installed wheel does not start"
+    fi
+  else
+    fail "the Python wheel could not be installed into an empty virtualenv"
+  fi
+fi
+
+rm -rf "$EXTRA_WHEEL"
+
 cd "$ROOT" || exit 2
 if [ "$FAIL" -gt 0 ]; then
   printf '\npackage_dist.sh: %d problem(s). The packages are meant to be publishable,\n' "$FAIL" >&2
@@ -115,4 +193,5 @@ if [ "$FAIL" -gt 0 ]; then
   exit 1
 fi
 printf '\npackage_dist.sh: OK — both packages build, carry LICENSE and NOTICE, and the\n'
-printf 'installed npm package behaves as documented.\n'
+printf 'installed npm package behaves as documented. The Python wheel carries the\n'
+printf 'engine for its platform and works with nothing else installed.\n'

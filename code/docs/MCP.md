@@ -69,9 +69,8 @@ interjson --version          # interjson 1.5.1
 > `linux-arm64`, `macos-arm64` and `windows-x86_64`. Building
 > from source needs the MoonBit toolchain `moon 0.1.20261016`. The mooncakes
 > counterpart **0.13.0 was published on 2026-10-29**, and the npm package
-> **`interjson-moonbit@1.5.1` on 2026-10-30**; PyPI does not carry
-> `interjson-moonbit` yet, so the Python package installs from a checkout with
-> the build commands below.
+> **`interjson-moonbit@1.5.1` on 2026-10-30**, and the same version on PyPI on
+> 2026-10-30, so both language packages install with one command.
 
 ### One command: `install.sh`
 
@@ -138,14 +137,16 @@ MoonBit engine); the import is `interjson`, and it installs two console
 scripts.
 
 ```sh
-python3 -m pip install ./code/python
+pip install interjson-moonbit
 interjson --version          # interjson 1.5.1: the engine the launcher needs
 interjson-mcp --version      # same output, through the console script
 interjson-http --help        # HTTP facade; not needed for MCP
 ```
 
-`pip install` installs the client and the two launchers, not the engine; the
-first command must succeed before the launchers can answer.
+The wheel carries the engine for every release platform, so this is the whole
+install: `interjson-mcp` starts with no `INTERJSON_BIN` and no `interjson` on
+`PATH`. Installing from a checkout (`python3 -m pip install ./code/python`)
+builds the client without the binaries and needs one of the paths below.
 
 `interjson-mcp` is a launcher: it resolves the engine, then replaces itself with
 `<binary> mcp`, so stdin/stdout stay a clean JSON-RPC channel with no Python in
@@ -153,13 +154,15 @@ the middle. Resolution order:
 
 1. `INTERJSON_BIN` — an absolute path to the binary;
 2. `interjson` on `PATH`;
-3. a binary bundled next to the package (`interjson/bin/`);
-4. the development build inside this repository.
+3. the bundled binary for this platform (`interjson/bin/<platform>/`), which
+   the PyPI wheel carries;
+4. a binary placed directly in `interjson/bin/`;
+5. the development build inside this repository.
 
-If none is found it raises `FileNotFoundError` naming the install options. The
-launcher and the engine are separate installs: `pip install` gives you the
-client and the scripts, and the engine comes from the source build above (or a
-release asset, until the next release renames them).
+If none is found it raises `FileNotFoundError` naming the install options; on a
+platform the release does not build for (Intel macOS) the message names the
+platforms the wheel does carry instead of suggesting a reinstall that cannot
+help.
 
 ### npm: `interjson-moonbit`
 
@@ -620,7 +623,7 @@ no network peer to authenticate.
 | --- | --- | --- |
 | Client shows no tools / "server failed to start" | The client cannot find `interjson` (GUI apps often do not inherit the shell `PATH`) | Use an absolute path in the client config, or set `INTERJSON_BIN` for the client's environment |
 | `interjson-mcp: the InterJSON engine was not found.` (exit `127`) | npm bin installed without the native engine | Build the native engine or set `INTERJSON_BIN` |
-| `FileNotFoundError: the interjson engine was not found` | pip launcher could not resolve the engine (`pip install` installs the launcher, not the engine) | Build the engine, put `interjson` on `PATH`, or set `INTERJSON_BIN` |
+| `FileNotFoundError: the interjson engine was not found` | the launcher could not resolve an engine — a checkout install rather than the PyPI wheel | `pip install interjson-moonbit` from PyPI, or put `interjson` on `PATH`, or set `INTERJSON_BIN` |
 | JSON-RPC `-32700 parse error` on every line | Something other than the server wrote to stdout (a wrapper banner, `print`, a shell profile) | Run `interjson mcp` directly; keep stdout for JSON-RPC and send logs to stderr |
 | JSON-RPC `-32602` with ``unknown tool `…` `` | The call itself is wrong, not the document | Check `tools/list`; the tool name must be one of the four |
 | JSON-RPC `-32602` with `` `arguments` must be an object `` | `arguments` was an array, a string or a number | Send `arguments` as a JSON object |

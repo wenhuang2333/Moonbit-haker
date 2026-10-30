@@ -54,8 +54,14 @@ packages = ["interjson"]
 
 # The package is typed, so the marker has to ship with it. Without it a type
 # checker ignores the annotations and a consumer gets `Any` everywhere.
+#
+# `bin/*/interjson` is the engine, one directory per release platform: the
+# wheel is self-contained, so `pip install interjson-moonbit` is enough to make
+# a call. `find_binary()` picks the directory this interpreter can run, and
+# `build_wheel.sh` is what fills them in -- a plain `pip wheel` on a checkout
+# builds the client without them and says so through `find_binary()`.
 [tool.setuptools.package-data]
-interjson = ["py.typed"]
+interjson = ["py.typed", "bin/*/interjson", "bin/*/interjson.exe"]
 
 # Apache-2.0 section 4(d): a redistributor has to pass the NOTICE on. Keeping it
 # at the distribution root makes it part of the sdist and the wheel's metadata.

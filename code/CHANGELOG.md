@@ -56,10 +56,33 @@
   验收判据、实施顺序。**它是设计，不是已实现的功能。**
 - 已发布文档不再引用未发布文档（此前有 33 处死链，其中 `code/README.md` 是 mooncakes 包页）。
 
+### 语言包：npm 与 PyPI 都发布了（2026-10-30）
+
+`interjson-moonbit@1.5.1` 于 2026-10-30 发布到 npm 与 PyPI。两个渠道的安装形态不同，
+这不是疏漏：
+
+- **npm**：包内带引擎的 JavaScript 编译产物（`vendor/interjson.js`），装完在 Node 里
+  直接可调；`interjson-mcp` 启动器仍需要原生二进制。
+- **PyPI**：wheel 内带**四个平台的 native 二进制**（`linux-x86_64`、`linux-arm64`、
+  `macos-arm64`、`windows-x86_64`，共约 3.4 MB 未压缩），`find_binary()` 按
+  `sys.platform` + `platform.machine()` 选当前平台那一份。`pip install interjson-moonbit`
+  是完整安装，不需要 `INTERJSON_BIN`、不需要 PATH 上有 `interjson`、不需要 MoonBit
+  工具链。
+
+  在此之前 Python 包是个"壳"：`pip install` 之后第一次调用会
+  `FileNotFoundError: the interjson engine was not found`。把二进制放进 wheel 是唯一
+  能消掉这一步的做法——装的时候不编译，跑的时候不下载。`code/python/build_wheel.sh`
+  从 Release 取四个二进制并逐个核对 Release 自带的 `SHA256SUMS`，构建后断言 wheel 里
+  确实有它们；`code/tests/package_dist.sh` 在空 venv 里装这个 wheel 并断言
+  `find_binary()` 落到 `site-packages` 内、`repair`/`analyze`/`interjson-mcp` 都能用。
+
+  轮到不支持的平台（Intel macOS）时，报错会说明"本包带的是哪些平台"，而不是让人
+  反复重装一个不可能有产物的包。
+
 ### 未做的事（如实记录）
 
-- **npm 与 PyPI 上没有** `interjson-moonbit`，两个语言包只能按仓库路径安装。
-  （mooncakes 侧不受影响：`0.12.0` 已于 2026-10-28 发布。）
+- **PyPI 上只有 wheel，没有可用的 sdist 安装路径之外的额外渠道**：sdist 里也带二进制，
+  所以从 sdist 装同样自包含；但 `pip install` 默认取 wheel，这是被测试覆盖的那条。
 - 「不建树、只出文本」的模式仍未实现：标量已在 4 倍预算内，**容器不在**（24–27 倍），
   而容器倍数在值是 core 的 `Json` 时不可能降下来。设计与验收判据见 `docs/NOTREE.md`。
 - `PreToolUse` hook 配方是手工验证的草图，不是本仓库测试套件覆盖的配置。
@@ -81,7 +104,7 @@
 版本对应 **1.5.0**（GitHub）↔ **0.12.0**（mooncakes）。发布状态：
 **`0.12.0` 已于 2026-10-28 上传 mooncakes**（`moon search interjson` 可见，
 重复上传返回 409）；GitHub 侧 tag `v1.5.0` 已推送，Release 随该 tag 构建。
-**npm 与 PyPI 上仍然没有 `interjson-moonbit`**，两个语言包目前只能按仓库路径安装。
+语言包当时还没有发布；npm 与 PyPI 的 `interjson-moonbit@1.5.1` 于 2026-10-30 补齐。
 
 第一次打 tag 时 Release 失败了：`macos-15-intel` 这个矩阵项装不上 MoonBit 工具链
 （`cli.moonbitlang.com/install/unix.sh` 只认 `Darwin arm64`、`Linux x86_64`、

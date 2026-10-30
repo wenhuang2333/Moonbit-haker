@@ -42,11 +42,63 @@ class InterJSONError(RuntimeError):
         return out
 
 
+def _platform_key() -> str | None:
+    """The release platform this interpreter can run, or None.
+
+    The wheel carries one binary per release platform, so the choice is made
+    here rather than by installing four different wheels: one wheel works on
+    every platform the release supports, and the cost is a few unused
+    megabytes.
+
+    The keys are the release asset names with the `interjson-` prefix removed,
+    so a wheel and a release can be compared by eye. There is deliberately no
+    Intel-macOS key: the MoonBit toolchain publishes no `darwin-x86_64`
+    target, so there is no binary to name.
+    """
+
+    import platform as _platform
+    import sys
+
+    machine = (_platform.machine() or "").lower()
+    if sys.platform == "darwin":
+        return "macos-arm64" if machine in ("arm64", "aarch64") else None
+    if sys.platform.startswith("linux"):
+        if machine in ("x86_64", "amd64"):
+            return "linux-x86_64"
+        if machine in ("aarch64", "arm64"):
+            return "linux-arm64"
+        return None
+    if sys.platform in ("win32", "cygwin"):
+        return "windows-x86_64"
+    return None
+
+
+def _make_executable(path: Path) -> None:
+    """The executable bit survives a wheel install on most platforms, not all.
+
+    A binary that is present but not executable turns every call into a
+    `PermissionError` that names a file the user did not install by hand, so
+    the bit is restored once, quietly, before the path is returned.
+    """
+
+    try:
+        mode = path.stat().st_mode
+        if not mode & 0o111:
+            path.chmod(mode | 0o755)
+    except OSError:
+        pass
+
+
 def find_binary() -> str:
     """Locate the engine.
 
-    Order: `INTERJSON_BIN`, `PATH`, a binary bundled next to this package, then
-    the development build inside this repository.
+    Order: `INTERJSON_BIN`, `PATH`, the binary this wheel carries for this
+    platform, a binary placed directly in `bin/`, then the development build
+    inside this repository.
+
+    An explicit path or a `PATH` entry wins over the bundled binary on purpose:
+    a caller who has installed a newer CLI should not silently get whichever
+    engine happened to be current when the Python package was built.
     """
 
     env = os.environ.get("INTERJSON_BIN")
@@ -56,9 +108,17 @@ def find_binary() -> str:
     if found:
         return found
     here = Path(__file__).resolve().parent
+    key = _platform_key()
+    if key is not None:
+        for name in ("interjson", "interjson.exe"):
+            candidate = here / "bin" / key / name
+            if candidate.is_file():
+                _make_executable(candidate)
+                return str(candidate)
     for name in ("interjson", "interjson.exe"):
         candidate = here / "bin" / name
         if candidate.is_file():
+            _make_executable(candidate)
             return str(candidate)
     # Development checkout: code/python/interjson/client.py -> code/
     code_dir = here.parents[1]
@@ -75,8 +135,39 @@ def find_binary() -> str:
         )
         if candidate.is_file():
             return str(candidate)
-    raise FileNotFoundError(
-        "the interjson engine was not found; set INTERJSON_BIN, put `interjson` on "
+    raise FileNotFoundError(_not_found_message(here, key))
+
+
+def _not_found_message(here: Path, key: str | None) -> str:
+    """Say what is missing in terms of what this installation actually has.
+
+    Three different situations used to produce the same sentence, and only one
+    of them was fixed by setting `INTERJSON_BIN`:
+
+      * a source checkout with no build -- "build it";
+      * a wheel installed for a platform the release does not cover, such as
+        Intel macOS -- "there is no binary for this platform", which no amount
+        of `pip install` will change;
+      * a wheel whose bundled directory was stripped by a repackager.
+    """
+
+    import platform as _platform
+    import sys
+
+    bundled = sorted(
+        p.name for p in (here / "bin").iterdir() if p.is_dir()
+    ) if (here / "bin").is_dir() else []
+    where = f"{_platform.system()} {_platform.machine() or 'unknown'} ({sys.platform})"
+    if bundled and key is None:
+        return (
+            f"the interjson engine is not available for {where}: the package "
+            f"carries {', '.join(bundled)}. Set INTERJSON_BIN to a binary built "
+            "for this platform, or build one with "
+            "`moon build cmd/interjson --target native --release`."
+        )
+    return (
+        "the interjson engine was not found. Reinstall `interjson-moonbit` from "
+        "PyPI to get the bundled binary, or set INTERJSON_BIN, put `interjson` on "
         "PATH, or build it with `moon build cmd/interjson --target native --release`"
     )
 

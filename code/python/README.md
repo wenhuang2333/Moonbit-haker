@@ -6,20 +6,23 @@ the model. This distribution is the Python client for the MoonBit engine —
 streaming repair, partial parsing, and the gate — plus two console scripts, one
 of which starts the local MCP server.
 
-No third-party dependencies. The engine is the same native binary the CLI uses,
-reached over a versioned stdio protocol.
+No third-party dependencies and nothing else to install: the wheel carries the
+engine for every platform the project releases — Linux x86_64 and arm64, macOS
+arm64, Windows x86_64 — and picks the right one at import time. The engine is
+the same native binary the CLI ships, reached over a versioned stdio protocol.
 
 ```bash
-pip install ./code/python          # from the repository root
-export INTERJSON_BIN=/path/to/interjson   # or put it on PATH
+pip install interjson-moonbit
 ```
 
 > The distribution name is **`interjson-moonbit`** on PyPI (the suffix identifies
-> the MoonBit engine); the import name is `interjson`. **Publication is
-> pending**: version 1.5.1 is not on PyPI yet, so install from the repository
-> path above. Nothing on this page claims the package is installable with
-> `pip install interjson-moonbit`. The npm package is published:
+> the MoonBit engine); the import name is `interjson`. Version `1.5.1` was
+> published to PyPI on 2026-10-30. The npm package is published too:
 > `npm install interjson-moonbit`.
+
+An engine that is already installed keeps priority: `INTERJSON_BIN`, then
+`interjson` on `PATH`, then the bundled binary. Set either to point the client
+at a newer CLI than the one this wheel was built with.
 
 ```python
 import json
@@ -51,8 +54,9 @@ functions that spawn a process per call.
 `interjson-mcp` is a launcher, not a server: it resolves the engine and replaces
 itself with `<binary> mcp`, so stdin/stdout stay a clean JSON-RPC channel with no
 Python in the middle. Resolution order is `INTERJSON_BIN`, then `interjson` on
-`PATH`, then a binary bundled next to the package, then the development build in
-this repository. If none exists it raises `FileNotFoundError` naming the fixes.
+`PATH`, then the binary this wheel carries for the current platform. Only a
+platform the release does not build for — Intel macOS, for example — needs
+`INTERJSON_BIN`.
 
 ```bash
 interjson --version                  # interjson 1.5.1: the engine the launchers need
@@ -61,10 +65,8 @@ interjson-mcp --print-config=claude  # the client configuration snippet
 interjson-http --port 8080           # POST /repair /analyze /validate /readiness, GET /healthz
 ```
 
-`pip install` installs this client and the two console scripts, not the engine:
-the launchers resolve `INTERJSON_BIN`, then `interjson` on `PATH`, then a
-bundled binary, then the development build, and fail with
-`FileNotFoundError` naming the fixes if none is found.
+`pip install` installs the client, the two console scripts and the engine.
+Nothing has to be on `PATH` for the configuration below to work:
 
 With the engine resolvable, the client configuration is one line:
 
@@ -118,10 +120,10 @@ than being silently dropped.
 
 ## Version
 
-The Python package is `1.5.1`, the engine version. The MoonBit package on
-mooncakes is `0.13.0` because the registry currently accepts only `0.x.y`; the
-bytes are the same. `Client.hello()` reports both. **The PyPI package is not
-published yet**; the mooncakes counterpart **0.13.0 was published on
-2026-10-29**, and `0.12.0` (the 1.5.0 correspondence) on 2026-10-28.
+The Python package is `1.5.1`, the engine version, published to PyPI on
+2026-10-30. The MoonBit package on mooncakes is `0.13.0` because the registry
+currently accepts only `0.x.y`; the bytes are the same. `Client.hello()` reports
+both. `0.13.0` was published on 2026-10-29, and `0.12.0` (the 1.5.0
+correspondence) on 2026-10-28.
 
 License: Apache-2.0.

@@ -319,14 +319,12 @@ troubleshooting are in [MCP.md](MCP.md).
 
 > Registry names: this repository ships the npm package and the PyPI
 > distribution as **`interjson-moonbit`** (the suffix identifies the MoonBit
-> engine). The npm package is published (`npm install interjson-moonbit`); the
-> PyPI distribution is not, so install it from the repository path. The Python
-> import name is `interjson`.
+> engine). Both packages are published — `npm install interjson-moonbit` and
+> `pip install interjson-moonbit`. The Python import name is `interjson`.
 
 ```bash
-pip install ./code/python            # no dependencies
-export INTERJSON_BIN=/path/to/interjson  # or put it on PATH
-interjson-mcp --version              # the MCP console script (needs the engine)
+pip install interjson-moonbit        # no dependencies; the wheel carries the engine
+interjson-mcp --version              # the MCP console script
 ```
 
 Keep one client for the session; each `Client` is one `interjson serve` process.

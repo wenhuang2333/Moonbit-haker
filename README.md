@@ -12,11 +12,11 @@
 
 **版本与渠道**
 
-| GitHub tag | mooncakes.io | npm 发行名 | 状态 |
-| --- | --- | --- | --- |
-| `v1.5.1` | `0.13.0` | `interjson-moonbit@1.5.1` | 当前版本 |
+| GitHub tag | mooncakes.io | npm | PyPI | 状态 |
+| --- | --- | --- | --- | --- |
+| `v1.5.1` | `0.13.0` | `interjson-moonbit@1.5.1` | `interjson-moonbit@1.5.1` | 当前版本 |
 
-mooncakes 的 `0.13.0` 已于 2026-10-29 发布（`moon add zhanshishan/interjson`）；npm 上可直接 `npm install interjson-moonbit`；PyPI 上同名发行 `interjson-moonbit` **尚未发布**，Python 侧目前从仓库路径安装。
+mooncakes 的 `0.13.0` 已于 2026-10-29 发布（`moon add zhanshishan/interjson`）；npm 上 `npm install interjson-moonbit`、PyPI 上 `pip install interjson-moonbit`，两个语言包的 wheel 与 tarball 里都带着引擎，装完即可调用。
 
 ## 功能亮点
 
@@ -38,7 +38,7 @@ mooncakes 的 `0.13.0` 已于 2026-10-29 发布（`moon add zhanshishan/interjso
 | CLI 冒烟 | `122 项断言` |
 | 协议 / MCP 一致性 | `19 组` |
 | npm 包 | `15 个 Node 测试` |
-| Python 包 | `20 个测试` |
+| Python 包 | `29 个测试` |
 | 根包行覆盖率 | `4032/4299` |
 | `llm` 包行覆盖率 | `337/391` |
 | 覆盖率门（有未覆盖行的文件口径） | `4294/4615` |
@@ -53,6 +53,7 @@ mooncakes 的 `0.13.0` 已于 2026-10-29 发布（`moon add zhanshishan/interjso
 
 - **原生 CLI**：不需要运行时。支持 macOS（Apple Silicon）、Linux（x86_64 / arm64）、Windows（x86_64）。**没有 Intel macOS 产物**：MoonBit 工具链不发布 `darwin-x86_64` 目标，该平台只能从源码构建。
 - **npm 包**：Node.js **>= 20**。
+- **pip 包**：Python **>= 3.10**，无需其他依赖；wheel 内已带原生引擎。
 - **从源码构建**：需要 MoonBit 工具链 `moon 0.1.20261016`（仓库与 CI 都钉在这个版本上，其他版本未验证）。
 
 ### 安装
@@ -69,6 +70,12 @@ Node 包（纯 JS 引擎 + MCP 启动器 `interjson-mcp`）：
 npm install interjson-moonbit
 ```
 
+Python 包（同一引擎的原生二进制随 wheel 一起装，四个平台各一份，按当前平台自动选）：
+
+```bash
+pip install interjson-moonbit
+```
+
 ### 运行命令
 
 ```bash
@@ -82,12 +89,12 @@ claude mcp add interjson -- interjson mcp
 # 同一个判定在命令行上直接看
 printf '{"amount":100,"currency":"USD"' | interjson explain --policy agent --json
 
-# 用 npm 的启动器起同一个 MCP server
-npm install -g interjson-moonbit
+# 语言包自带的启动器起同一个 MCP server（npm 与 pip 都提供 interjson-mcp）
+npm install -g interjson-moonbit                     # 或：pip install interjson-moonbit
 interjson-mcp --version                              # interjson 1.5.1
 ```
 
-`interjson-mcp` 只负责找到原生引擎（`INTERJSON_BIN` → PATH 上的 `interjson` → 仓库内的开发构建）并把 stdio 交过去；找不到二进制时以退出码 127 结束并打印三种安装方式，不会起一个半可用的 server。
+`interjson-mcp` 只负责找到原生引擎（`INTERJSON_BIN` → PATH 上的 `interjson` → 语言包自带的二进制 → 仓库内的开发构建）并把 stdio 交过去；找不到二进制时以退出码 127 结束并打印安装方式，不会起一个半可用的 server。
 
 ## 目录结构
 
@@ -177,7 +184,7 @@ q.finish()                                             // 抛 E010
 | **Claude Code hook** | `PreToolUse` | 宿主在工具执行前强制过门 |
 | **长驻协议** | `interjson serve` | 任何能起子进程的宿主；和高频 / 流式场景 |
 | **npm** | `interjson-moonbit` | Node 宿主进程内调用 |
-| **pip** | 同名 Python 包（尚未发布，暂从仓库路径安装） | Python 宿主进程内调用 |
+| **pip** | `pip install interjson-moonbit` | Python 宿主进程内调用 |
 | **HTTP** | `interjson-http --port 8080` | n8n、Dify、Coze、网关等只讲 HTTP 的宿主 |
 
 **MCP 是建议性的，这是产品边界而不是实现疏漏。** `interjson_gate` 是模型可以选择调用的一个工具，协议层没有任何强制点；「接了 MCP」等于多了一个检查点，不等于参数一定过了门。真正把它变成强制闸门的是宿主侧的三条路径：Claude Code 的 `PreToolUse` hook、宿主 SDK 里一行 `gate(args) -> execute | retry`、或 `interjson serve`——它们在执行之前运行，不依赖模型自觉。
@@ -187,7 +194,7 @@ q.finish()                                             // 抛 E010
 - **引擎**：纯 MoonBit，无第三方运行时依赖；工具链钉在 `moon 0.1.20261016`（CI 同样钉住）。
 - **后端**：wasm-gc / native / JS / wasm 四个后端跑同一套测试（每个后端 `249/249`）；CLI 与 MCP server 是 native 后端，浏览器里跑的是 JS 后端产物。
 - **协议**：MCP 用 stdio + JSON-RPC 2.0，协议版本 `2025-06-18`；`interjson serve` 用版本化 JSONL（每行一个请求、一行一个响应，stdout 只走协议）。
-- **语言包**：npm 包提供 ESM + CJS + TypeScript 类型（Node >= 20）；Python 包是同一引擎的薄客户端，无第三方依赖。
+- **语言包**：npm 包提供 ESM + CJS + TypeScript 类型（Node >= 20）；Python 包是同一引擎的薄客户端，无第三方依赖，wheel 内自带四个平台的 native 二进制。
 - **构建与 CI**：GitHub Actions；同一组命令在 CI 与本地执行，失败即失败。
 
 ## 许可证
