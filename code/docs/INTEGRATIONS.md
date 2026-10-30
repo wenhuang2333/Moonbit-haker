@@ -319,8 +319,9 @@ troubleshooting are in [MCP.md](MCP.md).
 
 > Registry names: this repository ships the npm package and the PyPI
 > distribution as **`interjson-moonbit`** (the suffix identifies the MoonBit
-> engine); install from the repository path until the registry publication.
-> The Python import name is `interjson`.
+> engine). The npm package is published (`npm install interjson-moonbit`); the
+> PyPI distribution is not, so install it from the repository path. The Python
+> import name is `interjson`.
 
 ```bash
 pip install ./code/python            # no dependencies
@@ -369,7 +370,7 @@ call.
 ## Node / TypeScript
 
 ```bash
-npm install ./code/npm
+npm install interjson-moonbit
 ```
 
 ```js

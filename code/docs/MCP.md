@@ -40,7 +40,7 @@ sentence to send back to the model when the answer is no.
 | Alias | `interjson-mcp` — the same binary under that name starts the MCP server with no arguments |
 | Transport | stdio: one JSON-RPC 2.0 object per line on stdin, one per line on stdout |
 | Protocol revisions | `2025-06-18`, `2025-03-26` and `2024-11-05` are all accepted verbatim; any other requested revision is answered with `2025-06-18` and is **never echoed back** |
-| Server identity | `serverInfo.name = "interjson"`, `serverInfo.title = "InterJSON — the execution gate"`, `serverInfo.version` = engine version (`1.5.0`) |
+| Server identity | `serverInfo.name = "interjson"`, `serverInfo.title = "InterJSON — the execution gate"`, `serverInfo.version` = engine version (`1.5.1`) |
 | Capabilities | `tools.listChanged: false` (tools only; no resources or prompts) |
 | Tools | `interjson_gate` (primary), `interjson_repair`, `interjson_validate`, `interjson_readiness` — all read-only |
 | Request line limit | 8 MiB (8,388,608 bytes); a longer line is answered with JSON-RPC `-32700` and discarded through the next LF |
@@ -61,15 +61,16 @@ Pick one install path; each ends with a working `interjson` binary. Every
 launcher and client below needs that binary, so verify it first:
 
 ```sh
-interjson --version          # interjson 1.5.0
+interjson --version          # interjson 1.5.1
 ```
 
 > **Technical preview.** The prebuilt binary comes from the GitHub release, which
 > builds four binaries across three operating systems: `linux-x86_64`,
 > `linux-arm64`, `macos-arm64` and `windows-x86_64`. Building
 > from source needs the MoonBit toolchain `moon 0.1.20261016`. The mooncakes
-> counterpart **0.12.0 was published on 2026-10-28**; npm and PyPI do not carry
-> `interjson-moonbit` yet, so the two language packages install from a checkout with
+> counterpart **0.13.0 was published on 2026-10-29**, and the npm package
+> **`interjson-moonbit@1.5.1` on 2026-10-30**; PyPI does not carry
+> `interjson-moonbit` yet, so the Python package installs from a checkout with
 > the build commands below.
 
 ### One command: `install.sh`
@@ -100,7 +101,7 @@ surface today:
 git clone https://github.com/wenhuang2333/Moonbit-haker
 cd Moonbit-haker/code
 moon build cmd/interjson --target native --release
-./_build/native/release/build/cmd/interjson/interjson.exe --version   # interjson 1.5.0
+./_build/native/release/build/cmd/interjson/interjson.exe --version   # interjson 1.5.1
 ```
 
 Put the binary on `PATH` under the name `interjson` (or point
@@ -126,9 +127,9 @@ so no runner can build one. Releases before v1.4.0 were published as JSONMend
 and keep the `jsonmend-*` asset prefix and the `jsonmend_*` tool names; use
 v1.4.0 or later for the `interjson` CLI and `interjson_gate`.
 
-The 1.5.0 release is tagged `v1.5.0` and is published with those eight assets;
-the mooncakes counterpart `0.12.0` was published on 2026-10-28, so the installer
-above installs the 1.5.0 binaries.
+The 1.5.1 release is tagged `v1.5.1` and is published with those eight assets;
+the mooncakes counterpart `0.13.0` was published on 2026-10-29, so the installer
+above installs the 1.5.1 binaries.
 
 ### pip: `interjson-moonbit`
 
@@ -138,7 +139,7 @@ scripts.
 
 ```sh
 python3 -m pip install ./code/python
-interjson --version          # interjson 1.5.0: the engine the launcher needs
+interjson --version          # interjson 1.5.1: the engine the launcher needs
 interjson-mcp --version      # same output, through the console script
 interjson-http --help        # HTTP facade; not needed for MCP
 ```
@@ -163,9 +164,9 @@ release asset, until the next release renames them).
 ### npm: `interjson-moonbit`
 
 ```sh
-npm install -g ./code/npm     # or: npm install ./code/npm
-interjson --version           # interjson 1.5.0: the native engine must resolve first
-interjson-mcp --version       # passed through to `<binary> mcp --version`
+npm install -g interjson-moonbit   # or: npm install interjson-moonbit
+interjson --version                # the native engine must resolve first
+interjson-mcp --version            # passed through to `<binary> mcp --version`
 ```
 
 Without a resolvable engine, `interjson-mcp --version` exits `127` with the
@@ -641,7 +642,7 @@ Run these from a checkout; `B` is the built binary.
 ```sh
 B=./code/_build/native/release/build/cmd/interjson/interjson.exe
 
-"$B" --version                     # interjson 1.5.0
+"$B" --version                     # interjson 1.5.1
 "$B" mcp --print-config=claude     # claude mcp add interjson -- interjson mcp
 "$B" mcp --help                    # names interjson_gate and the six named clients
 ```

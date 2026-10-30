@@ -7,14 +7,12 @@ repair, partial parsing, and the gate for in-process callers — plus a launcher
 that starts the local MCP server from the native binary.
 
 ```bash
-npm install ./code/npm      # from the repository root
+npm install interjson-moonbit
 ```
 
 > The package name is **`interjson-moonbit`** on npm (the suffix identifies the
-> MoonBit engine); the import name is `interjson`. **Publication is pending**:
-> version 1.5.0 is not on the npm registry yet, so install from the repository
-> path above. Nothing on this page claims the package is installable with
-> `npm install interjson-moonbit`.
+> MoonBit engine); the import name is `interjson`. Version `1.5.1` was published
+> to the npm registry on 2026-10-30.
 
 ```js
 import { analyze, repair } from "interjson-moonbit";
@@ -44,8 +42,8 @@ stdout but protocol messages). Resolution order:
 3. the development build inside this repository.
 
 ```bash
-npm install -g ./code/npm
-interjson --version              # interjson 1.5.0: the native engine must resolve first
+npm install -g interjson-moonbit
+interjson --version              # the native engine must resolve first
 interjson-mcp --version          # passed through to `<binary> mcp --version`
 interjson-mcp --print-config=claude
 ```
@@ -120,10 +118,9 @@ the MoonBit `PartialParser`.
 ## Scope
 
 This package wraps the same bundle as `static/demo/interjson.js`; it does not
-reimplement the engine. The version is the engine version (`1.5.0`). The
-MoonBit package on mooncakes is `0.12.0` because the registry currently accepts
-only `0.x.y`; the bytes are the same. **The npm package is not published yet**;
-the mooncakes counterpart **0.12.0 was published on 2026-10-28**, and `0.11.0`
-(the 1.4.0 correspondence) on 2026-10-27.
+reimplement the engine. The version is the engine version (`1.5.1`), published
+to npm on 2026-10-30. The MoonBit package on mooncakes is `0.13.0` because the
+registry currently accepts only `0.x.y`; the bytes are the same. `0.13.0` was
+published on 2026-10-29, and `0.12.0` (the 1.5.0 correspondence) on 2026-10-28.
 
 License: Apache-2.0.

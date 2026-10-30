@@ -16,9 +16,10 @@ export INTERJSON_BIN=/path/to/interjson   # or put it on PATH
 
 > The distribution name is **`interjson-moonbit`** on PyPI (the suffix identifies
 > the MoonBit engine); the import name is `interjson`. **Publication is
-> pending**: version 1.5.0 is not on PyPI yet, so install from the repository
+> pending**: version 1.5.1 is not on PyPI yet, so install from the repository
 > path above. Nothing on this page claims the package is installable with
-> `pip install interjson-moonbit`.
+> `pip install interjson-moonbit`. The npm package is published:
+> `npm install interjson-moonbit`.
 
 ```python
 import json
@@ -54,7 +55,7 @@ Python in the middle. Resolution order is `INTERJSON_BIN`, then `interjson` on
 this repository. If none exists it raises `FileNotFoundError` naming the fixes.
 
 ```bash
-interjson --version                  # interjson 1.5.0: the engine the launchers need
+interjson --version                  # interjson 1.5.1: the engine the launchers need
 interjson-mcp                        # MCP stdio server
 interjson-mcp --print-config=claude  # the client configuration snippet
 interjson-http --port 8080           # POST /repair /analyze /validate /readiness, GET /healthz
@@ -117,10 +118,10 @@ than being silently dropped.
 
 ## Version
 
-The Python package is `1.5.0`, the engine version. The MoonBit package on
-mooncakes is `0.12.0` because the registry currently accepts only `0.x.y`; the
+The Python package is `1.5.1`, the engine version. The MoonBit package on
+mooncakes is `0.13.0` because the registry currently accepts only `0.x.y`; the
 bytes are the same. `Client.hello()` reports both. **The PyPI package is not
-published yet**; the mooncakes counterpart **0.12.0 was published on
-2026-10-28**, and `0.11.0` (the 1.4.0 correspondence) on 2026-10-27.
+published yet**; the mooncakes counterpart **0.13.0 was published on
+2026-10-29**, and `0.12.0` (the 1.5.0 correspondence) on 2026-10-28.
 
 License: Apache-2.0.
