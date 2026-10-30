@@ -14,6 +14,7 @@ from __future__ import annotations
 import io
 import os
 import platform
+import shutil
 import sys
 import tempfile
 import unittest
@@ -69,6 +70,15 @@ class BundledBinaryTests(unittest.TestCase):
     """`find_binary()` must prefer the wheel's directory and say why if it can't."""
 
     def setUp(self) -> None:
+        # CI exports INTERJSON_BIN for the client tests, and that variable is
+        # by design the first thing `find_binary()` looks at -- so leaving it
+        # set would make every assertion below pass or fail for a reason this
+        # class is not testing. It is cleared here and restored afterwards.
+        self._saved_bin = os.environ.pop("INTERJSON_BIN", None)
+        # `PATH` can also answer the question before the bundled directory is
+        # reached, for the same reason.
+        self._saved_which = shutil.which
+        shutil.which = lambda _name: None
         self.tmp = tempfile.TemporaryDirectory()
         self.pkg = Path(self.tmp.name) / "interjson"
         self.pkg.mkdir()
@@ -78,6 +88,9 @@ class BundledBinaryTests(unittest.TestCase):
         self.module_file.write_text("", encoding="utf-8")
 
     def tearDown(self) -> None:
+        shutil.which = self._saved_which
+        if self._saved_bin is not None:
+            os.environ["INTERJSON_BIN"] = self._saved_bin
         self.tmp.cleanup()
 
     def _place(self, key: str, name: str = "interjson") -> Path:
@@ -114,6 +127,8 @@ class BundledBinaryTests(unittest.TestCase):
 
     def test_an_explicit_binary_still_wins(self) -> None:
         # A caller pointing at a newer CLI must not silently get the bundled one.
+        # setUp popped INTERJSON_BIN, so this sets the case explicitly instead
+        # of inheriting whatever the shell had.
         with mock.patch.dict(os.environ, {"INTERJSON_BIN": "/opt/interjson"}), mock.patch(
             "interjson.client.shutil.which", lambda _: None
         ):
